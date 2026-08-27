@@ -16,8 +16,8 @@ def extract_snapshot_hash_flags(libapp_file):
         # find "_kDartVmSnapshotData" symbol
         dynsym = elf.get_section_by_name('.dynsym')
         sym = dynsym.get_symbol_by_name('_kDartVmSnapshotData')[0]
-        #section = elf.get_section(sym['st_shndx'])
-        assert sym['st_size'] > 128
+        if sym['st_size'] <= 128:
+            raise ValueError(f"Symbol _kDartVmSnapshotData too small: {sym['st_size']}")
         f.seek(sym['st_value']+20)
         snapshot_hash = f.read(32).decode()
         data = f.read(256) # should be enough
@@ -33,7 +33,7 @@ def extract_libflutter_info(libflutter_file):
         elif elf.header.e_machine == 'EM_X86_64': # 62
             arch = 'x64'
         else:
-            assert False, f"Unsupported architecture: {elf.header.e_machine}"
+            raise ValueError(f"Unsupported architecture: {elf.header.e_machine}")
 
         section = elf.get_section_by_name('.rodata')
         data = section.data()
@@ -42,7 +42,8 @@ def extract_libflutter_info(libflutter_file):
         #print(sha_hashes)
         # all possible engine ids
         engine_ids = [ h.decode() for h in sha_hashes ]
-        assert len(engine_ids) == 2, f'found hashes {", ".join(engine_ids)}'
+        if len(engine_ids) != 2:
+            raise ValueError(f'Expected 2 engine hashes, found {len(engine_ids)}: {", ".join(engine_ids)}')
         
         # beta/dev version of flutter might not use stable dart version (we can get dart version from sdk with found engine_id)
         # support stable, beta and dev channels
@@ -91,7 +92,8 @@ def get_dart_commit(url):
             data = fp.read(compressSize)
 
             # expect compression method to be zipfile.ZIP_DEFLATED
-            assert compMethod == zipfile.ZIP_DEFLATED, 'Unexpected compression method'
+            if compMethod != zipfile.ZIP_DEFLATED:
+                raise ValueError(f'Unexpected compression method: {compMethod}')
             if filename == b'dart-sdk/revision':
                 commit_id = zlib.decompress(data, wbits=-zlib.MAX_WBITS).decode().strip()
             elif filename == b'dart-sdk/version':

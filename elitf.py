@@ -226,7 +226,7 @@ class ElitfUI:
     def _table(self, title, columns, rows, title_style=None):
         if not self.console:
             return None
-        t = Table(title=title, title_style=title_style or Style(color="bright_white", bold=True), box=rbox.SIMPLE, show_header=True, header_style=Style(color="bright_cyan", bold=True), border_style=Style(color="dim"))
+        t = Table(title=title, title_style=title_style or Style(color="bright_white", bold=True), box=rbox.SIMPLE, show_header=True, header_style=Style(color="bright_cyan", bold=True), border_style=Style(dim=True))
         for col_name, col_style in columns:
             t.add_column(col_name, style=col_style or "bright_white")
         for row in rows:
@@ -250,7 +250,7 @@ class ElitfUI:
         if not os.path.isdir(directory):
             return []
         pattern = os.path.join(directory, "**", "*.so")
-        files = globmod.glob(pattern, recursive=False)
+        files = globmod.glob(pattern, recursive=True)
         files.sort(key=lambda x: os.path.basename(x).lower())
         for f in files:
             size = os.path.getsize(f)
@@ -383,9 +383,9 @@ class ElitfUI:
         progress = Progress(
             SpinnerColumn(spinner_name="dots", style="bright_cyan"),
             TextColumn("[bold bright_white]{task.description}[/]", table_column=TextColumn(width=40)),
-            BarColumn(bar_width=30, bar_style=Style(color="bright_cyan"), complete_style=Style(color="bright_green"), finished_style=Style(color="bright_green"), background_style=Style(color="dim")),
+            BarColumn(bar_width=30, bar_style=Style(color="bright_cyan"), complete_style=Style(color="bright_green"), finished_style=Style(color="bright_green"), background_style=Style(dim=True)),
             TaskProgressColumn(text_style=Style(color="bright_white"), table_column=TextColumn(width=6)),
-            TimeElapsedColumn(text_style=Style(color="dim")),
+            TimeElapsedColumn(text_style=Style(dim=True)),
             console=self.console,
         )
 
@@ -526,10 +526,11 @@ def find_compat_macro(dart_version: str, no_analysis: bool):
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         if mm.find(b'AsTruncatedInt64Value()') == -1:
             macros.append('-DUNIFORM_INTEGER_ACCESS=1')
-    with open(os.path.join(vm_path, 'thread.h'), 'rb') as f:
-        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-        if mm.find(b'old_marking_stack_block') == -1:
-            macros.append('-DOLD_MARKING_STACK_BLOCK=1')
+    # [vm] marking_stack_block_offset() changes since Dart Stable 3.5.0
+    # https://github.com/worawit/blutter/issues/96#issue-2470674670
+    major, minor, *_ = dart_version.split('.')
+    if (int(major) > 3) or (int(major) == 3 and int(minor) >= 5):
+        macros.append('-DOLD_MARKING_STACK_BLOCK=1')
     if no_analysis:
         macros.append('-DNO_CODE_ANALYSIS=1')
     return macros
@@ -738,7 +739,7 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, log_mgr):
 def main_interactive(ui):
     ui.display_logo()
     if ui.console:
-        ui.console.print(Rule("[dim]Configuration[/]", style=Style(color="dim")))
+        ui.console.print(Rule("[dim]Configuration[/]", style=Style(dim=True)))
     if ui.console:
         ui.console.print()
         try:

@@ -92,17 +92,19 @@ def checkout_dart(info: DartLibInfo):
 
 
 def cmake_dart(info: DartLibInfo, target_dir: str):
-    # C++ standard required by this Dart SDK version
-    run_clang_tidy_file = os.path.join(target_dir, 'runtime', 'tools', 'run_clang_tidy.dart')
-    with open(run_clang_tidy_file, 'r') as f:
-        content = f.read()
-        pos = content.find("-std=c++")
-        cpp_std = "17" if pos == -1 else content[pos+8:pos+10]
+    # Dart 3.11.0+ requires C++20 (https://github.com/dart-lang/sdk/commit/3ebbaf08fb9236023b8f37bb9e9de85a9be8e281)
+    major, minor = map(int, info.version.split('.')[:2])
+    cpp_std = "20" if (major, minor) >= (3, 11) else "17"
 
     with open(CMAKE_TEMPLATE_FILE, 'r') as f:
         code = f.read()
     with open(os.path.join(target_dir, 'CMakeLists.txt'), 'w') as f:
         f.write(code.replace('VERSION_PLACE_HOLDER', info.version).replace('CXX_STD_PLACE_HOLDER', cpp_std))
+
+    # copy ICU compatibility header (needed for ICU < 73 with Dart 3.12+)
+    icu_compat_src = os.path.join(SCRIPT_DIR, 'scripts', 'icu_compat.h')
+    if os.path.isfile(icu_compat_src):
+        shutil.copy2(icu_compat_src, os.path.join(target_dir, 'icu_compat.h'))
 
     with open(os.path.join(target_dir, 'Config.cmake.in'), 'w') as f:
         f.write('@PACKAGE_INIT@\n\n')

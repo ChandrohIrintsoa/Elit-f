@@ -42,6 +42,8 @@ file(GLOB_RECURSE SRCS "src/*.cpp" "src/*.h")
 
 add_executable(${BINNAME} ${SRCS})
 
+target_precompile_headers(${BINNAME} PRIVATE "src/pch.h")
+
 if(FMT_FOUND AND NOT FMT_HEADER_ONLY)
         target_link_libraries(${BINNAME} PRIVATE ${DARTLIB} capstone ${FMT_LIBRARIES})
 else()
