@@ -441,11 +441,12 @@ class ElitfUI:
 
 
 class ElitfInput:
-    def __init__(self, libapp_path: str, dart_info: DartLibInfo, outdir: str, rebuild: bool, no_analysis: bool, log_mgr: LogManager = None):
+    def __init__(self, libapp_path: str, dart_info: DartLibInfo, outdir: str, rebuild: bool, no_analysis: bool, ida_fcn: bool = False, log_mgr: LogManager = None):
         self.libapp_path = libapp_path
         self.dart_info = dart_info
         self.outdir = outdir
         self.rebuild = rebuild
+        self.ida_fcn = ida_fcn
         vers = dart_info.version.split('.', 2)
         if int(vers[0]) == 2 and int(vers[1]) < 15:
             if not no_analysis:
@@ -460,6 +461,8 @@ class ElitfInput:
             self.name_suffix += '_no-compressed-ptrs'
         if no_analysis:
             self.name_suffix += '_no-analysis'
+        if ida_fcn:
+            self.name_suffix += '_ida-fcn'
         self.bin_name = f'elitf_{dart_info.lib_name}{self.name_suffix}'
         self.bin_file = os.path.join(BIN_DIR, self.bin_name)
 
@@ -506,7 +509,7 @@ def extract_libs_from_apk(apk_file: str, out_dir: str):
         return os.path.join(out_dir, app_info.filename), os.path.join(out_dir, flutter_info.filename)
 
 
-def find_compat_macro(dart_version: str, no_analysis: bool):
+def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = False):
     macros = []
     include_path = os.path.join(PKG_INC_DIR, f'dartvm{dart_version}')
     vm_path = os.path.join(include_path, 'vm')
@@ -563,12 +566,14 @@ def find_compat_macro(dart_version: str, no_analysis: bool):
             pass
     if no_analysis:
         macros.append('-DNO_CODE_ANALYSIS=1')
+    if ida_fcn:
+        macros.append('-DIDA_FCN=1')
     return macros
 
 
 def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
     builddir = os.path.join(BUILD_DIR, elitf_input.bin_name)
-    macros = find_compat_macro(elitf_input.dart_info.version, elitf_input.no_analysis)
+    macros = find_compat_macro(elitf_input.dart_info.version, elitf_input.no_analysis, elitf_input.ida_fcn)
     cmd = [CMAKE_CMD, '-GNinja', '-B', builddir,
            f'-DDARTLIB={elitf_input.dart_info.lib_name}',
            f'-DNAME_SUFFIX={elitf_input.name_suffix}',
@@ -730,7 +735,7 @@ def display_binary_info(so_list, outdir, log_mgr=None):
         log_mgr.add("Binary info scan complete", "success")
 
 
-def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, log_mgr):
+def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_mgr):
     if indir.endswith(".apk"):
         if log_mgr:
             log_mgr.add(f"Extracting APK: {indir}", "info")
@@ -749,7 +754,7 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, log_mgr):
                 "Auteur": AUTHOR,
             }
             dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
-            input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis, log_mgr)
+            input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis, ida_fcn, log_mgr)
             build_and_run(input_obj, log_mgr)
     else:
         libapp_file, libflutter_file = validate_two_libs(indir)
@@ -764,7 +769,7 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, log_mgr):
             "Auteur": AUTHOR,
         }
         dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
-        input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis, log_mgr)
+        input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis, ida_fcn, log_mgr)
         build_and_run(input_obj, log_mgr)
     if log_mgr:
         log_mgr.add("Flutter/Dart AOT analysis complete", "success")
@@ -924,7 +929,7 @@ def main_interactive(ui):
                 break
 
 
-def main_cli(indir, outdir, rebuild, no_analysis):
+def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False):
     ui = ElitfUI()
     if not HAS_RICH:
         print(f"\n  Auteur : {AUTHOR}")
@@ -934,13 +939,13 @@ def main_cli(indir, outdir, rebuild, no_analysis):
                 libapp_file, libflutter_file = extract_libs_from_apk(indir, tmp_dir)
                 dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs = get_dart_lib_info(libapp_file, libflutter_file)
                 dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
-                input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis)
+                input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis, ida_fcn)
                 build_and_run(input_obj)
         else:
             libapp_file, libflutter_file = validate_two_libs(indir)
             dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs = get_dart_lib_info(libapp_file, libflutter_file)
             dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
-            input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis)
+            input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis, ida_fcn)
             build_and_run(input_obj)
         return
     ui.indir = indir
@@ -956,7 +961,7 @@ def main_cli(indir, outdir, rebuild, no_analysis):
         os.makedirs(outdir, exist_ok=True)
         ui.log_mgr.clear()
         def work(lm):
-            run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, lm)
+            run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm)
         total_steps = 20
         ui.run_with_live_display("Flutter/Dart AOT Analysis", total_steps, work)
     elif choice in (2, 3):
@@ -986,7 +991,7 @@ def main_cli(indir, outdir, rebuild, no_analysis):
         os.makedirs(outdir, exist_ok=True)
         ui.log_mgr.clear()
         def work(lm):
-            run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, lm)
+            run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm)
         ui.run_with_live_display("Flutter/Dart AOT Analysis", 20, work)
 
 
@@ -998,14 +1003,15 @@ if __name__ == "__main__":
     parser.add_argument('outdir', nargs='?', default=None, help='An output directory')
     parser.add_argument('--rebuild', action='store_true', default=False, help='Force rebuild the Elit-f executable')
     parser.add_argument('--no-analysis', action='store_true', default=False, help='Do not build with code analysis')
+    parser.add_argument('--ida-fcn', action='store_true', default=False, help='Build with IDA function support')
     parser.add_argument('--dart-version', help='Run without libflutter (indir becomes libapp.so path)')
     parser.add_argument('--cli', action='store_true', default=False, help='Force CLI mode (no interactive menu)')
     args = parser.parse_args()
 
     if args.cli and args.indir and args.outdir and args.dart_version is None:
-        main_cli(args.indir, args.outdir, args.rebuild, args.no_analysis)
+        main_cli(args.indir, args.outdir, args.rebuild, args.no_analysis, args.ida_fcn)
     elif args.indir and args.outdir and args.dart_version is None:
-        main_cli(args.indir, args.outdir, args.rebuild, args.no_analysis)
+        main_cli(args.indir, args.outdir, args.rebuild, args.no_analysis, args.ida_fcn)
     elif args.dart_version is not None:
         if not args.indir:
             sys.exit('--dart-version requires indir (libapp.so path)')
@@ -1015,7 +1021,7 @@ if __name__ == "__main__":
         version, os_name, arch = parts
         dart_info = DartLibInfo(version, os_name, arch)
         outdir = args.outdir or './out'
-        input_obj = ElitfInput(args.indir, dart_info, outdir, args.rebuild, args.no_analysis)
+        input_obj = ElitfInput(args.indir, dart_info, outdir, args.rebuild, args.no_analysis, args.ida_fcn)
         build_and_run(input_obj)
     else:
         if not HAS_RICH:
@@ -1032,13 +1038,13 @@ if __name__ == "__main__":
                     libapp_file, libflutter_file = extract_libs_from_apk(args.indir, tmp_dir)
                     dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs = get_dart_lib_info(libapp_file, libflutter_file)
                     dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
-                    input_obj = ElitfInput(libapp_file, dart_info, args.outdir, args.rebuild, args.no_analysis)
+                    input_obj = ElitfInput(libapp_file, dart_info, args.outdir, args.rebuild, args.no_analysis, args.ida_fcn)
                     build_and_run(input_obj)
             else:
                 libapp_file, libflutter_file = validate_two_libs(args.indir)
                 dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs = get_dart_lib_info(libapp_file, libflutter_file)
                 dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
-                input_obj = ElitfInput(libapp_file, dart_info, args.outdir, args.rebuild, args.no_analysis)
+                input_obj = ElitfInput(libapp_file, dart_info, args.outdir, args.rebuild, args.no_analysis, args.ida_fcn)
                 build_and_run(input_obj)
         else:
             ui = ElitfUI()
