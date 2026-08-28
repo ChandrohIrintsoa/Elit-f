@@ -1,5 +1,4 @@
-# Dart VM static library fetch/build for any Dart version.
-# Adapted from the blutter project (MIT, https://github.com/worawit/blutter).
+
 import mmap
 import os
 import shutil
@@ -8,8 +7,8 @@ import subprocess
 import sys
 
 GIT_CMD = "git"
-CMAKE_CMD = "cmake"
-NINJA_CMD = "ninja"
+CMAKE_CMD = os.getenv('CMAKE', 'cmake')
+NINJA_CMD = os.getenv('NINJA', 'ninja')
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CMAKE_TEMPLATE_FILE = os.path.join(SCRIPT_DIR, 'scripts', 'CMakeLists.txt.dartvm')
@@ -92,7 +91,7 @@ def checkout_dart(info: DartLibInfo):
 
 
 def cmake_dart(info: DartLibInfo, target_dir: str):
-    # Dart 3.11.0+ requires C++20 (https://github.com/dart-lang/sdk/commit/3ebbaf08fb9236023b8f37bb9e9de85a9be8e281)
+
     major, minor = map(int, info.version.split('.')[:2])
     cpp_std = "20" if (major, minor) >= (3, 11) else "17"
 

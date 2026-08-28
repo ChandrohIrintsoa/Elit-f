@@ -14,33 +14,55 @@ export CMAKE=$PREFIX/bin/cmake
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Usage:
-#   ./build_termux.sh                                # build dartvm + elitf (default version 3.4.2)
-#   ./build_termux.sh <dart_version>                 # e.g. ./build_termux.sh 3.10.7
-#   ./build_termux.sh <dart_version> <os> <arch>     # e.g. ./build_termux.sh 3.10.7 android arm64
-# ─────────────────────────────────────────────────────────────────────────────
-DART_VERSION=${1:-3.4.2}
+
+
+DART_VERSION=${1:-}
 OS_NAME=${2:-android}
 ARCH=${3:-arm64}
 
+if [ -z "$DART_VERSION" ]; then
+        echo "Usage: $0 <dart_version> [os] [arch]"
+        echo ""
+        echo "Le dart_version DOIT correspondre à la version du Dart SDK détectée"
+        echo "depuis le libflutter.so de l'application à analyser."
+        echo ""
+        echo "Pour détecter automatiquement la version, lancez simplement :"
+        echo "  Elit-f <repertoire_ou_apk> <repertoire_sortie> --cli"
+        echo "  (Elit-f détectera la version, construira le dartvm si besoin,"
+        echo "   puis construira le binaire C++ et l'exécutera)"
+        echo ""
+        echo "Versions de dartvm déjà construites dans packages/lib :"
+        if [ -d "${SCRIPT_DIR}/packages/lib" ]; then
+                ls -1 "${SCRIPT_DIR}/packages/lib/"*.a 2>/dev/null | sed 's|.*/lib||;s|\.a$||' | sed 's/^/  /'
+        else
+                echo "  (aucune — lancez Elit-f sur une application pour en construire une)"
+        fi
+        exit 1
+fi
+
 DARTLIB="dartvm${DART_VERSION}_${OS_NAME}_${ARCH}"
+
+# Vérifier que le dartvm existe
+PKG_LIB_DIR="${SCRIPT_DIR}/packages/lib"
+LIBFILE="${PKG_LIB_DIR}/lib${DARTLIB}.a"
+if [ ! -f "${LIBFILE}" ]; then
+        echo "❌ La bibliothèque dartvm '${DARTLIB}' n'existe pas."
+        echo "   Pour la construire, lancez :"
+        echo "   python3 dartvm_fetch_build.py ${DART_VERSION} ${OS_NAME} ${ARCH}"
+        echo "   (ou laissez Elit-f le faire automatiquement en analysant une app)"
+        echo ""
+        echo "   Versions déjà construites :"
+        ls -1 "${PKG_LIB_DIR}/"*.a 2>/dev/null | sed 's|.*/lib||;s|\.a$||' | sed 's/^/     /' || echo "     (aucune)"
+        exit 1
+fi
+
+echo "[*] dartvm library: ${LIBFILE}"
 
 if [ ! -d "build" ]; then
         mkdir build
 fi
 
-# 1) Fetch & build dartvm static library if not already present
-PKG_LIB_DIR="${SCRIPT_DIR}/packages/lib"
-LIBFILE="${PKG_LIB_DIR}/lib${DARTLIB}.a"
-if [ ! -f "${LIBFILE}" ]; then
-        echo "[*] Building dartvm library: ${DARTLIB}"
-        python3 "${SCRIPT_DIR}/dartvm_fetch_build.py" "${DART_VERSION}" "${OS_NAME}" "${ARCH}"
-else
-        echo "[*] dartvm library already built: ${LIBFILE}"
-fi
-
-# 2) Compute compat macros (find_compat_macro from elitf.py)
+# 1) Calculer les macros compat pour cette version de Dart
 echo "[*] Computing compat macros for Dart ${DART_VERSION}"
 MACROS=$(python3 -c "
 import sys
@@ -51,7 +73,7 @@ print(' '.join(macros))
 ")
 echo "    Macros: ${MACROS}"
 
-# 3) Configure & build Elit-f against the dartvm library
+# 2) Configurer et compiler Elit-f
 cd "${SCRIPT_DIR}/build"
 cmake .. -DDARTLIB=$DARTLIB -DCMAKE_BUILD_TYPE=Release ${MACROS}
 make -j$(nproc)
@@ -64,7 +86,7 @@ fi
 
 echo "Build complete: bin/elitf_${DARTLIB}.stripped"
 
-# 4) Install launcher
+# 3) Installer le lanceur
 ELITF_LAUNCHER="$PREFIX/bin/Elit-f"
 printf '#!/data/data/com.termux/files/usr/bin/bash\ncd "%s"\nexec python3 elitf.py "$@"\n' "$SCRIPT_DIR" > "$ELITF_LAUNCHER"
 chmod 755 "$ELITF_LAUNCHER"

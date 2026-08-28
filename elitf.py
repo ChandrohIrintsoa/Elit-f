@@ -380,12 +380,14 @@ class ElitfUI:
         if not self.console or not HAS_RICH:
             return work_fn(self.log_mgr)
 
+        from rich.table import Column
+
         progress = Progress(
             SpinnerColumn(spinner_name="dots", style="bright_cyan"),
-            TextColumn("[bold bright_white]{task.description}[/]", table_column=TextColumn(width=40)),
-            BarColumn(bar_width=30, bar_style=Style(color="bright_cyan"), complete_style=Style(color="bright_green"), finished_style=Style(color="bright_green"), background_style=Style(dim=True)),
-            TaskProgressColumn(text_style=Style(color="bright_white"), table_column=TextColumn(width=6)),
-            TimeElapsedColumn(text_style=Style(dim=True)),
+            TextColumn("[bold bright_white]{task.description}[/]", table_column=Column(width=40, no_wrap=False)),
+            BarColumn(bar_width=30, style=Style(dim=True), complete_style=Style(color="bright_cyan"), finished_style=Style(color="bright_green")),
+            TaskProgressColumn(style=Style(color="bright_white"), table_column=Column(width=6)),
+            TimeElapsedColumn(table_column=Column()),
             console=self.console,
         )
 
