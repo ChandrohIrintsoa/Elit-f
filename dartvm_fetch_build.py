@@ -53,7 +53,7 @@ def checkout_dart(info: DartLibInfo):
     if os.path.exists(clonedir) and not os.path.exists(version_file):
         print('Delete incomplete clone directory ' + clonedir)
         def remove_readonly(func, path, _):
-            os.chmod(path, stat.S_IWRITE)
+            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
             func(path)
         shutil.rmtree(clonedir, onerror=remove_readonly)
 
@@ -74,7 +74,7 @@ def checkout_dart(info: DartLibInfo):
                 if os.path.exists(utils_path):
                     with open(utils_path, "r+") as f:
                         content = f.read()
-                        if r"match_against('^MAJOR (\d+)$', content)" in content:
+                        if r"match_against('^MAJOR (\d+)$', content)" in content and "match_against(r'" not in content:
                             content = content.replace(" ' awk ", " r' awk ").replace("match_against('", "match_against(r'").replace("re.search('", "re.search(r'")
                             if "import imp\n" in content:
                                 content = content.replace("import imp\n", imp_replace_snippet).replace("imp.load_source", "load_source")
@@ -92,7 +92,13 @@ def checkout_dart(info: DartLibInfo):
 
 def cmake_dart(info: DartLibInfo, target_dir: str):
 
-    major, minor = map(int, info.version.split('.')[:2])
+    parts = info.version.split('.')
+    if len(parts) < 2:
+        raise ValueError(f'Invalid Dart version format: "{info.version}"')
+    try:
+        major, minor = int(parts[0]), int(parts[1])
+    except ValueError:
+        raise ValueError(f'Invalid Dart version format: "{info.version}"')
     cpp_std = "20" if (major, minor) >= (3, 11) else "17"
 
     with open(CMAKE_TEMPLATE_FILE, 'r') as f:
@@ -127,6 +133,9 @@ def fetch_and_build(info: DartLibInfo):
     cmake_dart(info, outdir)
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print('Usage: dartvm_fetch_build.py <version> [os_name] [arch] [snapshot_hash]')
+        sys.exit(1)
     ver = sys.argv[1]
     os_name = 'android' if len(sys.argv) < 3 else sys.argv[2]
     arch = 'arm64' if len(sys.argv) < 4 else sys.argv[3]

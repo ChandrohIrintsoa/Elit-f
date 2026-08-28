@@ -484,13 +484,23 @@ def validate_two_libs(indir: str):
            os.path.abspath(os.path.join(indir, EXPECTED_LIBS[1]))
 
 
+ABI_DIRS = ['lib/arm64-v8a/', 'lib/armeabi-v7a/', 'lib/x86_64/', 'lib/x86/']
+
+
 def extract_libs_from_apk(apk_file: str, out_dir: str):
     with zipfile.ZipFile(apk_file, "r") as zf:
-        try:
-            app_info = zf.getinfo('lib/arm64-v8a/libapp.so')
-            flutter_info = zf.getinfo('lib/arm64-v8a/libflutter.so')
-        except Exception:
-            sys.exit("Cannot find libapp.so or libflutter.so in the APK")
+        names = zf.namelist()
+        app_info = None
+        flutter_info = None
+        for abi_dir in ABI_DIRS:
+            app_path = abi_dir + 'libapp.so'
+            flutter_path = abi_dir + 'libflutter.so'
+            if app_path in names and flutter_path in names:
+                app_info = zf.getinfo(app_path)
+                flutter_info = zf.getinfo(flutter_path)
+                break
+        if app_info is None or flutter_info is None:
+            sys.exit("Cannot find libapp.so and libflutter.so in the APK (tried: " + ', '.join(ABI_DIRS) + ")")
         zf.extract(app_info, out_dir)
         zf.extract(flutter_info, out_dir)
         return os.path.join(out_dir, app_info.filename), os.path.join(out_dir, flutter_info.filename)
@@ -502,48 +512,66 @@ def find_compat_macro(dart_version: str, no_analysis: bool):
     vm_path = os.path.join(include_path, 'vm')
     with open(os.path.join(vm_path, 'class_id.h'), 'rb') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-        if mm.find(b'V(LinkedHashMap)') != -1:
-            macros.append('-DOLD_MAP_SET_NAME=1')
-            if mm.find(b'V(ImmutableLinkedHashMap)') == -1:
-                macros.append('-DOLD_MAP_NO_IMMUTABLE=1')
-        if mm.find(b' kLastInternalOnlyCid ') == -1:
-            macros.append('-DNO_LAST_INTERNAL_ONLY_CID=1')
-        if mm.find(b'V(TypeRef)') != -1:
-            macros.append('-DHAS_TYPE_REF=1')
-        if dart_version.startswith('3.') and mm.find(b'V(RecordType)') != -1:
-            macros.append('-DHAS_RECORD_TYPE=1')
+        try:
+            if mm.find(b'V(LinkedHashMap)') != -1:
+                macros.append('-DOLD_MAP_SET_NAME=1')
+                if mm.find(b'V(ImmutableLinkedHashMap)') == -1:
+                    macros.append('-DOLD_MAP_NO_IMMUTABLE=1')
+            if mm.find(b' kLastInternalOnlyCid ') == -1:
+                macros.append('-DNO_LAST_INTERNAL_ONLY_CID=1')
+            if mm.find(b'V(TypeRef)') != -1:
+                macros.append('-DHAS_TYPE_REF=1')
+            if dart_version.startswith('3.') and mm.find(b'V(RecordType)') != -1:
+                macros.append('-DHAS_RECORD_TYPE=1')
+        finally:
+            mm.close()
     with open(os.path.join(vm_path, 'class_table.h'), 'rb') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-        if mm.find(b'class SharedClassTable {') != -1:
-            macros.append('-DHAS_SHARED_CLASS_TABLE=1')
+        try:
+            if mm.find(b'class SharedClassTable {') != -1:
+                macros.append('-DHAS_SHARED_CLASS_TABLE=1')
+        finally:
+            mm.close()
     with open(os.path.join(vm_path, 'stub_code_list.h'), 'rb') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-        if mm.find(b'V(InitLateStaticField)') == -1:
-            macros.append('-DNO_INIT_LATE_STATIC_FIELD=1')
+        try:
+            if mm.find(b'V(InitLateStaticField)') == -1:
+                macros.append('-DNO_INIT_LATE_STATIC_FIELD=1')
+        finally:
+            mm.close()
     with open(os.path.join(vm_path, 'object_store.h'), 'rb') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-        if mm.find(b'build_generic_method_extractor_code)') == -1:
-            macros.append('-DNO_METHOD_EXTRACTOR_STUB=1')
+        try:
+            if mm.find(b'build_generic_method_extractor_code)') == -1:
+                macros.append('-DNO_METHOD_EXTRACTOR_STUB=1')
+        finally:
+            mm.close()
     with open(os.path.join(vm_path, 'object.h'), 'rb') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-        if mm.find(b'AsTruncatedInt64Value()') == -1:
-            macros.append('-DUNIFORM_INTEGER_ACCESS=1')
-    # [vm] marking_stack_block_offset() changes since Dart Stable 3.5.0
-    # https://github.com/worawit/blutter/issues/96#issue-2470674670
-    major, minor, *_ = dart_version.split('.')
-    if (int(major) > 3) or (int(major) == 3 and int(minor) >= 5):
-        macros.append('-DOLD_MARKING_STACK_BLOCK=1')
+        try:
+            if mm.find(b'AsTruncatedInt64Value()') == -1:
+                macros.append('-DUNIFORM_INTEGER_ACCESS=1')
+        finally:
+            mm.close()
+    parts = dart_version.split('.')
+    if len(parts) >= 2:
+        try:
+            major, minor = int(parts[0]), int(parts[1])
+            if (major > 3) or (major == 3 and minor >= 5):
+                macros.append('-DOLD_MARKING_STACK_BLOCK=1')
+        except ValueError:
+            pass
     if no_analysis:
         macros.append('-DNO_CODE_ANALYSIS=1')
     return macros
 
 
-def cmake_elitf(input: ElitfInput, log_mgr: LogManager = None):
-    builddir = os.path.join(BUILD_DIR, input.bin_name)
-    macros = find_compat_macro(input.dart_info.version, input.no_analysis)
+def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
+    builddir = os.path.join(BUILD_DIR, elitf_input.bin_name)
+    macros = find_compat_macro(elitf_input.dart_info.version, elitf_input.no_analysis)
     cmd = [CMAKE_CMD, '-GNinja', '-B', builddir,
-           f'-DDARTLIB={input.dart_info.lib_name}',
-           f'-DNAME_SUFFIX={input.name_suffix}',
+           f'-DDARTLIB={elitf_input.dart_info.lib_name}',
+           f'-DNAME_SUFFIX={elitf_input.name_suffix}',
            '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE'] + macros
     fmt_inc = os.getenv('FMT_INCLUDE_DIR')
     if fmt_inc:
@@ -565,31 +593,32 @@ def get_dart_lib_info(libapp_path: str, libflutter_path: str, log_mgr: LogManage
     return dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs
 
 
-def build_and_run(input: ElitfInput, log_mgr: LogManager = None):
-    if not os.path.isfile(input.bin_file) or input.rebuild:
+def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
+    if not os.path.isfile(elitf_input.bin_file) or elitf_input.rebuild:
         libfile_variants = [
-            os.path.join(PKG_LIB_DIR, 'lib' + input.dart_info.lib_name + '.a'),
-            os.path.join(PKG_LIB_DIR, input.dart_info.lib_name + '.lib'),
+            os.path.join(PKG_LIB_DIR, 'lib' + elitf_input.dart_info.lib_name + '.a'),
+            os.path.join(PKG_LIB_DIR, elitf_input.dart_info.lib_name + '.lib'),
         ]
         dartlib_file = next((p for p in libfile_variants if os.path.isfile(p)), None)
         if dartlib_file is None:
             if log_mgr:
-                log_mgr.add(f"Fetching Dart VM {input.dart_info.version}...", "info")
+                log_mgr.add(f"Fetching Dart VM {elitf_input.dart_info.version}...", "info")
             from dartvm_fetch_build import fetch_and_build
-            fetch_and_build(input.dart_info)
+            fetch_and_build(elitf_input.dart_info)
             if log_mgr:
-                log_mgr.add(f"Dart VM {input.dart_info.version} built successfully", "success")
-        input.rebuild = True
-    if input.rebuild:
+                log_mgr.add(f"Dart VM {elitf_input.dart_info.version} built successfully", "success")
+        elitf_input.rebuild = True
+    if elitf_input.rebuild:
         if log_mgr:
-            log_mgr.add(f"Building Elit-f binary ({input.bin_name})...", "info")
-        cmake_elitf(input, log_mgr)
-        assert os.path.isfile(input.bin_file), "Build complete but cannot find binary: " + input.bin_file
+            log_mgr.add(f"Building Elit-f binary ({elitf_input.bin_name})...", "info")
+        cmake_elitf(elitf_input, log_mgr)
+        if not os.path.isfile(elitf_input.bin_file):
+            raise RuntimeError("Build complete but cannot find binary: " + elitf_input.bin_file)
         if log_mgr:
-            log_mgr.add(f"Binary built: {input.bin_file}", "success")
+            log_mgr.add(f"Binary built: {elitf_input.bin_file}", "success")
     if log_mgr:
-        log_mgr.add(f"Running analysis on {input.libapp_path}...", "info")
-        result = subprocess.run([input.bin_file, '-i', input.libapp_path, '-o', input.outdir],
+        log_mgr.add(f"Running analysis on {elitf_input.libapp_path}...", "info")
+        result = subprocess.run([elitf_input.bin_file, '-i', elitf_input.libapp_path, '-o', elitf_input.outdir],
                                capture_output=True, text=True)
         if result.stdout:
             for line in result.stdout.strip().split("\n"):
@@ -602,10 +631,10 @@ def build_and_run(input: ElitfInput, log_mgr: LogManager = None):
         if result.returncode != 0:
             if result.stderr:
                 log_mgr.add(result.stderr, "error")
-            raise subprocess.CalledProcessError(result.returncode, input.bin_file)
-        log_mgr.add(f"Analysis output: {input.outdir}", "success")
+            raise subprocess.CalledProcessError(result.returncode, elitf_input.bin_file)
+        log_mgr.add(f"Analysis output: {elitf_input.outdir}", "success")
     else:
-        subprocess.run([input.bin_file, '-i', input.libapp_path, '-o', input.outdir], check=True)
+        subprocess.run([elitf_input.bin_file, '-i', elitf_input.libapp_path, '-o', elitf_input.outdir], check=True)
 
 
 def generate_r2_scripts(so_list, outdir, log_mgr=None):
@@ -667,7 +696,10 @@ def run_r2_scripts(so_list, outdir, log_mgr=None):
                     log_mgr.add(f"r2 analysis complete: {so['name']}", "success")
             else:
                 if log_mgr:
-                    log_mgr.add(f"r2 error on {so['name']}: {result.stderr[:100]}", "error")
+                    err_text = result.stderr.strip()
+                    if len(err_text) > 200:
+                        err_text = err_text[:200] + '...'
+                    log_mgr.add(f"r2 error on {so['name']}: {err_text}", "error")
         except subprocess.TimeoutExpired:
             if log_mgr:
                 log_mgr.add(f"r2 timeout on {so['name']}", "warn")
@@ -713,7 +745,7 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, log_mgr):
                 "Architecture": arch,
                 "OS": os_name,
                 "Compressed Pointers": "Yes" if has_compressed_ptrs else "No",
-                "Null Safety": "Enabled",
+                "Null Safety": "Enabled" if 'no-null-safety' not in flags else "Disabled",
                 "Auteur": AUTHOR,
             }
             dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
@@ -728,7 +760,7 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ui, log_mgr):
             "Architecture": arch,
             "OS": os_name,
             "Compressed Pointers": "Yes" if has_compressed_ptrs else "No",
-            "Null Safety": "Enabled",
+            "Null Safety": "Enabled" if 'no-null-safety' not in flags else "Disabled",
             "Auteur": AUTHOR,
         }
         dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)

@@ -20,13 +20,17 @@ def get_src_files(path):
     name = os.path.split(path)[-1]
     gni_file = os.path.join(path, name+'_sources.gni')
     objs = extract_sources(gni_file)
-    return objs[name+'_sources']
+    key = name+'_sources'
+    if key not in objs:
+        raise KeyError(f"Variable '{key}' not found in {gni_file}")
+    return objs[key]
 
 def get_default_src_files(gni_file):
     objs = extract_sources(gni_file)
     for key in objs.keys():
         if key.endswith('_cc_files'):
             return objs[key]
+    return []
 
 def get_src_from_path(path):
     srcs = glob.glob(os.path.join(path, '*.cc'))
@@ -55,7 +59,7 @@ for path in ('vm', 'platform', 'vm/heap', 'vm/ffi', 'vm/regexp'):
     #cc_srcs.extend([ os.path.join(path, src) for src in srcs if src.endswith('.cc') ])
     for src in srcs:
         cc_srcs.append(os.path.join(path, src))
-        if src.endswith('h'):
+        if src.endswith('.h'):
             hdrs.append(os.path.join(path, src))
 
 # extra source files
@@ -79,7 +83,8 @@ for lib in ('async', 'concurrent', 'core', 'developer', 'ffi', 'isolate', 'math'
 double_conversion_dir = BASEDIR+'/third_party/double-conversion/src'
 if not os.path.isdir(double_conversion_dir):
     double_conversion_dir = SDKDIR+'/third_party/double-conversion/src'
-    assert os.path.isdir(double_conversion_dir)
+    if not os.path.isdir(double_conversion_dir):
+        print(f'Warning: double-conversion not found in {double_conversion_dir}', file=sys.stderr)
 cc_srcs.extend(get_src_from_path(double_conversion_dir))
 
 #print('VMSRCS='+' '.join(cc_srcs))

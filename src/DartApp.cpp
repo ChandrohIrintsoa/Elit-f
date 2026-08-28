@@ -76,7 +76,7 @@ void DartApp::ExitScope()
 
 DartClass* DartApp::GetClass(intptr_t cid)
 {
-        if ((size_t)cid >= classes.size()) {
+        if ((size_t)cid > classes.size()) {
                 // assume top level class
                 return topClasses.at(dart::ClassTable::IndexFromTopLevelCid(cid));
         }
