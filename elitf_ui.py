@@ -1,4 +1,25 @@
+#!/usr/bin/env python3
+"""
+elitf_ui.py — Composants d'interface utilisateur pour Elit-f.
 
+Contient :
+  * `LogManager`        : buffer circulaire thread-safe de logs avec rendu Rich/plaintext.
+  * `ElitfUI`           : façade d'affichage (console Rich ou fallback print).
+  * Constantes associées (LOGO, AUTHOR) et détection de `rich`.
+
+Ce module est importé paresseusement par `elitf.py` afin que le cœur fonctionnel
+(extraction, build, analyse) reste utilisable même si `rich` n'est pas installé.
+
+Notes Termux :
+  * Rich ne détecte pas toujours Termux comme un terminal interactif, ce qui
+    fait apparaître les balises littéralement et empêche `Live` de rafraîchir
+    correctement l'écran (les frames s'empilent au lieu de se remplacer).
+  * On détecte donc Termux via la variable d'environnement `TERMUX_VERSION`
+    ou la présence du chemin `/data/data/com.termux`, et dans ce cas on force
+    `Console(force_terminal=True)` pour l'interprétation des balises, et on
+    remplace `Live` par un mode "plain-streaming" qui affiche les logs au fil
+    de l'eau via des `print()` simples.
+"""
 import os
 import re
 import platform
@@ -56,7 +77,11 @@ def strip_rich_tags(text: str) -> str:
 
 
 class LogManager:
+    """Thread-safe ring buffer of timestamped log entries.
 
+    Also tracks an explicit `step_count` so progress bars can advance
+    based on actual work performed rather than the (capped) buffer length.
+    """
     def __init__(self, maxlen=200):
         self.logs = deque(maxlen=maxlen)
         self.lock = threading.Lock()
@@ -118,7 +143,11 @@ class LogManager:
 
 
 def _is_termux() -> bool:
- 
+    """Detect whether we're running inside a Termux environment.
+
+    Termux exposes a `TERMUX_VERSION` env var and installs under
+    `/data/data/com.termux/`. Either signal is sufficient.
+    """
     if os.environ.get('TERMUX_VERSION'):
         return True
     if os.path.isdir('/data/data/com.termux'):
@@ -130,12 +159,34 @@ def _is_termux() -> bool:
 
 
 class ElitfUI:
+    """Façade d'affichage Rich avec fallback plain-text.
 
+    `detected_so` est une liste de dicts `{"path", "name", "size"}` peuplée par
+    `detect_so_files()`. `metadata` est un dict affiché par `display_metadata()`.
+    """
     def __init__(self, force_plain: bool = False):
+        """Initialize the UI.
 
+        Args:
+            force_plain: if True, don't use Rich Live animations (use plain
+                streaming instead). Recommended on Termux or any terminal
+                where Live doesn't refresh correctly.
+
+        Note: Even when force_plain is True, we still create a Rich Console
+        (with force_terminal=True) so that the logo, menu, panels, and tables
+        are rendered with colors and proper formatting. Only the Live
+        animation is replaced with plain streaming on Termux.
+        """
+        # force_plain disables Live animations only, NOT colors/panels/tables.
+        # On Termux, Live doesn't refresh correctly (frames stack), so we use
+        # _run_plain which streams logs via print() while still using Rich
+        # Console for static rendering (logo, menu, panels).
         self.force_plain = force_plain or _is_termux()
-        if HAS_RICH and not self.force_plain:
-            self.console = Console()
+        if HAS_RICH:
+            # On Termux (or when force_plain is requested), force_terminal=True
+            # so Rich interprets markup tags and renders colors even when it
+            # can't auto-detect the terminal as interactive.
+            self.console = Console(force_terminal=self.force_plain or None)
         else:
             self.console = None
         self.log_mgr = LogManager(200)
@@ -145,7 +196,7 @@ class ElitfUI:
         self.indir = ""
 
     def _print(self, *args, **kwargs):
-        if self.console and not self.force_plain:
+        if self.console:
             self.console.print(*args, **kwargs)
         else:
             msg = " ".join(str(a) for a in args)
@@ -374,11 +425,23 @@ class ElitfUI:
 
         Used when Rich is unavailable OR when running on terminals (Termux, CI)
         where Rich Live doesn't refresh correctly.
+
+        When self.console is available (Rich installed), we still use it for
+        rendering the header panel and log entries with colors — only the
+        Live animation is replaced with plain streaming. When self.console is
+        None (Rich not installed), we fall back to plain print().
         """
-        # Print a header line so the user knows what's running.
-        print()
-        print(f"=== {title} ===")
-        print()
+        # Print a header so the user knows what's running.
+        if self.console:
+            self.console.print()
+            self.console.print(Panel(
+                f"[bold bright_cyan]◆[/] [bold bright_white]{title}[/]",
+                border_style=Style(color="bright_cyan"), box=rbox.ROUNDED))
+            self.console.print()
+        else:
+            print()
+            print(f"=== {title} ===")
+            print()
 
         self.log_mgr.set_total(steps)
         self.log_mgr.step_count = 0
@@ -397,6 +460,8 @@ class ElitfUI:
 
         last_count = 0
         prefix_map = {"error": "✗", "success": "✓", "warn": "⚠", "debug": "  "}
+        style_map = {"error": "bold red", "success": "bold bright_green",
+                    "warn": "bold bright_yellow", "debug": "dim"}
 
         # Stream new log entries as they appear.
         while thread.is_alive():
@@ -405,10 +470,12 @@ class ElitfUI:
             new_entries = current_logs[last_count:]
             for ts, msg, level in new_entries:
                 prefix = prefix_map.get(level, "→")
-                # In plain mode, strip any Rich markup so the user never sees
-                # literal `[bold red]...[/]` tags on stdout.
-                clean_msg = strip_rich_tags(str(msg))
-                print(f"  [{ts}] {prefix} {clean_msg}")
+                if self.console:
+                    style = style_map.get(level, "bright_cyan")
+                    self.console.print(f"  [dim][{ts}][/] [{style}]{prefix} {msg}[/]")
+                else:
+                    clean_msg = strip_rich_tags(str(msg))
+                    print(f"  [{ts}] {prefix} {clean_msg}")
             last_count = len(current_logs)
             time.sleep(0.2)
 
@@ -418,12 +485,19 @@ class ElitfUI:
         new_entries = current_logs[last_count:]
         for ts, msg, level in new_entries:
             prefix = prefix_map.get(level, "→")
-            clean_msg = strip_rich_tags(str(msg))
-            print(f"  [{ts}] {prefix} {clean_msg}")
+            if self.console:
+                style = style_map.get(level, "bright_cyan")
+                self.console.print(f"  [dim][{ts}][/] [{style}]{prefix} {msg}[/]")
+            else:
+                clean_msg = strip_rich_tags(str(msg))
+                print(f"  [{ts}] {prefix} {clean_msg}")
 
         thread.join(timeout=10)
 
-        print()
+        if self.console:
+            self.console.print()
+        else:
+            print()
         if error_holder[0]:
             raise error_holder[0]
         return result[0]
@@ -444,12 +518,12 @@ class ElitfUI:
             console=self.console,
         )
 
-        log_panel_content = Text("  [dim]En attente...[/]")
+        log_panel_content = Text.from_markup("  [dim]En attente...[/]")
         log_panel = Panel(log_panel_content, title=" Opérations en direct ",
                           border_style=Style(color="bright_yellow"),
                           box=rbox.ROUNDED, padding=(0, 0), height=18)
 
-        header_panel = Panel(Text(f"[bold bright_cyan]◆[/] [bold bright_white]{title}[/]", justify="center"),
+        header_panel = Panel(Text.from_markup(f"[bold bright_cyan]◆[/] [bold bright_white]{title}[/]", justify="center"),
                              border_style=Style(color="bright_cyan"), box=rbox.ROUNDED)
 
         layout = Layout()
