@@ -25,7 +25,7 @@ import zipfile
 
 from dartvm_fetch_build import DartLibInfo
 from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH, strip_rich_tags
-from elitf_r2 import generate_r2_scripts, run_r2_scripts, display_binary_info
+from elitf_r2 import generate_r2_scripts, run_r2_scripts, display_binary_info, r2_unified_analysis
 
 CMAKE_CMD = os.getenv('CMAKE', 'cmake')
 NINJA_CMD = os.getenv('NINJA', 'ninja')
@@ -488,29 +488,7 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
         except Exception as e:
             ui._print_error(e)
             return 1
-    elif choice in (2, 3):
-        if not ui.detected_so and not is_apk:
-            ui.detect_so_files(indir)
-        if choice == 3:
-            indices = ui.get_target_selection()
-            if not indices:
-                return 0
-            selected = [ui.detected_so[i] for i in indices]
-        else:
-            selected = ui.detected_so
-        if not selected:
-            print("No .so files to analyze")
-            return 1
-        os.makedirs(outdir, exist_ok=True)
-        ui.log_mgr.clear()
-        def work(lm):
-            run_r2_scripts(selected, outdir, lm)
-        try:
-            ui.run_with_live_display("Radare2 Analysis", len(selected) * 5, work)
-        except Exception as e:
-            ui._print_error(e)
-            return 1
-    elif choice == 4:
+    elif choice == 2:
         if not ui.detected_so and not is_apk:
             ui.detect_so_files(indir)
         if not ui.detected_so:
@@ -519,18 +497,18 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
         os.makedirs(outdir, exist_ok=True)
         ui.log_mgr.clear()
         def work(lm):
-            generate_r2_scripts(ui.detected_so, outdir, lm)
+            r2_unified_analysis(ui.detected_so, outdir, lm, ui)
         try:
-            ui.run_with_live_display("Génération scripts r2",
-                                     len(ui.detected_so) * 3, work)
+            ui.run_with_live_display("Radare2 - Analyse unifiée",
+                                     len(ui.detected_so) * 5, work)
         except Exception as e:
             ui._print_error(e)
             return 1
-    elif choice == 5:
+    elif choice == 3:
         print("Les scripts IDA sont générés automatiquement lors de l'analyse Flutter (option 1).")
-    elif choice == 6:
+    elif choice == 4:
         print("Les scripts Frida sont générés automatiquement lors de l'analyse Flutter (option 1).")
-    elif choice == 7:
+    elif choice == 5:
         if not ui.detected_so and not is_apk:
             ui.detect_so_files(indir)
         if not ui.detected_so:
@@ -662,76 +640,28 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
             def work(lm):
-                run_r2_scripts(ui.detected_so, outdir, lm)
+                r2_unified_analysis(ui.detected_so, outdir, lm, ui)
             try:
-                ui.run_with_live_display("Radare2 - Analyse complète",
+                ui.run_with_live_display("Radare2 - Analyse unifiée",
                                          len(ui.detected_so) * 5, work)
                 if ui.console:
                     ui.console.print(_Panel(
-                        f"[bright_green]Analyse r2 terminée: {len(ui.detected_so)} fichiers .so[/]",
+                        "[bright_green]Analyse r2 unifiée terminée.[/]",
                         border_style=_Style(color="bright_green")))
             except Exception as e:
                 ui._print_error(e)
 
         elif choice == 3:
-            if not ui.detected_so and not is_apk:
-                ui.detect_so_files(indir)
-            if not ui.detected_so:
-                ui._print("[bold yellow]Aucun fichier .so à analyser.[/]" if ui.console
-                          else "Aucun fichier .so a analyser.")
-                continue
-            indices = ui.get_target_selection()
-            if not indices:
-                ui._print("[dim]Aucune cible sélectionnée.[/]" if ui.console
-                          else "Aucune cible selectionnees.")
-                continue
-            selected = [ui.detected_so[i] for i in indices]
-            os.makedirs(outdir, exist_ok=True)
-            ui.log_mgr.clear()
-            def work(lm):
-                run_r2_scripts(selected, outdir, lm)
-            try:
-                ui.run_with_live_display("Radare2 - Analyse ciblée",
-                                         len(selected) * 5, work)
-                if ui.console:
-                    ui.console.print(_Panel(
-                        f"[bright_green]Analyse r2 ciblée terminée: {len(selected)} fichiers[/]",
-                        border_style=_Style(color="bright_green")))
-            except Exception as e:
-                ui._print_error(e)
-
-        elif choice == 4:
-            if not ui.detected_so and not is_apk:
-                ui.detect_so_files(indir)
-            if not ui.detected_so:
-                ui._print("[bold yellow]Aucun fichier .so détecté.[/]" if ui.console
-                          else "Aucun fichier .so detecte.")
-                continue
-            os.makedirs(outdir, exist_ok=True)
-            ui.log_mgr.clear()
-            def work(lm):
-                generate_r2_scripts(ui.detected_so, outdir, lm)
-            try:
-                ui.run_with_live_display("Génération scripts r2",
-                                         len(ui.detected_so) * 3, work)
-                if ui.console:
-                    ui.console.print(_Panel(
-                        f"[bright_green]{len(ui.detected_so)} scripts r2 générés dans {outdir}/r2_output/[/]",
-                        border_style=_Style(color="bright_green")))
-            except Exception as e:
-                ui._print_error(e)
-
-        elif choice == 5:
             ui._print("[bright_cyan]Les scripts IDA sont générés automatiquement lors de l'analyse Flutter (option 1).[/]"
                       if ui.console
                       else "Les scripts IDA sont generes automatiquement lors de l'analyse Flutter (option 1).")
 
-        elif choice == 6:
+        elif choice == 4:
             ui._print("[bright_cyan]Les scripts Frida sont générés automatiquement lors de l'analyse Flutter (option 1).[/]"
                       if ui.console
                       else "Les scripts Frida sont generes automatiquement lors de l'analyse Flutter (option 1).")
 
-        elif choice == 7:
+        elif choice == 5:
             if not ui.detected_so and not is_apk:
                 ui.detect_so_files(indir)
             if not ui.detected_so:

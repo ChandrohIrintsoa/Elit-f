@@ -310,12 +310,10 @@ class ElitfUI:
             menu_text = Text()
             menu_items = [
                 ("1", "Flutter/Dart AOT Analysis", "Analyse complète libapp.so + libflutter.so", "bright_cyan"),
-                ("2", "Radare2 - Toutes les lib*.so", "Analyse r2 complète de toutes les .so détectées", "bright_green"),
-                ("3", "Radare2 - Sélection ciblée", "Choisir les .so à analyser avec r2", "bright_yellow"),
-                ("4", "Générer scripts r2 uniquement", "Générer les scripts r2 sans exécution", "bright_magenta"),
-                ("5", "Générer scripts IDA uniquement", "Générer les scripts IDA sans exécution", "blue"),
-                ("6", "Générer scripts Frida uniquement", "Générer les scripts Frida sans exécution", "red"),
-                ("7", "Information binaire détaillée", "Afficher les infos détaillées des .so", "white"),
+                ("2", "Radare2 - Analyse unifiée", "Sélection cibles + sous-menu r2 (a/aa/aaa/-w/wa/extraits/...)", "bright_green"),
+                ("3", "Générer scripts IDA uniquement", "Générer les scripts IDA sans exécution", "blue"),
+                ("4", "Générer scripts Frida uniquement", "Générer les scripts Frida sans exécution", "red"),
+                ("5", "Information binaire détaillée", "Afficher les infos détaillées des .so", "white"),
                 ("0", "Quitter", "", "red"),
             ]
             for num, label, desc, color in menu_items:
@@ -330,12 +328,10 @@ class ElitfUI:
         else:
             print("\n  === Menu Principal ===")
             print("  [1] Flutter/Dart AOT Analysis")
-            print("  [2] Radare2 - Toutes les lib*.so")
-            print("  [3] Radare2 - Selection ciblee")
-            print("  [4] Generer scripts r2 uniquement")
-            print("  [5] Generer scripts IDA uniquement")
-            print("  [6] Generer scripts Frida uniquement")
-            print("  [7] Information binaire detaillee")
+            print("  [2] Radare2 - Analyse unifiee")
+            print("  [3] Generer scripts IDA uniquement")
+            print("  [4] Generer scripts Frida uniquement")
+            print("  [5] Information binaire detaillee")
             print("  [0] Quitter")
 
     def get_choice(self):
@@ -351,6 +347,403 @@ class ElitfUI:
             except (ValueError, KeyboardInterrupt, EOFError):
                 return 0
         return choice
+
+    # ------------------------------------------------------------------
+    #  Radare2 unified sub-menu (remplace les anciennes options [2] + [3])
+    # ------------------------------------------------------------------
+    def display_r2_submenu(self):
+        """Afficher le sous-menu Radare2 avec tous les modes d'analyse."""
+        if self.console:
+            from rich.text import Text as _Text
+            from rich.panel import Panel as _Panel
+            from rich.rule import Rule as _Rule
+            from rich.style import Style as _Style
+
+            self.console.print()
+            self.console.print(_Rule("[dim]Radare2 — Modes d'analyse[/]",
+                                    style=_Style(dim=True)))
+
+            # Section A : Presets
+            self.console.print()
+            preset_text = _Text()
+            preset_items = [
+                ("1", "Analyse complète", "aaa + toutes les commandes + toute extraction", "bright_green"),
+                ("2", "Analyse standard", "aaa + fonctions, strings, imports/exports, xrefs, info", "bright_cyan"),
+                ("3", "Analyse rapide", "aa + fonctions, strings, info binaire", "bright_yellow"),
+                ("4", "Analyse minimale", "a + liste des fonctions", "bright_magenta"),
+                ("5", "Audit sécurité", "aaa + sécurité, réseau, Android, strings", "red"),
+            ]
+            for num, label, desc, color in preset_items:
+                preset_text.append(f"  [{num}] ", style=f"bold {color}")
+                preset_text.append(f"{label}\n", style="bold bright_white")
+                preset_text.append(f"       {desc}\n", style="dim")
+            self.console.print(_Panel(
+                preset_text, title=" [A] Presets d'analyse ",
+                border_style=Style(color="bright_green"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+
+            # Section B : Niveaux d'analyse
+            self.console.print()
+            anal_text = _Text()
+            anal_items = [
+                ("a", "a — Analyse minimale", "", "dim"),
+                ("b", "aa — Analyse de base", "", "bright_cyan"),
+                ("c", "aaa — Analyse avancée", "", "bright_green"),
+                ("d", "Toutes les commandes", "aa+aaa+aac+aar+afr+aae+aaft+aao+aav+aas+aat+aap+aau+ad", "bright_yellow"),
+            ]
+            for num, label, desc, color in anal_items:
+                anal_text.append(f"  [{num}] ", style=f"bold {color}")
+                anal_text.append(f"{label}\n", style="bright_white")
+                if desc:
+                    anal_text.append(f"       {desc}\n", style="dim")
+            self.console.print(_Panel(
+                anal_text, title=" [B] Niveaux d'analyse ",
+                border_style=Style(color="bright_cyan"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+
+            # Section C : Extraction ciblée
+            self.console.print()
+            ext_text = _Text()
+            ext_items = [
+                ("e", "Fonctions uniquement", "afl, afij, aflq", "bright_cyan"),
+                ("f", "Strings uniquement", "iz, izz, izq, izzq", "bright_green"),
+                ("g", "Imports / Exports", "ii, iE, is, ir", "bright_yellow"),
+                ("h", "Cross-références", "axt, axf (vers/depuis)", "bright_magenta"),
+                ("i", "Info binaire", "headers, sections, arch, mémoire", "blue"),
+                ("j", "Classes (C++ / Obj-C)", "ic, icq, ic*", "red"),
+                ("k", "Sécurité (crypto, tokens)", "AES, RSA, SHA, clés, mots de passe, JWT", "bright_red"),
+                ("l", "Réseau (URLs, endpoints)", "HTTP(S), WS, Firebase, cookies, Bearer", "cyan"),
+                ("m", "Android (JNI, paths, dex)", "JNI_OnLoad, Java_, registerNatives, paths", "green"),
+                ("n", "Bases de données", "SQLite, .db, protobuf", "yellow"),
+                ("o", "Hooks (x86)", "Détection inline hooks", "magenta"),
+            ]
+            for num, label, desc, color in ext_items:
+                ext_text.append(f"  [{num}] ", style=f"bold {color}")
+                ext_text.append(f"{label}\n", style="bright_white")
+                ext_text.append(f"       {desc}\n", style="dim")
+            self.console.print(_Panel(
+                ext_text, title=" [C] Extraction ciblée (analyse aaa auto) ",
+                border_style=Style(color="bright_yellow"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+
+            # Section D : Mode écriture
+            self.console.print()
+            write_text = _Text()
+            write_items = [
+                ("p", "wa — Écriture assembleur", "r2 -w : écrire des instructions asm à une adresse", "bright_red"),
+                ("r", "wx — Écriture hexadécimale", "r2 -w : écrire des octets en hex à une adresse", "bright_red"),
+                ("s", "w — Écriture string", "r2 -w : écrire une chaîne à une adresse", "bright_red"),
+            ]
+            for num, label, desc, color in write_items:
+                write_text.append(f"  [{num}] ", style=f"bold {color}")
+                write_text.append(f"{label}\n", style="bold bright_white")
+                write_text.append(f"       {desc}\n", style="dim")
+            self.console.print(_Panel(
+                write_text, title=" [D] Mode écriture r2 -w (patching) ",
+                border_style=Style(color="red"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+
+            # Section E : Autres
+            self.console.print()
+            other_text = _Text()
+            other_items = [
+                ("t", "Personnalisé", "Choisir librement l'analyse + les blocs d'extraction", "bright_cyan"),
+                ("u", "Générer scripts sans exécuter", "Créer les .r2 + batch .sh uniquement", "bright_magenta"),
+                ("0", "Retour au menu principal", "", "red"),
+            ]
+            for num, label, desc, color in other_items:
+                other_text.append(f"  [{num}] ", style=f"bold {color}")
+                other_text.append(f"{label}\n", style="bold bright_white")
+                if desc:
+                    other_text.append(f"       {desc}\n", style="dim")
+            self.console.print(_Panel(
+                other_text, title=" [E] Autres ",
+                border_style=Style(color="white"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+        else:
+            # Mode plain-text
+            print()
+            print("  === [A] Presets d'analyse ===")
+            print("  [1] Analyse complete (aaa + toute extraction)")
+            print("  [2] Analyse standard (aaa + extraction courante)")
+            print("  [3] Analyse rapide (aa + extraction basique)")
+            print("  [4] Analyse minimale (a + fonctions)")
+            print("  [5] Audit securite")
+            print()
+            print("  === [B] Niveaux d'analyse ===")
+            print("  [a] a  — Analyse minimale")
+            print("  [b] aa — Analyse de base")
+            print("  [c] aaa — Analyse avancee")
+            print("  [d] Toutes les commandes d'analyse")
+            print()
+            print("  === [C] Extraction ciblee (analyse aaa auto) ===")
+            print("  [e] Fonctions uniquement")
+            print("  [f] Strings uniquement")
+            print("  [g] Imports / Exports")
+            print("  [h] Cross-references")
+            print("  [i] Info binaire (headers, sections, arch)")
+            print("  [j] Classes (C++ / Obj-C)")
+            print("  [k] Securite (crypto, tokens, secrets)")
+            print("  [l] Reseau (URLs, endpoints, auth)")
+            print("  [m] Android (JNI, paths, dex)")
+            print("  [n] Bases de donnees")
+            print("  [o] Hooks (x86)")
+            print()
+            print("  === [D] Mode ecriture r2 -w (patching) ===")
+            print("  [p] wa — Ecriture assembleur")
+            print("  [r] wx — Ecriture hexadecimale")
+            print("  [s] w  — Ecriture string")
+            print()
+            print("  === [E] Autres ===")
+            print("  [t] Personnalise (choix libre analyse + extraction)")
+            print("  [u] Generer scripts sans executer")
+            print("  [0] Retour au menu principal")
+
+    def get_r2_choice(self):
+        """Obtenir le choix de l'utilisateur dans le sous-menu r2.
+
+        Returns:
+            str: la clé du choix ("full", "standard", "a", "aa", "functions", etc.)
+                 ou "back" pour retourner.
+        """
+        # Mapping choix -> clé
+        _PRESET_MAP = {
+            "1": "full", "2": "standard", "3": "quick",
+            "4": "minimal", "5": "security_audit",
+        }
+        _ANALYSIS_MAP = {
+            "a": "a", "b": "aa", "c": "aaa", "d": "all_anal",
+        }
+        _EXTRACTION_MAP = {
+            "e": "functions", "f": "strings", "g": "imports_exports",
+            "h": "xrefs", "i": "binary_info", "j": "classes",
+            "k": "security", "l": "network", "m": "android",
+            "n": "databases", "o": "hooks",
+        }
+        _WRITE_MAP = {
+            "p": "write_wa", "r": "write_wx", "s": "write_w",
+        }
+        _OTHER_MAP = {
+            "t": "custom", "u": "generate_only", "0": "back",
+        }
+
+        prompt_text = "  [bold bright_green]Mode r2[/]"
+        if self.console:
+            try:
+                raw = Prompt.ask(prompt_text, default="1", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return "back"
+        else:
+            try:
+                raw = input("\n  Mode r2 [1]: ") or "1"
+            except (KeyboardInterrupt, EOFError):
+                return "back"
+
+        raw = raw.strip().lower()
+
+        # Chercher dans tous les mappings
+        for mapping in (_PRESET_MAP, _ANALYSIS_MAP, _EXTRACTION_MAP,
+                        _WRITE_MAP, _OTHER_MAP):
+            if raw in mapping:
+                return mapping[raw]
+
+        # Invité ? Montrer le sous-menu à nouveau
+        self._print("[bold yellow]Choix invalide.[/]" if self.console
+                    else "Choix invalide.")
+        return None
+
+    def display_r2_analysis_picker(self):
+        """Afficher le sélecteur de niveau d'analyse (pour le mode personnalisé)."""
+        if self.console:
+            from rich.text import Text as _Text
+            from rich.panel import Panel as _Panel
+            text = _Text()
+            items = [
+                ("1", "a", "Analyse minimale"),
+                ("2", "aa", "Analyse de base"),
+                ("3", "aaa", "Analyse avancee"),
+                ("4", "all_anal", "Toutes les commandes"),
+            ]
+            for num, key, label in items:
+                text.append(f"  [{num}] ", style="bold bright_cyan")
+                text.append(f"{key} — {label}\n", style="bright_white")
+            self.console.print(_Panel(
+                text, title=" Niveau d'analyse ",
+                border_style=Style(color="bright_cyan"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+        else:
+            print("\n  === Niveau d'analyse ===")
+            print("  [1] a  — Analyse minimale")
+            print("  [2] aa — Analyse de base")
+            print("  [3] aaa — Analyse avancee")
+            print("  [4] Toutes les commandes")
+
+    def get_r2_analysis_choice(self):
+        """Obtenir le choix du niveau d'analyse personnalisé.
+
+        Returns:
+            Clé dans R2_ANALYSIS_LEVELS ou None.
+        """
+        _MAP = {"1": "a", "2": "aa", "3": "aaa", "4": "all_anal"}
+        if self.console:
+            try:
+                raw = Prompt.ask(
+                    "  [bold bright_green]Niveau d'analyse[/]",
+                    default="3", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return None
+        else:
+            try:
+                raw = input("\n  Niveau d'analyse [3]: ") or "3"
+            except (KeyboardInterrupt, EOFError):
+                return None
+        return _MAP.get(raw.strip(), None)
+
+    def display_r2_extraction_picker(self):
+        """Afficher le sélecteur de blocs d'extraction (pour le mode personnalisé)."""
+        if self.console:
+            from rich.text import Text as _Text
+            from rich.panel import Panel as _Panel
+            text = _Text()
+            items = [
+                ("1", "functions", "Fonctions"),
+                ("2", "strings", "Strings"),
+                ("3", "imports_exports", "Imports/Exports"),
+                ("4", "xrefs", "Cross-references"),
+                ("5", "binary_info", "Info binaire"),
+                ("6", "classes", "Classes"),
+                ("7", "security", "Securite"),
+                ("8", "network", "Reseau"),
+                ("9", "android", "Android"),
+                ("a", "databases", "Bases de donnees"),
+                ("b", "hooks", "Hooks"),
+                ("0", "all", "TOUT sélectionner"),
+            ]
+            for num, key, label in items:
+                text.append(f"  [{num}] ", style="bold bright_yellow")
+                text.append(f"{label}\n", style="bright_white")
+            text.append("\n  ", style="dim")
+            text.append("Saisir les numeros separes par des virgules (ex: 1,3,5)", style="dim")
+            self.console.print(_Panel(
+                text, title=" Blocs d'extraction ",
+                border_style=Style(color="bright_yellow"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+        else:
+            print("\n  === Blocs d'extraction ===")
+            print("  [1] Fonctions")
+            print("  [2] Strings")
+            print("  [3] Imports/Exports")
+            print("  [4] Cross-references")
+            print("  [5] Info binaire")
+            print("  [6] Classes")
+            print("  [7] Securite")
+            print("  [8] Reseau")
+            print("  [9] Android")
+            print("  [a] Bases de donnees")
+            print("  [b] Hooks")
+            print("  [0] TOUT selectionner")
+            print("  (numeros separes par virgules, ex: 1,3,5)")
+
+    def get_r2_extraction_choices(self):
+        """Obtenir les blocs d'extraction sélectionnés.
+
+        Returns:
+            Liste de clés dans R2_EXTRACTION_BLOCKS, ou None si annulé.
+        """
+        _MAP = {
+            "1": "functions", "2": "strings", "3": "imports_exports",
+            "4": "xrefs", "5": "binary_info", "6": "classes",
+            "7": "security", "8": "network", "9": "android",
+            "a": "databases", "b": "hooks",
+        }
+        if self.console:
+            try:
+                raw = Prompt.ask(
+                    "  [bold bright_green]Extraction[/] (ex: 1,3,5 ou 0 pour tout)",
+                    default="0", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return None
+        else:
+            try:
+                raw = input("\n  Extraction [0]: ") or "0"
+            except (KeyboardInterrupt, EOFError):
+                return None
+
+        raw = raw.strip().lower()
+        if raw == "0" or raw.strip().lower() == "all":
+            return list(_MAP.values())
+
+        keys = []
+        for part in raw.split(","):
+            part = part.strip()
+            if part in _MAP:
+                keys.append(_MAP[part])
+        return keys if keys else None
+
+    def get_r2_execute_choice(self):
+        """Demander si l'on doit exécuter r2 ou juste générer les scripts.
+
+        Returns:
+            True pour exécuter, False pour générer uniquement.
+        """
+        if self.console:
+            try:
+                raw = Prompt.ask(
+                    "  [bold bright_green]Exécuter[/] r2 ou [bold bright_magenta]générer[/] uniquement ? (e/g)",
+                    default="e", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return True
+        else:
+            try:
+                raw = input("\n  Executer (e) ou generer uniquement (g) [e]: ") or "e"
+            except (KeyboardInterrupt, EOFError):
+                return True
+        return raw.strip().lower() != "g"
+
+    def get_r2_generate_choice(self):
+        """Sous-menu pour le mode 'générer sans exécuter'.
+
+        Returns:
+            Clé de preset ou None.
+        """
+        self.display_r2_submenu()
+        choice = self.get_r2_choice()
+        if choice == "back" or choice is None:
+            return None
+        if choice in ("write_wa", "write_wx", "write_w"):
+            # Pas de sens en mode génération seule
+            self._print("[bold yellow]Le mode écriture nécessite l'exécution de r2.[/]"
+                        if self.console else "Le mode ecriture necessite l'execution de r2.")
+            return None
+        if choice == "generate_only":
+            # Récursif — utiliser le preset complet par défaut
+            return "full"
+        if choice == "custom":
+            return "full"  # Simplification pour la génération
+        return choice
+
+    def _prompt_text(self, prompt_str, default=""):
+        """Demander une chaîne de texte à l'utilisateur.
+
+        Args:
+            prompt_str: le prompt à afficher
+            default: valeur par défaut
+
+        Returns:
+            La chaîne saisie ou la valeur par défaut.
+        """
+        if self.console:
+            try:
+                return Prompt.ask(
+                    f"  [bold bright_cyan]{prompt_str}[/]",
+                    default=default, console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return default
+        else:
+            try:
+                return input(f"\n  {prompt_str} [{default}]: ") or default
+            except (KeyboardInterrupt, EOFError):
+                return default
 
     def get_target_selection(self):
         if not self.detected_so:
