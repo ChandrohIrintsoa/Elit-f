@@ -174,21 +174,22 @@ class LogManager:
             self.logs.clear()
 
     def get_rich_text(self):
+        from rich.text import Text as RichText
         lines = []
         for ts, msg, level in self.logs:
             if level == "error":
-                lines.append(Text(f"  [{ts}] [bold red]✗ {msg}[/]"))
+                lines.append(RichText(f"  [{ts}] ", style="dim") + RichText(f"✗ {msg}", style="bold red"))
             elif level == "success":
-                lines.append(Text(f"  [{ts}] [bold bright_green]✓ {msg}[/]"))
+                lines.append(RichText(f"  [{ts}] ", style="dim") + RichText(f"✓ {msg}", style="bold bright_green"))
             elif level == "warn":
-                lines.append(Text(f"  [{ts}] [bold bright_yellow]⚠ {msg}[/]"))
+                lines.append(RichText(f"  [{ts}] ", style="dim") + RichText(f"⚠ {msg}", style="bold bright_yellow"))
             elif level == "debug":
-                lines.append(Text(f"  [{ts}] [dim]{msg}[/]"))
+                lines.append(RichText(f"  [{ts}] {msg}", style="dim"))
             else:
-                lines.append(Text(f"  [{ts}] [bright_cyan]→ {msg}[/]"))
+                lines.append(RichText(f"  [{ts}] ", style="dim") + RichText(f"→ {msg}", style="bright_cyan"))
         if not lines:
-            lines.append(Text("  [dim]En attente...[/]"))
-        return Text("\n").join(lines)
+            lines.append(RichText("  En attente...", style="dim"))
+        return RichText("\n").join(lines)
 
     def get_plain_text(self):
         lines = []
@@ -214,6 +215,17 @@ class ElitfUI:
         else:
             msg = " ".join(str(a) for a in args)
             print(msg)
+
+    def _print_error(self, e):
+        if self.console:
+            self.console.print()
+            self.console.print(Panel(f"[bold red]Erreur: {type(e).__name__}: {e}[/]", title="[bright_red]Échec de l'opération[/]", border_style=Style(color="red")))
+            self.console.print("[dim]Vérifiez que toutes les dépendances sont installées :[/]")
+            self.console.print("[dim]  pkg install python  &&  pip install pyelftools requests rich[/]")
+        else:
+            print(f"\nERREUR: {type(e).__name__}: {e}")
+            print("Vérifiez que toutes les dépendances sont installées:")
+            print("  pkg install python && pip install pyelftools requests rich")
 
     def _clear(self):
         os.system('cls' if platform.system() == 'Windows' else 'clear')
@@ -288,7 +300,8 @@ class ElitfUI:
         if self.console:
             meta_text = Text()
             for key, val in self.metadata.items():
-                meta_text.append(f"  [bold bright_cyan]{key}[/]: {val}\n")
+                meta_text.append(f"  {key}", style="bold bright_cyan")
+                meta_text.append(f": {val}\n")
             panel = Panel(meta_text, title=" Métadonnées ", border_style=Style(color="bright_yellow"), box=rbox.ROUNDED, padding=(0, 1))
             self.console.print(panel)
         else:
@@ -819,6 +832,24 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
         ui._print(f"[bold red]Chemin invalide: {indir}[/]" if ui.console else f"Chemin invalide: {indir}")
         return
 
+    missing = check_dependencies()
+    if missing:
+        if ui.console:
+            ui.console.print()
+            ui.console.print(Panel(
+                "\n".join(f"  • {name}  [dim]({cmd})[/]" for name, cmd in missing),
+                title="[bold bright_yellow]Dépendances manquantes[/]",
+                border_style=Style(color="bright_yellow")
+            ))
+            ui.console.print("[dim]Installez-les avant de lancer une analyse :[/]")
+            ui.console.print("[dim]  pkg install python && pip install pyelftools requests rich[/]")
+            ui.console.print()
+        else:
+            print("\nDépendances manquantes:")
+            for name, cmd in missing:
+                print(f"  - {name} ({cmd})")
+            print("Installez-les: pkg install python && pip install pyelftools requests rich\n")
+
     while True:
         ui._clear()
         ui.display_logo()
@@ -833,15 +864,17 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
         elif choice == 1:
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
+            analysis_ok = False
             def work(lm):
                 run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm)
             total_steps = 20
             try:
                 ui.run_with_live_display("Flutter/Dart AOT Analysis", total_steps, work)
+                analysis_ok = True
             except Exception as e:
-                ui._print(f"[bold red]Erreur: {e}[/]" if ui.console else f"Erreur: {e}")
+                ui._print_error(e)
             ui._print("")
-            if ui.console:
+            if analysis_ok and ui.console:
                 ui.console.print(Panel("[bright_green]Analyse Flutter terminée.[/]", border_style=Style(color="bright_green")))
         elif choice == 2:
             if not ui.detected_so and not is_apk:
@@ -851,15 +884,17 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
                 continue
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
+            ok = False
             def work(lm):
                 run_r2_scripts(ui.detected_so, outdir, lm)
             total_steps = len(ui.detected_so) * 5
             try:
                 ui.run_with_live_display("Radare2 - Analyse complète", total_steps, work)
+                ok = True
             except Exception as e:
-                ui._print(f"[bold red]Erreur: {e}[/]" if ui.console else f"Erreur: {e}")
+                ui._print_error(e)
             ui._print("")
-            if ui.console:
+            if ok and ui.console:
                 ui.console.print(Panel(f"[bright_green]Analyse r2 terminée: {len(ui.detected_so)} fichiers .so[/]", border_style=Style(color="bright_green")))
         elif choice == 3:
             if not ui.detected_so and not is_apk:
@@ -879,10 +914,11 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
             total_steps = len(selected) * 5
             try:
                 ui.run_with_live_display("Radare2 - Analyse ciblée", total_steps, work)
+                ok = True
             except Exception as e:
-                ui._print(f"[bold red]Erreur: {e}[/]" if ui.console else f"Erreur: {e}")
+                ui._print_error(e)
             ui._print("")
-            if ui.console:
+            if ok and ui.console:
                 ui.console.print(Panel(f"[bright_green]Analyse r2 ciblée terminée: {len(selected)} fichiers[/]", border_style=Style(color="bright_green")))
         elif choice == 4:
             if not ui.detected_so and not is_apk:
@@ -892,14 +928,16 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
                 continue
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
+            ok = False
             def work(lm):
                 generate_r2_scripts(ui.detected_so, outdir, lm)
             try:
                 ui.run_with_live_display("Génération scripts r2", len(ui.detected_so) * 3, work)
+                ok = True
             except Exception as e:
-                ui._print(f"[bold red]Erreur: {e}[/]" if ui.console else f"Erreur: {e}")
+                ui._print_error(e)
             ui._print("")
-            if ui.console:
+            if ok and ui.console:
                 ui.console.print(Panel(f"[bright_green]{len(ui.detected_so)} scripts r2 générés dans {outdir}/r2_output/[/]", border_style=Style(color="bright_green")))
         elif choice == 5:
             ui._print("[bright_cyan]Les scripts IDA sont générés automatiquement lors de l'analyse Flutter (option 1).[/]" if ui.console else "Les scripts IDA sont generes automatiquement lors de l'analyse Flutter (option 1).")
@@ -913,12 +951,16 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
                 continue
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
+            ok = False
             def work(lm):
                 display_binary_info(ui.detected_so, outdir, lm)
             try:
                 ui.run_with_live_display("Information binaire", len(ui.detected_so) * 2, work)
+                ok = True
             except Exception as e:
-                ui._print(f"[bold red]Erreur: {e}[/]" if ui.console else f"Erreur: {e}")
+                ui._print_error(e)
+            if ok and ui.console:
+                ui.console.print(Panel("[bright_green]Information binaire affichée.[/]", border_style=Style(color="bright_green")))
         else:
             ui._print("[bold yellow]Option invalide.[/]" if ui.console else "Option invalide.")
 
@@ -927,6 +969,23 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
                 input("\n  Appuyez sur Entrée pour continuer...")
             except (KeyboardInterrupt, EOFError):
                 break
+
+
+def check_dependencies():
+    missing = []
+    try:
+        import elftools  # noqa: F401
+    except ImportError:
+        missing.append(('pyelftools', 'pip install pyelftools'))
+    try:
+        import requests  # noqa: F401
+    except ImportError:
+        missing.append(('requests', 'pip install requests'))
+    if HAS_RICH:
+        pass
+    else:
+        missing.append(('rich', 'pip install rich'))
+    return missing
 
 
 def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False):
