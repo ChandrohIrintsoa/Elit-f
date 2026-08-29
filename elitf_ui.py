@@ -9,12 +9,23 @@ Contient :
 
 Ce module est importé paresseusement par `elitf.py` afin que le cœur fonctionnel
 (extraction, build, analyse) reste utilisable même si `rich` n'est pas installé.
+
+Notes Termux :
+  * Rich ne détecte pas toujours Termux comme un terminal interactif, ce qui
+    fait apparaître les balises littéralement et empêche `Live` de rafraîchir
+    correctement l'écran (les frames s'empilent au lieu de se remplacer).
+  * On détecte donc Termux via la variable d'environnement `TERMUX_VERSION`
+    ou la présence du chemin `/data/data/com.termux`, et dans ce cas on force
+    `Console(force_terminal=True)` pour l'interprétation des balises, et on
+    remplace `Live` par un mode "plain-streaming" qui affiche les logs au fil
+    de l'eau via des `print()` simples.
 """
 import os
 import re
 import platform
 import threading
 import time
+import sys
 from datetime import datetime
 from collections import deque
 
@@ -131,14 +142,46 @@ class LogManager:
         return "\n".join(lines) if lines else "  En attente..."
 
 
+def _is_termux() -> bool:
+    """Detect whether we're running inside a Termux environment.
+
+    Termux exposes a `TERMUX_VERSION` env var and installs under
+    `/data/data/com.termux/`. Either signal is sufficient.
+    """
+    if os.environ.get('TERMUX_VERSION'):
+        return True
+    if os.path.isdir('/data/data/com.termux'):
+        return True
+    prefix = os.environ.get('PREFIX', '')
+    if 'com.termux' in prefix:
+        return True
+    return False
+
+
 class ElitfUI:
     """Façade d'affichage Rich avec fallback plain-text.
 
     `detected_so` est une liste de dicts `{"path", "name", "size"}` peuplée par
     `detect_so_files()`. `metadata` est un dict affiché par `display_metadata()`.
     """
-    def __init__(self):
-        self.console = Console() if HAS_RICH else None
+    def __init__(self, force_plain: bool = False):
+        """Initialize the UI.
+
+        Args:
+            force_plain: if True, never use Rich rendering (panels, tables,
+                Live animations). All output is plain text via `print()`.
+                Recommended on Termux or any terminal where Rich's cursor
+                repositioning or markup interpretation doesn't work.
+        """
+        # Auto-detect Termux and enable plain mode in that case, because
+        # Rich's Live doesn't refresh correctly on Termux (frames stack
+        # instead of replacing each other) and markup tags can be printed
+        # literally when Rich doesn't detect the terminal as interactive.
+        self.force_plain = force_plain or _is_termux()
+        if HAS_RICH and not self.force_plain:
+            self.console = Console()
+        else:
+            self.console = None
         self.log_mgr = LogManager(200)
         self.detected_so = []
         self.metadata = {}
@@ -146,7 +189,7 @@ class ElitfUI:
         self.indir = ""
 
     def _print(self, *args, **kwargs):
-        if self.console:
+        if self.console and not self.force_plain:
             self.console.print(*args, **kwargs)
         else:
             msg = " ".join(str(a) for a in args)
@@ -345,13 +388,92 @@ class ElitfUI:
         return sorted(set(indices))
 
     def run_with_live_display(self, title, steps, work_fn):
-        """Run `work_fn(log_mgr)` in a worker thread while refreshing a Rich Live display.
+        """Run `work_fn(log_mgr)` while reporting progress.
 
-        Falls back to a direct call when Rich is unavailable.
+        Three modes:
+          * Plain (no Rich): work_fn runs synchronously, logs are NOT streamed
+            but `work_fn` itself can `print()` directly.
+          * Plain-streaming (Rich installed but on Termux / force_plain):
+            work_fn runs in a thread, new log entries are printed in real-time
+            via `print()` so the user sees progress without needing Rich Live.
+          * Rich Live (default on desktop terminals): full animated TUI with
+            progress bar + live log panel.
+
+        The plain-streaming mode exists because Termux (and some CI terminals)
+        don't support Rich's cursor-repositioning codes correctly, which causes
+        Live frames to stack vertically instead of refreshing in place.
         """
+        # Plain fallback when Rich is unavailable OR when the user explicitly
+        # asked for plain mode (Termux, --plain, non-TTY output, ...).
         if not self.console or not HAS_RICH:
-            return work_fn(self.log_mgr)
+            return self._run_plain(title, steps, work_fn, stream_logs=True)
 
+        if self.force_plain:
+            return self._run_plain(title, steps, work_fn, stream_logs=True)
+
+        return self._run_live(title, steps, work_fn)
+
+    def _run_plain(self, title, steps, work_fn, stream_logs=True):
+        """Plain mode: print title, run work_fn in a thread, stream logs as they arrive.
+
+        Used when Rich is unavailable OR when running on terminals (Termux, CI)
+        where Rich Live doesn't refresh correctly.
+        """
+        # Print a header line so the user knows what's running.
+        print()
+        print(f"=== {title} ===")
+        print()
+
+        self.log_mgr.set_total(steps)
+        self.log_mgr.step_count = 0
+
+        result = [None]
+        error_holder = [None]
+
+        def worker():
+            try:
+                result[0] = work_fn(self.log_mgr)
+            except Exception as e:
+                error_holder[0] = e
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        last_count = 0
+        prefix_map = {"error": "✗", "success": "✓", "warn": "⚠", "debug": "  "}
+
+        # Stream new log entries as they appear.
+        while thread.is_alive():
+            with self.log_mgr.lock:
+                current_logs = list(self.log_mgr.logs)
+            new_entries = current_logs[last_count:]
+            for ts, msg, level in new_entries:
+                prefix = prefix_map.get(level, "→")
+                # In plain mode, strip any Rich markup so the user never sees
+                # literal `[bold red]...[/]` tags on stdout.
+                clean_msg = strip_rich_tags(str(msg))
+                print(f"  [{ts}] {prefix} {clean_msg}")
+            last_count = len(current_logs)
+            time.sleep(0.2)
+
+        # Print any final logs added after the worker exited.
+        with self.log_mgr.lock:
+            current_logs = list(self.log_mgr.logs)
+        new_entries = current_logs[last_count:]
+        for ts, msg, level in new_entries:
+            prefix = prefix_map.get(level, "→")
+            clean_msg = strip_rich_tags(str(msg))
+            print(f"  [{ts}] {prefix} {clean_msg}")
+
+        thread.join(timeout=10)
+
+        print()
+        if error_holder[0]:
+            raise error_holder[0]
+        return result[0]
+
+    def _run_live(self, title, steps, work_fn):
+        """Rich Live mode: animated TUI with progress bar + live log panel."""
         from rich.table import Column
 
         progress = Progress(

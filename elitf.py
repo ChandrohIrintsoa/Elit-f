@@ -432,9 +432,15 @@ def check_dependencies():
 # ---------------------------------------------------------------------------
 # CLI mode (one-shot)
 # ---------------------------------------------------------------------------
-def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False):
-    """CLI one-shot mode: show menu once, run the chosen action, exit."""
-    ui = ElitfUI()
+def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=False):
+    """CLI one-shot mode: show menu once, run the chosen action, exit.
+
+    Args:
+        force_plain: if True, disable Rich Live animations even when Rich is
+            available — recommended on Termux or any terminal where Live
+            refresh doesn't work correctly.
+    """
+    ui = ElitfUI(force_plain=force_plain)
     missing = check_dependencies()
     if missing and ui.console:
         from rich.panel import Panel as _Panel
@@ -798,6 +804,9 @@ def main():
                              'Format: <version>_<os>_<arch>')
     parser.add_argument('--cli', action='store_true', default=False,
                         help='Force CLI mode (no interactive menu)')
+    parser.add_argument('--plain', action='store_true', default=False,
+                        help='Disable Rich Live animations and use plain streaming '
+                             '(recommended on Termux or limited terminals)')
     args = parser.parse_args()
 
     # --dart-version mode: libapp.so + user-provided version (no libflutter needed)
@@ -818,9 +827,10 @@ def main():
     if args.indir and args.outdir:
         if args.cli or not HAS_RICH:
             return main_cli(args.indir, args.outdir, args.rebuild,
-                            args.no_analysis, args.ida_fcn) or 0
+                            args.no_analysis, args.ida_fcn,
+                            force_plain=args.plain) or 0
         # Rich available, no --cli: launch full TUI with indir+outdir preset.
-        ui = ElitfUI()
+        ui = ElitfUI(force_plain=args.plain)
         ui.indir = args.indir
         ui.outdir = args.outdir
         main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn)
@@ -845,14 +855,15 @@ def main():
                 return 0
         try:
             run_flutter_analysis(args.indir, args.outdir, args.rebuild,
-                                 args.no_analysis, args.ida_fcn, ElitfUI(), None)
+                                 args.no_analysis, args.ida_fcn,
+                                 ElitfUI(force_plain=args.plain), None)
         except Exception as e:
             print(f"\nERREUR: {type(e).__name__}: {e}")
             return 2
         return 0
 
     # Rich available: launch interactive TUI (indir/outdir preset if provided).
-    ui = ElitfUI()
+    ui = ElitfUI(force_plain=args.plain)
     if args.indir:
         ui.indir = args.indir
     if args.outdir:
