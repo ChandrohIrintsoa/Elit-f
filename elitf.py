@@ -152,10 +152,10 @@ def extract_libs_from_apk(apk_file: str, out_dir: str):
 def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = False):
     """Detect required -D... macros by scanning the installed Dart SDK headers.
 
-    The detection logic for `OLD_MARKING_STACK_BLOCK` scans `thread.h` for the
-    substring `old_marking_stack_block` (present in Dart >= 3.5). This is more
-    robust than hard-coding a version threshold and stays consistent with the
-    C++ branches in `src/DartThreadInfo.cpp`.
+    Strictly mirrors the upstream blutter `find_compat_macro()` so that the
+    compiled C++ binary is byte-for-byte compatible with the one produced by
+    blutter (1=1 output). Any divergence here would compile a different binary
+    and break the parity guarantee.
     """
     macros = []
     include_path = os.path.join(PKG_INC_DIR, f'dartvm{dart_version}')
@@ -163,7 +163,7 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
 
     required_files = [
         'class_id.h', 'class_table.h', 'stub_code_list.h',
-        'object_store.h', 'object.h', 'thread.h',
+        'object_store.h', 'object.h',
     ]
     for required in required_files:
         if not os.path.isfile(os.path.join(vm_path, required)):
@@ -202,14 +202,16 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
     if not _search_in_file(os.path.join(vm_path, 'object.h'), b'AsTruncatedInt64Value()'):
         macros.append('-DUNIFORM_INTEGER_ACCESS=1')
 
-    # thread.h — OLD_MARKING_STACK_BLOCK is set when old_marking_stack_block is present.
-    if _search_in_file(os.path.join(vm_path, 'thread.h'), b'old_marking_stack_block'):
-        macros.append('-DOLD_MARKING_STACK_BLOCK=1')
+    # NOTE: blutter upstream does NOT define OLD_MARKING_STACK_BLOCK or IDA_FCN.
+    # The CMakeLists.txt and C++ source of blutter do not reference these macros
+    # at all, so we must NOT emit them either — doing so would compile a
+    # different binary and break the 1=1 output parity guarantee.
 
     if no_analysis:
         macros.append('-DNO_CODE_ANALYSIS=1')
-    if ida_fcn:
-        macros.append('-DIDA_FCN=1')
+    # ida_fcn is accepted as a CLI arg for forward-compat with elit-f, but it
+    # is intentionally NOT translated to a -D flag here because blutter does
+    # not support it. Building with ida_fcn would diverge from blutter.
     return macros
 
 

@@ -15,7 +15,7 @@ void FridaWriter::Create(const char* filename)
 	std::ofstream of(filename, std::ios_base::app);
 
 	of << "const ClassIdTagPos = " << kUntaggedObjectClassIdTagPos << ";\n";
-	of << fmt::format("const ClassIdTagMask = {:#x};\n", (1 << dart::UntaggedObject::kClassIdTagSize) - 1);
+	of << std::format("const ClassIdTagMask = {:#x};\n", (1 << dart::UntaggedObject::kClassIdTagSize) - 1);
 
 	of << "const NumPredefinedCids = " << dart::kNumPredefinedCids << ";\n";
 	of << "const CidObject = " << dart::kInstanceCid << ";\n";
@@ -115,9 +115,7 @@ void FridaWriter::Create(const char* filename)
 				of << "{id:" << dartCls->Id() << ",";
 				of << "name:\"Closure\",";
 				of << "fnOffset:" << AOT_Closure_function_offset << ",";
-#ifndef ELITF_DART_SINGLE_SNAPSHOT
 				of << "contextOffset:" << AOT_Closure_context_offset << ",";
-#endif
 				of << "epOffset:" << AOT_Closure_entry_point_offset << "},\n";
 				break;
 			case dart::kTypedDataUint8ArrayCid:

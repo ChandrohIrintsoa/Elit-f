@@ -56,7 +56,7 @@ std::string FnParamInfo::ToString() const
 				txt += ", ";
 		}
 		if (localOffset)
-			txt += fmt::format("fp-{:#x}", -localOffset);
+			txt += std::format("fp-{:#x}", -localOffset);
 		txt += " */";
 	}
 	return txt;

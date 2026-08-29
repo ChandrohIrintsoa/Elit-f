@@ -74,7 +74,7 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		if (obj.IsTypedData()) {
 			//dart::kTypedDataInt32ArrayCid;
 			//auto& data = dart::TypedData::Cast(obj);
-			return new VarExpression(fmt::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 		}
 
 		switch (obj.GetClassId()) {
@@ -112,12 +112,12 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 			// TODO: map
 		case dart::kConstSetCid:
 			// TODO: set
-			return new VarExpression(fmt::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 #ifdef HAS_RECORD_TYPE
 		case dart::kRecordCid: {
 			// temporary expression for Record object (need full object for analysis)
 			//const auto& rec = dart::Record::Cast(obj);
-			return new VarExpression(fmt::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 		}
 #endif
 		case dart::kTypeParametersCid:
@@ -149,7 +149,7 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		case dart::kInt32x4Cid:
 		case dart::kFloat32x4Cid:
 		case dart::kFloat64x2Cid:
-			return new VarExpression(fmt::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId()); 
 		case dart::kLibraryPrefixCid:
 			// TODO: handle LibraryPrefix object
 		case dart::kInstanceCid:
@@ -159,13 +159,13 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		if (obj.IsInstance()) {
 			auto dartCls = app.GetClass(obj.GetClassId());
 			if (dartCls->Id() < dart::kNumPredefinedCids) {
-				std::cerr << fmt::format("Unhandle predefined class {} ({})\n", dartCls->Name(), dartCls->Id());
+				std::cerr << std::format("Unhandle predefined class {} ({})\n", dartCls->Name(), dartCls->Id());
 			}
 			return new VarInstance(dartCls);
 		}
 
 		throw std::runtime_error("unhandle object class in getPoolObject");
-		//auto txt = fmt::format("XXX: {}", obj.ToCString());
+		//auto txt = std::format("XXX: {}", obj.ToCString());
 		//return new VarExpression(txt);
 	}
 	else if (objType == dart::ObjectPool::EntryType::kImmediate) {
@@ -175,22 +175,18 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		return new VarInteger(imm, VarValue::NativeInt);
 	}
 	else if (objType == dart::ObjectPool::EntryType::kNativeFunction) {
-		// normally, it is only used in internal library (can be ignored)
-		// but it can be loaded in Dart code (e.g. for calling bootstrap native)
-		const auto addr = pool.RawValueAt(idx);
-		return new VarExpression(fmt::format("NativeFn_{:#x}", addr));
+		//val = pool.RawValueAt(idx);
+		throw std::runtime_error("getting native function pool object from Dart code");
 	}
 	else {
-		throw std::runtime_error(fmt::format("unknown pool object type: {}", (int)objType).c_str());
+		throw std::runtime_error(std::format("unknown pool object type: {}", (int)objType).c_str());
 	}
 }
 
 static inline void handleDecompressPointer(AsmIterator& insn, arm64_reg reg) {
 	INSN_ASSERT(insn.id() == ARM64_INS_ADD);
 	INSN_ASSERT(insn.ops(0).reg == insn.ops(1).reg && insn.ops(0).reg == reg);
-#if defined(DART_COMPRESSED_POINTERS)
 	INSN_ASSERT(insn.ops(2).reg == CSREG_DART_HEAP && insn.ops(2).shift.value == 32);
-#endif
 	++insn;
 }
 
@@ -494,13 +490,13 @@ void FunctionAnalyzer::printInsnException(InsnException& e)
 		--ins;
 	}
 	while (ins != e.insn) {
-		std::cerr << fmt::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
+		std::cerr << std::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
 		++ins;
 	}
-	std::cerr << fmt::format("  * {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
+	std::cerr << std::format("  * {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
 	if (ins->address + ins->size < fnInfo->dartFn.AddressEnd()) {
 		++ins;
-		std::cerr << fmt::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
+		std::cerr << std::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
 	}
 }
 
@@ -657,7 +653,7 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 	}
 	// weird case
 	// it should be easier to detect THR register if varaible tracking is fully implemented
-	else if ((insn.id() == ARM64_INS_MOV && insn.ops(1).reg == CSREG_DART_THR) ||
+	else if ((insn.id() == ARM64_INS_MOV && insn.ops(1).reg == CSREG_DART_THR) || 
 		(insn.id() == ARM64_INS_LDR && GetThreadLeafFunction(insn.ops(1).mem.disp) && insn.ops(1).mem.base != CSREG_DART_PP && insn.ops(1).mem.disp > dart::Thread::AllocateHandle_entry_point_offset()))
 	{
 		InsnMarker marker(insn);
@@ -743,7 +739,7 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 			++insn;
 			save_to_vm_tag = true;
 		}
-
+		
 		INSN_ASSERT(insn.id() == ARM64_INS_BLR);
 		INSN_ASSERT(insn.ops(0).reg == call_target_reg);
 		++insn;
@@ -875,7 +871,7 @@ void FunctionAnalyzer::handlePrologue(AsmIterator& insn, uint64_t endPrologueAdd
 
 	// below check is very useful for checking analyzing prologue because it is correct in most case
 	if (hasPrologue && endPrologueAddr != 0 && endPrologueAddr != insn.address()) {
-		//std::cerr << fmt::format("endPrologueAddr != insn.address(), {:#x} != {:#x}\n", endPrologueAddr, insn.address());
+		//std::cerr << std::format("endPrologueAddr != insn.address(), {:#x} != {:#x}\n", endPrologueAddr, insn.address());
 	}
 
 	// Dart always check stack overflow if allocating stack instruction is emitted
@@ -1224,7 +1220,7 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 	bool isRequired = false;
 	while (!isLastName) {
 		// load current parameter name from ArgumentsDescriptor
-		// the load code uses fixed offset of ArgumentsDescriptor if offset is known (first parameter),
+		// the load code uses fixed offset of ArgumentsDescriptor if offset is known (first parameter), 
 		// if the parameter is "required", no parameter name comparison and also no default value branch
 		if (nameParamCnt) {
 			// load from currParamPosReg
@@ -1470,7 +1466,7 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 					auto val = fnInfo->State()->MoveRegister(insn.ops(0).reg, insn.ops(1).reg);
 					INSN_ASSERT(val);
 				}
-				// TODO: verify final register for valNameCurrParamPos (set when "nameParamCnt && !isLastName") in this branch
+				// TODO: verify final register for valNameCurrParamPos (set when "nameParamCnt && !isLastName") in this branch 
 				//         is same as another branch
 
 				++insn;
@@ -1943,7 +1939,7 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 				++insn;
 			}
 			else if (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.base == CSREG_ARGS_DESC) {
-				//std::cout << fmt::format("  !!! use ArgsDesc directory without moving !!! at {:#x}\n", insn.address());
+				//std::cout << std::format("  !!! use ArgsDesc directory without moving !!! at {:#x}\n", insn.address());
 				argsDescReg = CSREG_ARGS_DESC;
 			}
 			if (argsDescReg != ARM64_REG_INVALID)
@@ -2003,7 +1999,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 		++insn;
 	}
 
-#ifndef ELITF_DART_SINGLE_SNAPSHOT
 	// PrologueBuilder::BuildClosureContextHandling()
 	// closure context handling
 	if (dartFn->IsClosure() && insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.disp == AOT_Closure_context_offset - dart::kHeapObjectTag) {
@@ -2035,7 +2030,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 				}
 			}
 	}
-#endif
 
 	// TypeArgument from Arguments Descriptor might be used
 	if (argsDescReg != ARM64_REG_INVALID)
@@ -2044,7 +2038,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 	if (endPrologueAddr != 0 && insn.address() < endPrologueAddr)
 		handleInitialization();
 
-#ifndef ELITF_DART_SINGLE_SNAPSHOT
 	// closure delayed type arguments
 	if (dartFn->IsClosure()) {
 		const auto save_ins = insn.Current();
@@ -2159,7 +2152,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 			insn.SetCurrent(save_ins);
 		}
 	}
-#endif
 
 	if (insn.address() < endPrologueAddr) {
 		// short-lived aliases for prologue parameter register shuffle
@@ -2502,7 +2494,6 @@ std::unique_ptr<MoveRegInstr> FunctionAnalyzer::processMoveRegInstr(AsmIterator&
 
 std::unique_ptr<DecompressPointerInstr> FunctionAnalyzer::processDecompressPointerInstr(AsmIterator& insn)
 {
-#if defined(DART_COMPRESSED_POINTERS)
 	if (insn.id() == ARM64_INS_ADD && insn.ops(2).reg == CSREG_DART_HEAP && insn.ops(2).shift.value == 32) {
 		INSN_ASSERT(insn.ops(0).reg == insn.ops(1).reg);
 		const auto reg = A64::Register{ insn.ops(0).reg };
@@ -2510,7 +2501,6 @@ std::unique_ptr<DecompressPointerInstr> FunctionAnalyzer::processDecompressPoint
 		++insn;
 		return std::make_unique<DecompressPointerInstr>(insn.Wrap(ins0_addr), reg);
 	}
-#endif
 	return nullptr;
 }
 
@@ -3244,7 +3234,7 @@ std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(As
 	// if (can_be_smi == kValueCanBeSmi) {
 	//     BranchIfSmi(value, &done);
 	// }
-	//
+	// 
 	// 0x2a766c: tbz  w0, #0, #0x2a7688  ; BranchIfSmi()
 	// 0x2a7670: ldurb  w16, [x1, #-1]
 	// 0x2a7674: ldurb  w17, [x0, #-1]
@@ -3292,9 +3282,7 @@ std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(As
 
 	INSN_ASSERT(insn.id() == ARM64_INS_TST);
 	INSN_ASSERT(insn.ops(0).reg == CSREG_DART_TMP);
-#if defined(DART_COMPRESSED_POINTERS)
 	INSN_ASSERT(insn.ops(1).reg == CSREG_DART_HEAP);
-#endif
 	INSN_ASSERT(insn.ops(1).shift.type == ARM64_SFT_LSR && insn.ops(1).shift.value == 32);
 	++insn;
 
@@ -3651,7 +3639,7 @@ void CodeAnalyzer::asm2il(DartFunction* dartFn, AsmInstructions& asm_insns)
 	FunctionAnalyzer analyzer{ dartFn->GetAnalyzedData(), dartFn, asm_insns, app };
 	analyzer.asm2il();
 }
-
+	
 AsmTexts CodeAnalyzer::convertAsm(AsmInstructions& asm_insns)
 {
 	// convert register name in op_str
@@ -3665,14 +3653,14 @@ AsmTexts CodeAnalyzer::convertAsm(AsmInstructions& asm_insns)
 
 		text_asm.addr = insn->address;
 		text_asm.dataType = AsmText::None;
-
+		
 		memset(text_asm.text, ' ', 16);
 		memcpy(text_asm.text, insn->mnemonic, strlen(insn->mnemonic));
 		auto ptr = text_asm.text + 16;
 		auto op_ptr = insn->op_str;
 		bool token_start = true;
 		while (*op_ptr != '\0') {
-			if (token_start) {
+			if (token_start) { 
 				if (op_ptr[0] == 'x' || op_ptr[0] == 'w') {
 					bool do_replacement = true;
 					if (op_ptr[1] == '1' && op_ptr[2] == '5') {

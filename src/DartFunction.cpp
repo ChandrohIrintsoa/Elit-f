@@ -11,43 +11,6 @@
 // place static member because no DartFnBase source file
 intptr_t DartFnBase::lib_base;
 
-#ifdef ELITF_DART_SINGLE_SNAPSHOT
-// Dart 3.13 replaces the code of the discarded functions with a shared UnknownDartCode stub
-// during snapshot deserialization (see UntaggedCode::DiscardedBit). The real instructions are
-// still present in the instructions table. So, the code size has to be derived from the table.
-static int64_t findDiscardedCodeSize(dart::uword entry_point)
-{
-	auto& tables = dart::GrowableObjectArray::Handle(dart::Thread::Current()->zone(),
-		dart::IsolateGroup::Current()->object_store()->instructions_tables());
-	auto& table = dart::InstructionsTable::Handle();
-	for (intptr_t t = 0; t < tables.Length(); t++) {
-		table ^= tables.At(t);
-		if (!table.ContainsPc(entry_point))
-			continue;
-		const auto len = static_cast<intptr_t>(table.rodata()->length);
-		// find the instruction block containing the entry point (same search as InstructionsTable::FindEntry())
-		intptr_t lo = 0;
-		intptr_t hi = len - 1;
-		while (lo <= hi) {
-			const auto mid = (hi - lo + 1) / 2 + lo;
-			if (entry_point < table.EntryPointAt(mid)) {
-				hi = mid - 1;
-			}
-			else if ((mid != hi) && (entry_point >= table.EntryPointAt(mid + 1))) {
-				lo = mid + 1;
-			}
-			else {
-				if (mid == len - 1)
-					break; // the last entry has no following entry to derive the size from
-				return static_cast<int64_t>(table.EntryPointAt(mid + 1)) - static_cast<int64_t>(table.EntryPointAt(mid));
-			}
-		}
-		break;
-	}
-	return 0;
-}
-#endif
-
 DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFnBase(), cls(cls), parent(nullptr), ptr(ptr), kind(NORMAL)
 {
 	auto* zone = dart::Thread::Current()->zone();
@@ -107,33 +70,21 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 	// Code.EntryPoint() in obfuscated app might be pointed at start of snapshot (wrong)
 	const auto ep = func.entry_point() - lib_base;
 	const auto& code = dart::Code::Handle(zone, func.CurrentCode());
-#ifdef ELITF_DART_SINGLE_SNAPSHOT
-	if (dart::Code::IsUnknownDartCode(code.ptr())) {
-		// discarded function (Dart 3.13). entry point is correct but code info comes from the shared stub
+	payload_addr = code.PayloadStart();
+	if (payload_addr > 0)
+		payload_addr -= lib_base;
+	morphic_addr = code.MonomorphicEntryPoint();
+	if (morphic_addr > 0)
+		morphic_addr -= lib_base;
+	size = code.Size();
+	ep_addr = code.EntryPoint() - lib_base;
+	if (ep != ep_addr) {
 		ep_addr = ep;
-		payload_addr = ep;
-		morphic_addr = ep;
-		size = findDiscardedCodeSize(func.entry_point());
-	}
-	else
-#endif
-	{
-		payload_addr = code.PayloadStart();
-		if (payload_addr > 0)
-			payload_addr -= lib_base;
-		morphic_addr = code.MonomorphicEntryPoint();
-		if (morphic_addr > 0)
-			morphic_addr -= lib_base;
-		size = code.Size();
-		ep_addr = code.EntryPoint() - lib_base;
-		if (ep != ep_addr) {
-			ep_addr = ep;
-			//std::cout << fmt::format("Fn: {}, payload: {:#x}, ep_addr: {:#x}, ep: {:#x}\n", name.c_str(), payload_addr, ep_addr, ep);
-		}
+		//std::cout << std::format("Fn: {}, payload: {:#x}, ep_addr: {:#x}, ep: {:#x}\n", name.c_str(), payload_addr, ep_addr, ep);
 	}
 
 	//if (ep_addr != payload_addr) {
-	//	std::cout << fmt::format("Fn: {}, payload: {:#x}, morphic: {:#x}, ep: {:#x}\n", name.c_str(), payload_addr, morphic_addr, ep_addr);
+	//	std::cout << std::format("Fn: {}, payload: {:#x}, morphic: {:#x}, ep: {:#x}\n", name.c_str(), payload_addr, morphic_addr, ep_addr);
 	//}
 
 	// closure parent (what function use this closure)
@@ -149,7 +100,7 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 			parent = (DartFunction*)(intptr_t)parentPtr;
 		}
 		else {
-			//std::cout << fmt::format("[?] closure {} ({:#x}) has null parent\n", name, ep_addr);
+			//std::cout << std::format("[?] closure {} ({:#x}) has null parent\n", name, ep_addr);
 		}
 	}
 
@@ -239,12 +190,12 @@ std::string DartFunction::ToCallStatement(const std::vector<std::shared_ptr<VarI
 			callFn = args[0]->CallArgName() + "." + Name();
 		}
 	}
-	return fmt::format("{}({})", callFn.c_str(), callArgs.c_str());
+	return std::format("{}({})", callFn.c_str(), callArgs.c_str());
 }
 
 void DartFunction::PrintHead(std::ostream& of) const
 {
-	//of << fmt::format("    {} /* addr: {:#x}, size: {:#x} */\n", func.ToCString(), ep, code_size);
+	//of << std::format("    {} /* addr: {:#x}, size: {:#x} */\n", func.ToCString(), ep, code_size);
 	auto zone = dart::Thread::Current()->zone();
 	auto& func = dart::Function::Handle(zone, ptr);
 
@@ -308,7 +259,7 @@ void DartFunction::PrintHead(std::ostream& of) const
 	}
 	of << " {\n";
 
-	of << fmt::format("    // ** addr: {:#x}, size: {:#x}\n", ep_addr, size);
+	of << std::format("    // ** addr: {:#x}, size: {:#x}\n", ep_addr, size);
 }
 
 void DartFunction::PrintFoot(std::ostream& of) const

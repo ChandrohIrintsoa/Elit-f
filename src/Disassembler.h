@@ -1,13 +1,17 @@
 #pragma once
-#include <capstone/capstone.h>
+#include <capstone.h>
 #include <utility>
 #ifdef TARGET_ARCH_ARM64
 #include "Disassembler_arm64.h"
 #endif
 
+
+// master of disassmbled instructions from capstone
+// do not allow copy because this class must free the instructions
 class AsmInstructions {
 	cs_insn* insns;
 	size_t count;
+
 	AsmInstructions(cs_insn* insns, size_t count) : insns(insns), count(count) {}
 public:
 	AsmInstructions() = delete;
@@ -28,6 +32,7 @@ public:
 	cs_insn* Ptr(size_t i) { return &insns[i]; }
 	size_t AtIndex(uint64_t addr) {
 		ASSERT(addr > insns->address);
+		// estimate index (normally 4 bytes per instruction for arm64)
 		auto idx = (addr - insns->address) / 4;
 		ASSERT(idx < count);
 		while (idx < count && insns[idx].address < addr)
@@ -36,6 +41,7 @@ public:
 	}
 	AsmInstruction AtAddr(uint64_t addr) {
 		ASSERT(addr > insns->address);
+		// estimate index (normally 4 bytes per instruction for arm64)
 		auto idx = (addr - insns->address) / 4;
 		ASSERT(idx < count);
 		auto insn = &insns[idx];
@@ -49,9 +55,12 @@ public:
 	friend class Instruction;
 };
 
+// partial instructions from Instructions object.
+// this class object are safe to copy/move because there is no freeing when destructor is called
 class AsmBlock {
 	cs_insn* insns;
 	cs_insn* last_insn;
+
 public:
 	explicit AsmBlock() : insns(nullptr), last_insn(nullptr) {}
 	explicit AsmBlock(cs_insn* insns, cs_insn* last_insn) : insns(insns), last_insn(last_insn) {}
@@ -85,3 +94,4 @@ public:
 private:
 	csh cshandle;
 };
+

@@ -1,0 +1,7 @@
+bin/
+build/
+packages/
+*.o
+*.d
+.cache/
+.DS_Store

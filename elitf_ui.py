@@ -1,25 +1,4 @@
-#!/usr/bin/env python3
-"""
-elitf_ui.py — Composants d'interface utilisateur pour Elit-f.
 
-Contient :
-  * `LogManager`        : buffer circulaire thread-safe de logs avec rendu Rich/plaintext.
-  * `ElitfUI`           : façade d'affichage (console Rich ou fallback print).
-  * Constantes associées (LOGO, AUTHOR) et détection de `rich`.
-
-Ce module est importé paresseusement par `elitf.py` afin que le cœur fonctionnel
-(extraction, build, analyse) reste utilisable même si `rich` n'est pas installé.
-
-Notes Termux :
-  * Rich ne détecte pas toujours Termux comme un terminal interactif, ce qui
-    fait apparaître les balises littéralement et empêche `Live` de rafraîchir
-    correctement l'écran (les frames s'empilent au lieu de se remplacer).
-  * On détecte donc Termux via la variable d'environnement `TERMUX_VERSION`
-    ou la présence du chemin `/data/data/com.termux`, et dans ce cas on force
-    `Console(force_terminal=True)` pour l'interprétation des balises, et on
-    remplace `Live` par un mode "plain-streaming" qui affiche les logs au fil
-    de l'eau via des `print()` simples.
-"""
 import os
 import re
 import platform
@@ -77,11 +56,7 @@ def strip_rich_tags(text: str) -> str:
 
 
 class LogManager:
-    """Thread-safe ring buffer of timestamped log entries.
 
-    Also tracks an explicit `step_count` so progress bars can advance
-    based on actual work performed rather than the (capped) buffer length.
-    """
     def __init__(self, maxlen=200):
         self.logs = deque(maxlen=maxlen)
         self.lock = threading.Lock()
@@ -143,11 +118,7 @@ class LogManager:
 
 
 def _is_termux() -> bool:
-    """Detect whether we're running inside a Termux environment.
-
-    Termux exposes a `TERMUX_VERSION` env var and installs under
-    `/data/data/com.termux/`. Either signal is sufficient.
-    """
+ 
     if os.environ.get('TERMUX_VERSION'):
         return True
     if os.path.isdir('/data/data/com.termux'):
@@ -159,24 +130,9 @@ def _is_termux() -> bool:
 
 
 class ElitfUI:
-    """Façade d'affichage Rich avec fallback plain-text.
 
-    `detected_so` est une liste de dicts `{"path", "name", "size"}` peuplée par
-    `detect_so_files()`. `metadata` est un dict affiché par `display_metadata()`.
-    """
     def __init__(self, force_plain: bool = False):
-        """Initialize the UI.
 
-        Args:
-            force_plain: if True, never use Rich rendering (panels, tables,
-                Live animations). All output is plain text via `print()`.
-                Recommended on Termux or any terminal where Rich's cursor
-                repositioning or markup interpretation doesn't work.
-        """
-        # Auto-detect Termux and enable plain mode in that case, because
-        # Rich's Live doesn't refresh correctly on Termux (frames stack
-        # instead of replacing each other) and markup tags can be printed
-        # literally when Rich doesn't detect the terminal as interactive.
         self.force_plain = force_plain or _is_termux()
         if HAS_RICH and not self.force_plain:
             self.console = Console()

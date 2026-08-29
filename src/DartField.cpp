@@ -9,11 +9,13 @@ DartField::DartField(const DartClass& cls_, dart::FieldPtr ptr_) : cls(cls_), ty
 	auto zone = dart::Thread::Current()->zone();
 	const auto& field = dart::Field::Handle(ptr_);
 	name = field.UserVisibleNameCString();
+	// static field has no offset in object. it is offset of static list
 	offset = (uint32_t)field.TargetOffset();
 	is_static = field.is_static();
 	is_late = field.is_late();
 	is_final = field.is_final();
 	is_const = field.is_const();
+	//field.is_covariant();
 
 	typePtr = field.type();
 	const auto& abType = dart::AbstractType::Handle(typePtr);
@@ -31,9 +33,10 @@ void DartField::Print(std::ostream& of) const
 {
 	of << "  ";
 	if (ptr == nullptr) {
+		// use concrete type
 		ASSERT(type);
 		of << type->ToString();
-		of << fmt::format(" field_{:x};\n", offset);
+		of << std::format(" field_{:x};\n", offset);
 	}
 	else {
 		if (is_static)
@@ -45,7 +48,7 @@ void DartField::Print(std::ostream& of) const
 		if (is_const)
 			of << "const ";
 		of << typeName << " " << name;
-		of << fmt::format("; // offset: {:#x}\n", offset);
+		of << std::format("; // offset: {:#x}\n", offset);
 	}
 }
 

@@ -8,3 +8,4 @@ public:
 	static std::string Quote(const std::string& s);
 	static std::string Unquote(const std::string& s);
 };
+

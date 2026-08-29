@@ -41,4 +41,6 @@ private:
 	bool is_late;
 	bool is_final;
 	bool is_const;
+	//bool is_covariant;
 };
+

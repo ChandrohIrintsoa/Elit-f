@@ -29,7 +29,7 @@ function tryLoadLibapp() {
         }
     }
     if (libapp === null)
-        setTimeout(tryLoadLibapp, 500);
+        setTimeout(tryLoadLibapp, 500);    
     else
         onLibappLoaded();
 }
