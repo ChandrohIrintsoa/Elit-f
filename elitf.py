@@ -775,7 +775,7 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_m
         log_mgr.add("Flutter/Dart AOT analysis complete", "success")
 
 
-def main_interactive(ui):
+def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
     ui.display_logo()
     if ui.console:
         ui.console.print(Rule("[dim]Configuration[/]", style=Style(dim=True)))
@@ -834,7 +834,7 @@ def main_interactive(ui):
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
             def work(lm):
-                run_flutter_analysis(indir, outdir, False, False, ui, lm)
+                run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm)
             total_steps = 20
             try:
                 ui.run_with_live_display("Flutter/Dart AOT Analysis", total_steps, work)
@@ -1052,4 +1052,4 @@ if __name__ == "__main__":
                 ui.indir = args.indir
             if args.outdir:
                 ui.outdir = args.outdir
-            main_interactive(ui)
+            main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn)
