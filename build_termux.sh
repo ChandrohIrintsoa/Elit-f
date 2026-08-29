@@ -86,8 +86,12 @@ fi
 
 echo "Build complete: bin/elitf_${DARTLIB}.stripped"
 
-# 3) Installer le lanceur
-ELITF_LAUNCHER="$PREFIX/bin/Elit-f"
-printf '#!/data/data/com.termux/files/usr/bin/bash\ncd "%s"\nexec python3 elitf.py "$@"\n' "$SCRIPT_DIR" > "$ELITF_LAUNCHER"
-chmod 755 "$ELITF_LAUNCHER"
-echo "Launcher installed: $ELITF_LAUNCHER"
+# 3) Installer le lanceur (uniquement si PREFIX est défini — typiquement Termux)
+if [ -n "$PREFIX" ] && [ -d "$PREFIX/bin" ]; then
+        ELITF_LAUNCHER="$PREFIX/bin/Elit-f"
+        printf '#!/data/data/com.termux/files/usr/bin/bash\ncd "%s"\nexec python3 elitf.py "$@"\n' "$SCRIPT_DIR" > "$ELITF_LAUNCHER"
+        chmod 755 "$ELITF_LAUNCHER"
+        echo "Launcher installed: $ELITF_LAUNCHER"
+else
+        echo "Skipped launcher install (PREFIX not set or $PREFIX/bin missing — non-Termux env)."
+fi

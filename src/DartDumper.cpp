@@ -22,7 +22,7 @@ static std::unordered_map<std::string, std::string> OP_MAP {
         { "++", "increment" }, { "--", "decrement" },
         { "+", "add" }, { "-", "sub" }, { "*", "mul" }, { "~/", "div" }, { "/", "divf" },
         { "%", "mod" },
-        { "&", "LAnd" }, { "|", "LOr" }, { "^", "xor" }, { "~", "not" }, {">>", "shar"}, {"<<", "shal"}, {">>", "shr"}
+        { "&", "LAnd" }, { "|", "LOr" }, { "^", "xor" }, { "~", "not" }, {">>", "shar"}, {"<<", "shal"}, {">>>", "shr"}
 };
 
 static bool is_valid_char(const char ch) {

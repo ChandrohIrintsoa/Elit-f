@@ -82,7 +82,7 @@ private:
         intptr_t dartRunesCid;
         intptr_t dartFutureCid;
 
-        intptr_t throwStubAddr;
+        uintptr_t throwStubAddr;
 
         friend class CodeAnalyzer;
         friend class DartAnalyzer;
