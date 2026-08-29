@@ -92,30 +92,50 @@ def _parse_major_minor(version: str):
 def validate_two_libs(indir: str):
     """Ensure `indir` contains exactly libapp.so and libflutter.so.
 
+    Searches recursively in subdirectories (e.g. lib/arm64-v8a/) so that
+    users can point to a parent directory that contains an ABI folder
+    structure extracted from an APK.
+
     Returns a tuple of absolute paths (libapp_path, libflutter_path).
     Raises `ValueError` (rather than sys.exit) so callers can recover.
     """
     if not os.path.isdir(indir):
         raise ValueError(
             f"Input is not a directory containing {EXPECTED_LIBS[0]} and {EXPECTED_LIBS[1]}")
+
+    import glob as globmod
+
+    # First try: direct children (fast path, preserves strict behaviour)
     try:
         so_files = sorted(f for f in os.listdir(indir) if f.endswith('.so'))
     except OSError as e:
         raise ValueError(f"Cannot list directory '{indir}': {e}")
+
+    # If both expected libs found directly, return them (original behaviour)
     expected = sorted(EXPECTED_LIBS)
-    missing = [f for f in expected if f not in so_files]
-    extra = [f for f in so_files if f not in expected]
-    if missing or extra:
-        parts = []
-        if missing:
-            parts.append(f"Missing libraries: {missing}")
-        if extra:
-            parts.append(f"Unexpected libraries: {extra}")
+    if all(f in so_files for f in expected):
+        return (os.path.abspath(os.path.join(indir, EXPECTED_LIBS[0])),
+                os.path.abspath(os.path.join(indir, EXPECTED_LIBS[1])))
+
+    # Second try: recursive glob to find .so in subdirectories (e.g. lib/arm64-v8a/)
+    try:
+        all_so = globmod.glob(os.path.join(indir, '**', '*.so'), recursive=True)
+    except (PermissionError, OSError):
+        all_so = []
+
+    found = {}  # basename -> absolute path
+    for p in all_so:
+        name = os.path.basename(p)
+        if name in EXPECTED_LIBS and name not in found:
+            found[name] = os.path.abspath(p)
+
+    missing = [f for f in EXPECTED_LIBS if f not in found]
+    if missing:
         raise ValueError(
-            "; ".join(parts) + ". The Flutter libs must be exactly two: "
+            f"Missing libraries: {missing}. The Flutter libs must be exactly two: "
             f"{EXPECTED_LIBS[0]} and {EXPECTED_LIBS[1]}")
-    return (os.path.abspath(os.path.join(indir, EXPECTED_LIBS[0])),
-            os.path.abspath(os.path.join(indir, EXPECTED_LIBS[1])))
+
+    return (found[EXPECTED_LIBS[0]], found[EXPECTED_LIBS[1]])
 
 
 def extract_libs_from_apk(apk_file: str, out_dir: str):
