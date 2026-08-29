@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python3
 import os
 import re
 import platform
@@ -50,7 +50,6 @@ ASCII_LINES = [
 
 X_COLORS = ["bright_cyan", "bright_magenta", "bright_yellow", "bright_green", "bright_blue"]
 
-
 def build_x(offset: int = 0):
     art = Text()
     color_idx = offset
@@ -64,7 +63,6 @@ def build_x(offset: int = 0):
                 color_idx += 1
         art.append("\n")
     return art
-
 
 def build_y(author: str, platform_name: str, date_str: str) -> "Panel":
     body = Text()
@@ -91,12 +89,10 @@ def build_y(author: str, platform_name: str, date_str: str) -> "Panel":
     )
     return panel
 
-
 def build_logo(author: str, platform_name: str, date_str: str, offset: int = 0) -> "Columns":
     x = build_x(offset=offset)
     y = build_y(author, platform_name, date_str)
     return Columns([x, y], align="center", expand=False, padding=(0, 3))
-
 
 def logo_plain_text(author: str, platform_name: str, date_str: str) -> str:
     lines = list(ASCII_LINES)
@@ -109,14 +105,10 @@ def logo_plain_text(author: str, platform_name: str, date_str: str) -> str:
 
 _RICH_TAG_RE = re.compile(r'(?:\[/?[#a-zA-Z][\w #]*\]|\[/\])')
 
-
 def strip_rich_tags(text: str) -> str:
-  
     return _RICH_TAG_RE.sub('', str(text))
 
-
 class LogManager:
-
     def __init__(self, maxlen=200):
         self.logs = deque(maxlen=maxlen)
         self.lock = threading.Lock()
@@ -159,7 +151,6 @@ class LogManager:
                 lines.append(RichText(f"  [{ts}] ", style="dim") + RichText(f"→ {msg}", style="bright_cyan"))
         if not lines:
             lines.append(RichText("  En attente...", style="dim"))
-        # Use RichText("\n").join() — well-defined in Rich Text objects.
         result = RichText("")
         for i, line in enumerate(lines):
             if i > 0:
@@ -176,9 +167,7 @@ class LogManager:
             lines.append(f"  [{ts}] {prefix} {msg}")
         return "\n".join(lines) if lines else "  En attente..."
 
-
 def _is_termux() -> bool:
- 
     if os.environ.get('TERMUX_VERSION'):
         return True
     if os.path.isdir('/data/data/com.termux'):
@@ -188,15 +177,11 @@ def _is_termux() -> bool:
         return True
     return False
 
-
 class ElitfUI:
-
     def __init__(self, force_plain: bool = False):
-   
         self.force_plain = force_plain or _is_termux()
         if HAS_RICH:
-
-            self.console = Console(force_terminal=self.force_plain or None)
+            self.console = Console(force_terminal=True)
         else:
             self.console = None
         self.log_mgr = LogManager(200)
@@ -254,7 +239,6 @@ class ElitfUI:
             print()
 
     def animate_logo(self, duration_seconds=10.0, interval_ms=150):
-  
         if not self.console or not HAS_RICH or self.force_plain:
             self.display_logo()
             return
@@ -382,11 +366,7 @@ class ElitfUI:
                 return 0
         return choice
 
-    # ------------------------------------------------------------------
-    #  Radare2 unified sub-menu (remplace les anciennes options [2] + [3])
-    # ------------------------------------------------------------------
     def display_r2_submenu(self):
-        """Afficher le sous-menu Radare2 avec tous les modes d'analyse."""
         if self.console:
             from rich.text import Text as _Text
             from rich.panel import Panel as _Panel
@@ -397,7 +377,6 @@ class ElitfUI:
             self.console.print(_Rule("[dim]Radare2 — Modes d'analyse[/]",
                                     style=_Style(dim=True)))
 
-            # Section A : Presets
             self.console.print()
             preset_text = _Text()
             preset_items = [
@@ -416,7 +395,6 @@ class ElitfUI:
                 border_style=Style(color="bright_green"), box=rbox.ROUNDED,
                 padding=(0, 1)))
 
-            # Section B : Niveaux d'analyse
             self.console.print()
             anal_text = _Text()
             anal_items = [
@@ -435,7 +413,6 @@ class ElitfUI:
                 border_style=Style(color="bright_cyan"), box=rbox.ROUNDED,
                 padding=(0, 1)))
 
-            # Section C : Extraction ciblée
             self.console.print()
             ext_text = _Text()
             ext_items = [
@@ -460,7 +437,6 @@ class ElitfUI:
                 border_style=Style(color="bright_yellow"), box=rbox.ROUNDED,
                 padding=(0, 1)))
 
-            # Section D : Mode écriture
             self.console.print()
             write_text = _Text()
             write_items = [
@@ -477,7 +453,6 @@ class ElitfUI:
                 border_style=Style(color="red"), box=rbox.ROUNDED,
                 padding=(0, 1)))
 
-            # Section E : Autres
             self.console.print()
             other_text = _Text()
             other_items = [
@@ -495,7 +470,6 @@ class ElitfUI:
                 border_style=Style(color="white"), box=rbox.ROUNDED,
                 padding=(0, 1)))
         else:
-            # Mode plain-text
             print()
             print("  === [A] Presets d'analyse ===")
             print("  [1] Analyse complete (aaa + toute extraction)")
@@ -534,13 +508,6 @@ class ElitfUI:
             print("  [0] Retour au menu principal")
 
     def get_r2_choice(self):
-        """Obtenir le choix de l'utilisateur dans le sous-menu r2.
-
-        Returns:
-            str: la clé du choix ("full", "standard", "a", "aa", "functions", etc.)
-                 ou "back" pour retourner.
-        """
-        # Mapping choix -> clé
         _PRESET_MAP = {
             "1": "full", "2": "standard", "3": "quick",
             "4": "minimal", "5": "security_audit",
@@ -575,19 +542,16 @@ class ElitfUI:
 
         raw = raw.strip().lower()
 
-        # Chercher dans tous les mappings
         for mapping in (_PRESET_MAP, _ANALYSIS_MAP, _EXTRACTION_MAP,
                         _WRITE_MAP, _OTHER_MAP):
             if raw in mapping:
                 return mapping[raw]
 
-        # Invité ? Montrer le sous-menu à nouveau
         self._print("[bold yellow]Choix invalide.[/]" if self.console
                     else "Choix invalide.")
         return None
 
     def display_r2_analysis_picker(self):
-        """Afficher le sélecteur de niveau d'analyse (pour le mode personnalisé)."""
         if self.console:
             from rich.text import Text as _Text
             from rich.panel import Panel as _Panel
@@ -613,11 +577,6 @@ class ElitfUI:
             print("  [4] Toutes les commandes")
 
     def get_r2_analysis_choice(self):
-        """Obtenir le choix du niveau d'analyse personnalisé.
-
-        Returns:
-            Clé dans R2_ANALYSIS_LEVELS ou None.
-        """
         _MAP = {"1": "a", "2": "aa", "3": "aaa", "4": "all_anal"}
         if self.console:
             try:
@@ -634,7 +593,6 @@ class ElitfUI:
         return _MAP.get(raw.strip(), None)
 
     def display_r2_extraction_picker(self):
-        """Afficher le sélecteur de blocs d'extraction (pour le mode personnalisé)."""
         if self.console:
             from rich.text import Text as _Text
             from rich.panel import Panel as _Panel
@@ -679,11 +637,6 @@ class ElitfUI:
             print("  (numeros separes par virgules, ex: 1,3,5)")
 
     def get_r2_extraction_choices(self):
-        """Obtenir les blocs d'extraction sélectionnés.
-
-        Returns:
-            Liste de clés dans R2_EXTRACTION_BLOCKS, ou None si annulé.
-        """
         _MAP = {
             "1": "functions", "2": "strings", "3": "imports_exports",
             "4": "xrefs", "5": "binary_info", "6": "classes",
@@ -715,11 +668,6 @@ class ElitfUI:
         return keys if keys else None
 
     def get_r2_execute_choice(self):
-        """Demander si l'on doit exécuter r2 ou juste générer les scripts.
-
-        Returns:
-            True pour exécuter, False pour générer uniquement.
-        """
         if self.console:
             try:
                 raw = Prompt.ask(
@@ -735,37 +683,21 @@ class ElitfUI:
         return raw.strip().lower() != "g"
 
     def get_r2_generate_choice(self):
-        """Sous-menu pour le mode 'générer sans exécuter'.
-
-        Returns:
-            Clé de preset ou None.
-        """
         self.display_r2_submenu()
         choice = self.get_r2_choice()
         if choice == "back" or choice is None:
             return None
         if choice in ("write_wa", "write_wx", "write_w"):
-            # Pas de sens en mode génération seule
             self._print("[bold yellow]Le mode écriture nécessite l'exécution de r2.[/]"
                         if self.console else "Le mode ecriture necessite l'execution de r2.")
             return None
         if choice == "generate_only":
-            # Récursif — utiliser le preset complet par défaut
             return "full"
         if choice == "custom":
             return "full"  # Simplification pour la génération
         return choice
 
     def _prompt_text(self, prompt_str, default=""):
-        """Demander une chaîne de texte à l'utilisateur.
-
-        Args:
-            prompt_str: le prompt à afficher
-            default: valeur par défaut
-
-        Returns:
-            La chaîne saisie ou la valeur par défaut.
-        """
         if self.console:
             try:
                 return Prompt.ask(
@@ -822,7 +754,6 @@ class ElitfUI:
         return sorted(set(indices))
 
     def run_with_live_display(self, title, steps, work_fn):
-
         if not self.console or not HAS_RICH:
             return self._run_plain(title, steps, work_fn, stream_logs=True)
 
@@ -832,7 +763,6 @@ class ElitfUI:
         return self._run_live(title, steps, work_fn)
 
     def _run_plain(self, title, steps, work_fn, stream_logs=True):
-      
         if self.console:
             self.console.print()
             self.console.print(Panel(
@@ -864,7 +794,6 @@ class ElitfUI:
         style_map = {"error": "bold red", "success": "bold bright_green",
                     "warn": "bold bright_yellow", "debug": "dim"}
 
-        # Stream new log entries as they appear.
         while thread.is_alive():
             with self.log_mgr.lock:
                 current_logs = list(self.log_mgr.logs)
@@ -880,7 +809,6 @@ class ElitfUI:
             last_count = len(current_logs)
             time.sleep(0.2)
 
-        # Print any final logs added after the worker exited.
         with self.log_mgr.lock:
             current_logs = list(self.log_mgr.logs)
         new_entries = current_logs[last_count:]
@@ -904,7 +832,6 @@ class ElitfUI:
         return result[0]
 
     def _run_live(self, title, steps, work_fn):
-        """Rich Live mode: animated TUI with progress bar + live log panel."""
         from rich.table import Column
 
         progress = Progress(
@@ -971,7 +898,6 @@ class ElitfUI:
                 progress.update(task_id, completed=steps)
                 update_logs()
         finally:
-
             thread.join(timeout=10)
 
         if error_holder[0]:
