@@ -10,12 +10,19 @@ Contient :
 
 Ces fonctions acceptent un `LogManager` optionnel (issu de `elitf_ui`) pour reporter
 la progression sans dépendre directement de Rich.
+
+Le script r2 généré est exhaustif : il exécute toutes les commandes d'analyse
+radare2 disponibles (`aa`, `aaa`, `aac`, `aar`, `afr`, `aae`, `aaft`, `aao`, ...)
+puis extrait toutes les informations (fonctions, strings, sections, imports,
+exports, symboles, xrefs, classes, crypto, URLs, JNI, etc.).
 """
 import os
 import shutil
 import subprocess
 
-# Radare2 default analysis + extraction script
+# Radare2 comprehensive analysis + extraction script.
+# Runs ALL available analysis commands (aa, aaa, aac, aar, afr, aae, aaft, aao, ...)
+# then extracts every kind of information radare2 can produce.
 R2_SCRIPT_TEMPLATE = r"""e scr.color=0
 e scr.utf8=0
 e anal.strings=true
@@ -23,8 +30,42 @@ e bin.cache=true
 e asm.bytes=false
 e asm.lines=false
 e asm.offset=true
-aaa
 e log.dest=FILE
+
+ab
+
+aa
+
+aaa
+
+aac
+
+aar
+
+afr
+
+aae
+
+aaft
+
+aao
+
+aav
+
+aas
+
+aat
+
+aap
+
+aau
+
+ad@e:anal.depth=8
+
+afl
+
+e log.dest=stderr
+
 afl > __OUTDIR__/__NAME__functions.txt
 izz > __OUTDIR__/__NAME__strings.txt
 iS > __OUTDIR__/__NAME__sections.txt
@@ -37,18 +78,29 @@ iI > __OUTDIR__/__NAME__binary_info.txt
 ie > __OUTDIR__/__NAME__entrypoints.txt
 Ih > __OUTDIR__/__NAME__headers.txt
 im > __OUTDIR__/__NAME__memory_map.txt
-e log.dest=stderr
+iA > __OUTDIR__/__NAME__arch_info.txt
+il > __OUTDIR__/__NAME__libraries.txt
+iz > __OUTDIR__/__NAME__data_strings.txt
+izq > __OUTDIR__/__NAME__data_strings_raw.txt
+izzq > __OUTDIR__/__NAME__all_strings_raw.txt
+iEq > __OUTDIR__/__NAME__exports_raw.txt
+iiq > __OUTDIR__/__NAME__imports_raw.txt
+isq > __OUTDIR__/__NAME__symbols_raw.txt
 f > __OUTDIR__/__NAME__flags.txt
+aflq > __OUTDIR__/__NAME__func_list.txt
+aflq~? > __OUTDIR__/__NAME__func_count.txt
 afl~sym\. > __OUTDIR__/__NAME__sym_functions.txt
 afl~sub\. > __OUTDIR__/__NAME__sub_functions.txt
-aac
-aar
-afr
-aflq > __OUTDIR__/__NAME__func_list.txt
 isq~FUNC > __OUTDIR__/__NAME__func_symbols.txt
 axt sym.imp.* > __OUTDIR__/__NAME__xrefs_to_imports.txt
-iE~* > __OUTDIR__/__NAME__exports_raw.txt
-ii~* > __OUTDIR__/__NAME__imports_raw.txt
+axt * > __OUTDIR__/__NAME__xrefs_all.txt
+axf * > __OUTDIR__/__NAME__xrefs_from.txt
+axt @ `aflq~?` > __OUTDIR__/__NAME__xrefs_count.txt
+afl* > __OUTDIR__/__NAME__functions_json.txt
+afij > __OUTDIR__/__NAME__functions_info.json
+icq > __OUTDIR__/__NAME__classes_raw.txt
+ic* > __OUTDIR__/__NAME__classes_json.txt
+
 /w \x00http > __OUTDIR__/__NAME__urls.txt
 /w \x00file:// > __OUTDIR__/__NAME__file_urls.txt
 /w \x00/content/ > __OUTDIR__/__NAME__content_uris.txt
@@ -83,6 +135,20 @@ ii~* > __OUTDIR__/__NAME__imports_raw.txt
 /w encrypt > __OUTDIR__/__NAME__encrypt_refs.txt
 /w BASE64 > __OUTDIR__/__NAME__base64.txt
 /w protobuf > __OUTDIR__/__NAME__protobuf.txt
+/w https:// > __OUTDIR__/__NAME__https_urls.txt
+/w http:// > __OUTDIR__/__NAME__http_urls.txt
+/w ws:// > __OUTDIR__/__NAME__ws_urls.txt
+/w wss:// > __OUTDIR__/__NAME__wss_urls.txt
+/w firebase > __OUTDIR__/__NAME__firebase.txt
+/w googleapis > __OUTDIR__/__NAME__google_apis.txt
+/w Authorization > __OUTDIR__/__NAME__auth_headers.txt
+/w Bearer > __OUTDIR__/__NAME__bearer_tokens.txt
+/w jwt > __OUTDIR__/__NAME__jwt.txt
+/w private_key > __OUTDIR__/__NAME__private_keys.txt
+/w public_key > __OUTDIR__/__NAME__public_keys.txt
+/w BEGIN CERTIFICATE > __OUTDIR__/__NAME__certificates.txt
+/w Cookie > __OUTDIR__/__NAME__cookies.txt
+/w Set-Cookie > __OUTDIR__/__NAME__set_cookies.txt
 q
 """
 

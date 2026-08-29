@@ -70,6 +70,15 @@ add_executable(${BINNAME} ${SRCS})
 
 target_link_libraries(${BINNAME} PRIVATE ${DARTLIB} capstone)
 
+# On Android/Termux, the Dart VM static library references __android_log_vprint
+# (from os_android.cc and syslog_android.cc), which is provided by liblog.
+# Without -llog, the link fails with: undefined symbol: __android_log_vprint
+# This affects both native Android NDK builds and Termux (which also reports
+# CMAKE_SYSTEM_NAME=Android).
+if (CMAKE_SYSTEM_NAME STREQUAL "Android")
+        target_link_libraries(${BINNAME} PRIVATE log)
+endif()
+
 target_precompile_headers(${BINNAME} PRIVATE "${SRCDIR}/pch.h")
 
 if (MSVC)
