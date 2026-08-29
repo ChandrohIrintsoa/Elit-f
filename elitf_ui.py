@@ -1,25 +1,4 @@
-#!/usr/bin/env python3
-"""
-elitf_ui.py — Composants d'interface utilisateur pour Elit-f.
 
-Contient :
-  * `LogManager`        : buffer circulaire thread-safe de logs avec rendu Rich/plaintext.
-  * `ElitfUI`           : façade d'affichage (console Rich ou fallback print).
-  * Constantes associées (LOGO, AUTHOR) et détection de `rich`.
-
-Ce module est importé paresseusement par `elitf.py` afin que le cœur fonctionnel
-(extraction, build, analyse) reste utilisable même si `rich` n'est pas installé.
-
-Notes Termux :
-  * Rich ne détecte pas toujours Termux comme un terminal interactif, ce qui
-    fait apparaître les balises littéralement et empêche `Live` de rafraîchir
-    correctement l'écran (les frames s'empilent au lieu de se remplacer).
-  * On détecte donc Termux via la variable d'environnement `TERMUX_VERSION`
-    ou la présence du chemin `/data/data/com.termux`, et dans ce cas on force
-    `Console(force_terminal=True)` pour l'interprétation des balises, et on
-    remplace `Live` par un mode "plain-streaming" qui affiche les logs au fil
-    de l'eau via des `print()` simples.
-"""
 import os
 import re
 import platform
@@ -35,6 +14,7 @@ try:
     from rich.table import Table
     from rich.progress import Progress, BarColumn, TextColumn, SpinnerColumn, TimeElapsedColumn, TaskProgressColumn
     from rich.text import Text
+    from rich.columns import Columns
     from rich.layout import Layout
     from rich.live import Live
     from rich.prompt import IntPrompt, Prompt
@@ -47,41 +27,96 @@ except ImportError:
 
 AUTHOR = "𝕴𝖗𝖎𝖓𝖙𝖘𝖔𝖆 𝕮𝖍𝖆𝖓𝖉𝖗𝖔𝖍"
 
-LOGO = (
-    "[bold bright_cyan]    ╔═══════════════════════════════════════════════╗[/]\n"
-    "    [bold bright_cyan]║[/] [bold bright_white]E[/][bold bright_cyan] L [/][bold bright_white]I[/][bold bright_cyan] T [/][bold bright_white]-[/][bold bright_cyan] F [/][bold bright_cyan]                             ║[/]\n"
-    "    [bold bright_cyan]║[/] [dim]Flutter/Dart AOT Reversing Engine[/]       [bold bright_cyan]║[/]\n"
-    "    [bold bright_cyan]╠═══════════════════════════════════════════════╣[/]\n"
-    "    [bold bright_cyan]║[/] [bright_yellow]◈[/] [bold bright_white]Auteur[/] : [italic bright_magenta]%s[/]   [bold bright_cyan]║[/]\n"
-    "    [bold bright_cyan]║[/] [bright_yellow]◈[/] [bold bright_white]Plateforme[/] : [bright_green]%s[/]  [bold bright_cyan]║[/]\n"
-    "    [bold bright_cyan]║[/] [bright_yellow]◈[/] [bold bright_white]Date[/] : [bright_green]%s[/]             [bold bright_cyan]║[/]\n"
-    "    [bold bright_cyan]╚═══════════════════════════════════════════════╝[/]"
-)
+ASCII_LINES = [
+    "⠀⠀⠀⣿⣿⣷⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+    "⠀⠀⢀⣿⣿⣿⣿⣿⣿⣆⡀⠀⠀⠀⠀⣠⣴⣦⡄⢤⣄⠀⠀⠀⠀⠀⠀⠀⠀",
+    "⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣷⣷⣶⣶⣿⣿⣿⣿⡀⣽⡿⣶⣦⡀⠀⠀⠀⠀",
+    "⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡿⣿⣿⣿⣿⣆⠀⠀⠀",
+    "⠀⠀⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣾⣿⣿⣿⣿⣿⣦⠀⠀",
+    "⠀⠀⢾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣟⣿⣿⣿⣿⣿⡿⢟⣿⣷⡀",
+    "⠀⠀⠘⣿⣿⣿⣿⣿⣿⣿⣿⣭⣿⣿⣽⣿⣽⣾⣿⣿⣿⠛⠉⠉⠀⢈⣿⣿⡇",
+    "⠀⠀⠀⢻⣿⣿⠛⠉⠛⠻⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠡⠤⠄⠁⠀⠀⢻⣿⡇",
+    "⠀⠀⠀⠘⣿⣿⠄⠀⠀⠀⠀⠀⣉⠙⠋⢿⣿⣯⠀⠀⠀⠀⠀⠀⣰⣿⣿⡿⡃",
+    "⠀⠀⠀⠀⢹⣿⣇⣀⠀⠈⠉⠉⠁⠀⣤⢠⣿⣿⣧⡆⣤⣤⡀⣾⣿⣿⣿⢠⡇",
+    "⠀⠀⠀⠀⠀⣿⣿⣿⣷⣤⠄⣀⣴⣧⣹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⠇",
+    "⠀⠀⠀⠀⠀⠸⣿⣯⠉⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⣿⣿⣿⣿⡯⠁⡌⠀",
+    "⠀⠀⠀⠀⠀⠀⠙⢿⡄⢿⣿⣿⣿⣿⣿⣎⠙⠻⠛⣁⣼⣿⣿⡿⠛⠁⡸⠀⠀",
+    "⠀⠀⠀⠀⠀⠀⠀⠈⢿⡄⠉⣿⡿⣿⣿⣿⣿⣷⣬⣿⡿⠟⠋⢀⣴⡞⠁⠀⠀",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠈⢳⠀⠀⠀⠀⠉⠉⠋⠉⠉⠁⠀⢀⣴⣿⡿⠀⠀⠀⠀",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠻⣿⣿⣿⣿⣿⠿⢃⣴⣿⣿⣿⠃⠀⠀⠀⠀",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢿⣿⣿⣿⣿⣿⣿⣿⠟⠀⠀⠀⠀⠀",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠛⠛⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀",
+]
 
-# Regex to strip Rich markup tags when rich is unavailable.
-# Rich markup tags can contain combinations of style names, colors, and modifiers
-# separated by spaces (e.g. `[bold bright_cyan on #ff0000]`). The closing tag
-# shorthand is `[/]`. We accept any tag starting with a letter or `#` (hex color),
-# followed by word chars / spaces / `#` — this is permissive but matches Rich's
-# parser for the markup used in this codebase.
+X_COLORS = ["bright_cyan", "bright_magenta", "bright_yellow", "bright_green", "bright_blue"]
+
+
+def build_x(offset: int = 0):
+    art = Text()
+    color_idx = offset
+    for line in ASCII_LINES:
+        for ch in line:
+            if ch == "⠀" or ch == " ":
+                art.append(ch)
+            else:
+                color = X_COLORS[color_idx % len(X_COLORS)]
+                art.append(ch, style=f"bold {color}")
+                color_idx += 1
+        art.append("\n")
+    return art
+
+
+def build_y(author: str, platform_name: str, date_str: str) -> "Panel":
+    body = Text()
+    body.append("◈ ", style="bright_yellow")
+    body.append("Auteur", style="bold bright_white")
+    body.append(" : ")
+    body.append(author, style="italic bright_magenta")
+    body.append("\n")
+    body.append("◈ ", style="bright_yellow")
+    body.append("Plateforme", style="bold bright_white")
+    body.append(" : ")
+    body.append(platform_name, style="bright_green")
+    body.append("\n")
+    body.append("◈ ", style="bright_yellow")
+    body.append("Date", style="bold bright_white")
+    body.append(" : ")
+    body.append(date_str, style="bright_green")
+    panel = Panel(
+        body,
+        title="[bold bright_white]E L I T - F[/]",
+        title_align="center",
+        border_style="bold bright_cyan",
+        padding=(1, 2),
+    )
+    return panel
+
+
+def build_logo(author: str, platform_name: str, date_str: str, offset: int = 0) -> "Columns":
+    x = build_x(offset=offset)
+    y = build_y(author, platform_name, date_str)
+    return Columns([x, y], align="center", expand=False, padding=(0, 3))
+
+
+def logo_plain_text(author: str, platform_name: str, date_str: str) -> str:
+    lines = list(ASCII_LINES)
+    lines.append("")
+    lines.append(f"  E L I T - F   (Flutter/Dart AOT Reversing Engine)")
+    lines.append(f"  ◈ Auteur    : {author}")
+    lines.append(f"  ◈ Plateforme: {platform_name}")
+    lines.append(f"  ◈ Date      : {date_str}")
+    return "\n".join(lines)
+
 _RICH_TAG_RE = re.compile(r'(?:\[/?[#a-zA-Z][\w #]*\]|\[/\])')
 
 
 def strip_rich_tags(text: str) -> str:
-    """Strip Rich markup tags so plain-text fallbacks stay readable.
-
-    Handles both named tags ([bold red]...[/bold red]) and Rich shorthand
-    closings ([/]).
-    """
+  
     return _RICH_TAG_RE.sub('', str(text))
 
 
 class LogManager:
-    """Thread-safe ring buffer of timestamped log entries.
 
-    Also tracks an explicit `step_count` so progress bars can advance
-    based on actual work performed rather than the (capped) buffer length.
-    """
     def __init__(self, maxlen=200):
         self.logs = deque(maxlen=maxlen)
         self.lock = threading.Lock()
@@ -143,11 +178,7 @@ class LogManager:
 
 
 def _is_termux() -> bool:
-    """Detect whether we're running inside a Termux environment.
-
-    Termux exposes a `TERMUX_VERSION` env var and installs under
-    `/data/data/com.termux/`. Either signal is sufficient.
-    """
+ 
     if os.environ.get('TERMUX_VERSION'):
         return True
     if os.path.isdir('/data/data/com.termux'):
@@ -159,33 +190,12 @@ def _is_termux() -> bool:
 
 
 class ElitfUI:
-    """Façade d'affichage Rich avec fallback plain-text.
 
-    `detected_so` est une liste de dicts `{"path", "name", "size"}` peuplée par
-    `detect_so_files()`. `metadata` est un dict affiché par `display_metadata()`.
-    """
     def __init__(self, force_plain: bool = False):
-        """Initialize the UI.
-
-        Args:
-            force_plain: if True, don't use Rich Live animations (use plain
-                streaming instead). Recommended on Termux or any terminal
-                where Live doesn't refresh correctly.
-
-        Note: Even when force_plain is True, we still create a Rich Console
-        (with force_terminal=True) so that the logo, menu, panels, and tables
-        are rendered with colors and proper formatting. Only the Live
-        animation is replaced with plain streaming on Termux.
-        """
-        # force_plain disables Live animations only, NOT colors/panels/tables.
-        # On Termux, Live doesn't refresh correctly (frames stack), so we use
-        # _run_plain which streams logs via print() while still using Rich
-        # Console for static rendering (logo, menu, panels).
+   
         self.force_plain = force_plain or _is_termux()
         if HAS_RICH:
-            # On Termux (or when force_plain is requested), force_terminal=True
-            # so Rich interprets markup tags and renders colors even when it
-            # can't auto-detect the terminal as interactive.
+
             self.console = Console(force_terminal=self.force_plain or None)
         else:
             self.console = None
@@ -233,15 +243,39 @@ class ElitfUI:
 
     def display_logo(self):
         self._clear()
-        logo_text = LOGO % (AUTHOR, platform.system(), datetime.now().strftime("%Y-%m-%d %H:%M"))
+        author = AUTHOR
+        plat = platform.system()
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
         if self.console:
-            self.console.print(logo_text)
-            self.console.print("\n")
+            self.console.print(build_logo(author, plat, date_str))
+            self.console.print()
         else:
-            print(f"\n  ELIT-F - Flutter/Dart AOT Reversing Engine")
-            print(f"  Auteur : {AUTHOR}")
-            print(f"  Plateforme : {platform.system()}")
-            print(f"  Date : {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+            print(logo_plain_text(author, plat, date_str))
+            print()
+
+    def animate_logo(self, duration_seconds=10.0, interval_ms=150):
+  
+        if not self.console or not HAS_RICH or self.force_plain:
+            self.display_logo()
+            return
+        author = AUTHOR
+        plat = platform.system()
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        offset = 0
+        start = time.monotonic()
+        try:
+            with Live(
+                build_logo(author, plat, date_str, offset=offset),
+                console=self.console,
+                refresh_per_second=max(1, int(1000 / interval_ms)),
+                screen=False,
+            ) as live:
+                while (time.monotonic() - start) < duration_seconds:
+                    time.sleep(interval_ms / 1000)
+                    offset += 1
+                    live.update(build_logo(author, plat, date_str, offset=offset))
+        except KeyboardInterrupt:
+            pass
 
     def detect_so_files(self, directory):
         import glob as globmod
@@ -788,23 +822,7 @@ class ElitfUI:
         return sorted(set(indices))
 
     def run_with_live_display(self, title, steps, work_fn):
-        """Run `work_fn(log_mgr)` while reporting progress.
 
-        Three modes:
-          * Plain (no Rich): work_fn runs synchronously, logs are NOT streamed
-            but `work_fn` itself can `print()` directly.
-          * Plain-streaming (Rich installed but on Termux / force_plain):
-            work_fn runs in a thread, new log entries are printed in real-time
-            via `print()` so the user sees progress without needing Rich Live.
-          * Rich Live (default on desktop terminals): full animated TUI with
-            progress bar + live log panel.
-
-        The plain-streaming mode exists because Termux (and some CI terminals)
-        don't support Rich's cursor-repositioning codes correctly, which causes
-        Live frames to stack vertically instead of refreshing in place.
-        """
-        # Plain fallback when Rich is unavailable OR when the user explicitly
-        # asked for plain mode (Termux, --plain, non-TTY output, ...).
         if not self.console or not HAS_RICH:
             return self._run_plain(title, steps, work_fn, stream_logs=True)
 
@@ -814,17 +832,7 @@ class ElitfUI:
         return self._run_live(title, steps, work_fn)
 
     def _run_plain(self, title, steps, work_fn, stream_logs=True):
-        """Plain mode: print title, run work_fn in a thread, stream logs as they arrive.
-
-        Used when Rich is unavailable OR when running on terminals (Termux, CI)
-        where Rich Live doesn't refresh correctly.
-
-        When self.console is available (Rich installed), we still use it for
-        rendering the header panel and log entries with colors — only the
-        Live animation is replaced with plain streaming. When self.console is
-        None (Rich not installed), we fall back to plain print().
-        """
-        # Print a header so the user knows what's running.
+      
         if self.console:
             self.console.print()
             self.console.print(Panel(
@@ -963,8 +971,7 @@ class ElitfUI:
                 progress.update(task_id, completed=steps)
                 update_logs()
         finally:
-            # Ensure worker has fully finished before returning so any pending
-            # exception is propagated deterministically.
+
             thread.join(timeout=10)
 
         if error_holder[0]:
