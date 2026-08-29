@@ -74,17 +74,29 @@ print(' '.join(macros))
 echo "    Macros: ${MACROS}"
 
 # 2) Configurer et compiler Elit-f
-cd "${SCRIPT_DIR}/build"
-cmake .. -DDARTLIB=$DARTLIB -DCMAKE_BUILD_TYPE=Release ${MACROS}
-make -j$(nproc)
+cd "${SCRIPT_DIR}"
+if [ ! -d "build" ]; then
+        mkdir build
+fi
+CMAKE_BIN="${CMAKE:-cmake}"
+NINJA_BIN="${NINJA:-ninja}"
+
+# Configurer avec Ninja (plus rapide que Make, requis par le CMakeLists.txt)
+"${CMAKE_BIN}" -GNinja -B build -DDARTLIB=$DARTLIB -DCMAKE_BUILD_TYPE=Release ${MACROS}
+
+# Compiler avec Ninja
+"${NINJA_BIN}" -C build -j$(nproc)
+
+# Installer le binaire dans bin/
+"${CMAKE_BIN}" --install build
 
 if [ -f "bin/elitf_${DARTLIB}" ]; then
-        $STRIP bin/elitf_${DARTLIB}
-        cp bin/elitf_${DARTLIB} bin/elitf_${DARTLIB}.stripped
-        rm bin/elitf_${DARTLIB}
+        # Striper le binaire pour réduire sa taille
+        STRIP_BIN="${STRIP:-strip}"
+        "$STRIP_BIN" bin/elitf_${DARTLIB} || true
 fi
 
-echo "Build complete: bin/elitf_${DARTLIB}.stripped"
+echo "Build complete: bin/elitf_${DARTLIB}"
 
 # 3) Installer le lanceur (uniquement si PREFIX est défini — typiquement Termux)
 if [ -n "$PREFIX" ] && [ -d "$PREFIX/bin" ]; then

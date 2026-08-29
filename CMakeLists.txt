@@ -22,12 +22,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        # for macOS only
-        cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH LLVM_BIN_DIR)
-        # <format> library is experimental in clang 15 and 16
+        # <format> library is experimental in clang 15 and 16.
+        # On all clang platforms (Linux, macOS, Termux), we enable the experimental
+        # library so that std::format is available.
         add_compile_options(-fexperimental-library)
-        # need an extra lib for experimental library
-        add_link_options(-fexperimental-library -L${LLVM_BIN_DIR}/../lib/c++ -dead_strip)
+        add_link_options(-fexperimental-library)
+        if (APPLE)
+                # macOS only: the experimental libc++ is in a non-standard path.
+                cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH LLVM_BIN_DIR)
+                add_link_options(-L${LLVM_BIN_DIR}/../lib/c++ -dead_strip)
+        endif()
 endif()
 
 find_package(${DARTLIB} REQUIRED PATHS "${PROJECT_SOURCE_DIR}/packages")
@@ -40,7 +44,22 @@ else()
         include(FindPkgConfig)
         pkg_search_module(CAPSTONE REQUIRED capstone)
         link_directories(${CAPSTONE_LIBDIR})
-        include_directories(AFTER ${CAPSTONE_INCLUDEDIR})
+        # Robustly locate capstone.h.
+        # On Debian/macOS, pkg-config returns -I.../include/capstone and
+        # CAPSTONE_INCLUDE_DIRS is set. On Termux, the capstone.pc file has
+        # empty Cflags (headers assumed to be in the default include path),
+        # but capstone.h is actually in $PREFIX/include/capstone/ — so
+        # #include <capstone.h> fails because the compiler only looks in
+        # $PREFIX/include/ by default, not the capstone/ subdirectory.
+        # find_path with PATH_SUFFIXES capstone handles all cases.
+        find_path(CAPSTONE_INCLUDE_DIR capstone.h
+                HINTS ${CAPSTONE_INCLUDE_DIRS} ${CAPSTONE_INCLUDEDIR}
+                PATH_SUFFIXES capstone
+        )
+        if(NOT CAPSTONE_INCLUDE_DIR)
+                message(FATAL_ERROR "capstone.h not found. Install capstone-dev (Debian: libcapstone-dev, Termux: capstone).")
+        endif()
+        include_directories(AFTER ${CAPSTONE_INCLUDE_DIR})
 endif()
 
 # Add source to this project's executable.
