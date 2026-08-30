@@ -25,43 +25,11 @@ static std::unordered_map<std::string, std::string> OP_MAP {
 	{ "&", "LAnd" }, { "|", "LOr" }, { "^", "xor" }, { "~", "not" }, {">>", "shar"}, {"<<", "shal"}, {">>", "shr"}
 };
 
-static bool is_valid_char(const char ch) {
-	if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || isdigit(ch)) {
-		return true;
-	}
-	switch (ch) {
-	case '.':
-	case ':':
-	case '_':
-		return true;
-	default:
-		return false;
-	}
-}
-
-static void filterString(std::string &str) {
-	for (char& ch : str) {
-		if (!is_valid_char(ch)) {
-			ch = '_';
-		}
-	}
-}
-
 static std::string getFunctionName4Ida(const DartFunction& dartFn, const std::string& cls_prefix)
 {
 	auto fnName = dartFn.Name();
 	if (dartFn.IsClosure() && fnName == "<anonymous closure>") {
 		return "_anon_closure";
-	}
-
-	if (fnName.starts_with("#")) {
-		fnName.replace(0, 1, "@");
-	}
-
-	for (size_t pos = 0; ; pos += 1) {
-		pos = fnName.find("|_", pos);
-		if (pos == std::string::npos) break;
-		fnName.replace(pos, 2, "_");
 	}
 
 	auto periodPos = fnName.find('.');
@@ -74,18 +42,6 @@ static std::string getFunctionName4Ida(const DartFunction& dartFn, const std::st
 			std::replace(prefix.begin(), prefix.end(), '#', '@');
 		}
 		fnName = fnName.substr(periodPos + 1);
-	}
-
-	// fnNames: #0#4internal, #0#1internal gives invalid name in IDA due to '#'
-	// lib file: https://github.com/worawit/blutter/issues/93#issuecomment-2283490634
-	for (size_t pos = 0; pos < fnName.size(); ++pos) {
-		if (fnName[pos] == '@' && pos + 1 < fnName.size() && fnName[pos + 1] == '#') {
-			fnName.replace(pos, 2, "_");
-		} else if (fnName[pos] == '0' && pos + 1 < fnName.size() && fnName[pos + 1] == '#') {
-			fnName.replace(pos, 2, "0");
-		} else if (fnName[pos] == '#') {
-			fnName[pos] = '_';
-		}
 	}
 
 	if (OP_MAP.contains(fnName)) {
@@ -126,81 +82,12 @@ static std::string getFunctionName4Ida(const DartFunction& dartFn, const std::st
 	return prefix + fnName;
 }
 
-void DartDumper::Dump4Radare2(std::filesystem::path outDir)
-{
-	std::filesystem::create_directory(outDir);
-	std::ofstream of((outDir / "addNames.r2").string());
-	of << "# create flags for libraries, classes and methods\n";
-
-	of << "e emu.str=true\n";
-	of << std::format("f app.base = {:#x}\n", app.base());
-	of << std::format("f app.heap_base = {:#x}\n", app.heap_base());
-
-	bool show_library = true;
-	bool show_class = true;
-	for (auto lib : app.libs) {
-		std::string lib_prefix = lib->GetName();
-		filterString(lib_prefix);
-		for (auto cls : lib->classes) {
-			std::string cls_prefix = cls->Name();
-			filterString(cls_prefix);
-			for (auto dartFn : cls->Functions()) {
-				const auto ep = dartFn->Address();
-				std::string name = getFunctionName4Ida(*dartFn, cls_prefix);
-				filterString(name);
-				if (show_library) {
-					of << std::format("'@{:#x}'CC Library({:#x}) = {}\n", ep, lib->id, lib->GetName());
-					of << std::format("'@{:#x}'f lib.{}\n", ep, lib_prefix);
-					show_library = false;
-				}
-				if (show_class) {
-					of << std::format("'@{:#x}'CC Class({:#x}) = {}\n", ep, cls->Id(), cls->Name());
-					of << std::format("'@{:#x}'f class.{}.{}\n", ep, lib_prefix, cls_prefix);
-					show_class = false;
-				}
-				of << std::format("'@{:#x}'f method.{}.{}.{}\n", ep, lib_prefix, cls_prefix, name);
-				of << std::format("'@{:#x}'ic+{}.{}\n", ep, cls_prefix, name);
-				if (dartFn->HasMorphicCode()) {
-					of << std::format("'@{:#x}'f method.{}.{}.{}.miss\n",
-									dartFn->PayloadAddress(),
-									lib_prefix, cls_prefix, name);
-					of << std::format("'@{:#x}'f method.{}.{}.{}.check\n",
-									dartFn->MonomorphicAddress(),
-									lib_prefix, cls_prefix, name);
-				}
-		}
-			show_class = true;
-		}
-		show_library = true;
-	}
-	for (auto& item : app.stubs) {
-		auto stub = item.second;
-		const auto ep = stub->Address();
-		std::string name = stub->FullName();
-		std::string flagName = name;
-		filterString(flagName);
-		of << std::format("'@{:#x}'f method.stub.{}\n", ep, flagName);
-	}
-	of << "dr x27=`e anal.gp`\n";
-	of << "'f PP=x27\n";
-	auto comments = DumpStructHeaderFile((outDir / "r2_dart_struct.h").string());
-	for (const auto& [offset, comment] : comments) {
-		if (comment.find("String:") != -1) {
-			std::string flagFromComment = comment;
-			filterString(flagFromComment);
-			of << "f pp." << flagFromComment << "=PP+" << offset << "\n";
-			of << "'@PP+" << offset << "'CC " << comment << "\n";
-		}
-	}
-}
-
 void DartDumper::Dump4Ida(std::filesystem::path outDir)
 {
 	std::filesystem::create_directory(outDir);
 	std::ofstream of((outDir / "addNames.py").string());
 	of << "import ida_funcs\n";
 	of << "import idaapi\n\n";
-	of << "print("[+] Adding Function names...")\n\n";
 
 	for (auto lib : app.libs) {
 		std::string lib_prefix = lib->GetName();
@@ -241,10 +128,8 @@ void DartDumper::Dump4Ida(std::filesystem::path outDir)
 			continue;
 		of << std::format("ida_funcs.add_func({:#x}, {:#x})\n", ep, ep + stub->Size());
 	}
-	of << "print("[+] Done!")\n";
 
 
-#ifndef IDA_FCN
 	// Note: create struct with a lot of member by ida script is very slow
 	//   use header file then adding comment is much faster
 	auto comments = DumpStructHeaderFile((outDir / "ida_dart_struct.h").string());
@@ -264,27 +149,13 @@ def create_Dart_structs():
 	for (const auto& [offset, comment] : comments) {
 		of << "\tida_struct.set_member_cmt(ida_struct.get_member(struc, " << offset << "), '''" << comment << "''', True)\n";
 	}
-#else
-	auto comments = DumpStructHeaderFile((outDir / "ida_dart_struct.h").string());
-	of << R"CBLOCK(
-import os
-def create_Dart_structs():
-	sid1 = idc.get_struc_id("DartThread")
-	if sid1 != idc.BADADDR:
-		return sid1, idc.get_struc_id("DartObjectPool")
-	hdr_file = os.path.join(os.path.dirname(__file__), 'ida_dart_struct.h')
-	idaapi.idc_parse_types(hdr_file, idc.PT_FILE)
-	sid1 = idc.import_type(-1, "DartThread")
-	sid2 = idc.import_type(-1, "DartObjectPool")
-)CBLOCK";
-#endif
 	of << "\treturn sid1, sid2\n";
 	of << "thrs, pps = create_Dart_structs()\n";
 
-	of << "print('[+] Applying Thread and Object Pool struct')\n";
+	of << "print('Applying Thread and Object Pool struct')\n";
 	applyStruct4Ida(of);
 
-	of << "print('[+] Script finished!')\n";
+	of << "print('Script finished!')\n";
 }
 
 std::vector<std::pair<intptr_t, std::string>> DartDumper::DumpStructHeaderFile(std::string outFile)
@@ -629,13 +500,9 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 		return "SubtypeTestCache";
 	case dart::kFunctionCid: {
 		// stub never be in Object Pool
-		auto& fn = dart::Function::Cast(obj);
-		auto offset = fn.entry_point() - app.base();
-		auto info = app.GetFunction(offset);
-		if (!info || info->IsStub()) {
-			std::string name = fn.UserVisibleNameCString();
-			const char* type = info ? "StubFunction" : "UnresolvedFunction";
-			return std::format("{}: {} ({:#x})", type, name.empty() ? "[unknown]" : name, offset);
+		auto fnBase = app.GetFunction(dart::Function::Cast(obj).entry_point() - app.base());
+		if (fnBase == nullptr || fnBase->IsStub()) {
+			return std::format("Function: [unknown] ({:#x})", dart::Function::Cast(obj).entry_point() - app.base());
 		}
 		auto dartFn = fnBase->AsFunction();
 		if (dartFn->IsClosure()) {
