@@ -36,22 +36,14 @@ dart_versions = {
     "3.0_90": ["3.0.3", "3.0.4", "3.0.5", "3.0.6", "3.0.7"],
     "3.1": ["3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.4", "3.1.5"],
     "3.2": ["3.2.0", "3.2.1", "3.2.2", "3.2.3", "3.2.4", "3.2.5", "3.2.6"],
-    "3.3": ["3.3.0", "3.3.1", "3.3.2", "3.3.3", "3.3.4"],
     "3.4": ["3.4.0", "3.4.1", "3.4.2", "3.4.3", "3.4.4"],
-    "3.5": ["3.5.0", "3.5.1", "3.5.2", "3.5.3", "3.5.4", "3.5.5", "3.5.6"],
-    "3.6": ["3.6.0", "3.6.1", "3.6.2", "3.6.3", "3.6.4"],
+    "3.3": ["3.3.0", "3.3.1", "3.3.2", "3.3.3", "3.3.4"],
+    "3.5": ["3.5.0", "3.5.1", "3.5.2", "3.5.3", "3.5.4"],
+    "3.6": ["3.6.0", "3.6.1", "3.6.2"],
     "3.7": ["3.7.0", "3.7.1", "3.7.2"],
     "3.8": ["3.8.0", "3.8.1", "3.8.2", "3.8.3", "3.8.4", "3.8.5"],
-    "3.9": ["3.9.0", "3.9.1", "3.9.2", "3.9.3", "3.9.4", "3.9.5"],
-    "3.10": ["3.10.0", "3.10.1", "3.10.2", "3.10.3", "3.10.4", "3.10.5", "3.10.6", "3.10.7", "3.10.8", "3.10.9"],
-    "3.11": ["3.11.0", "3.11.1", "3.11.2", "3.11.3", "3.11.4", "3.11.5", "3.11.6"],
-    "3.12": ["3.12.0", "3.12.1", "3.12.2", "3.12.3", "3.12.4", "3.12.5", "3.12.6", "3.12.7", "3.12.8"],
-    "3.13": ["3.13.0", "3.13.1", "3.13.2", "3.13.3", "3.13.4", "3.13.5"],
-    "3.14": ["3.14.0", "3.14.1", "3.14.2"],
-    "3.15": ["3.15.0", "3.15.1"],
-    "3.16": ["3.16.0"],
-    "3.17": ["3.17.0"],
-    "3.18": ["3.18.0"],
+    "3.9": ["3.9.0", "3.9.2"],
+    "3.10": ["3.10.0", "3.10.1", "3.10.3", "3.10.4", "3.10.7", "3.10.8", "3.10.9"],
 }
 
 
@@ -130,6 +122,24 @@ def checkout_dart(info: DartLibInfo):
         else:
             # snapshot hash of the analyzed app; mandatory to parse its snapshot
             subprocess.run([sys.executable, MAKE_VERSION_FILE, clonedir, info.snapshot_hash], check=True)
+        if sys.platform == 'win32':
+            # since Dart 3.8, RUNTIME_FUNCTION is declared when DART_HOST_OS_WINDOWS and TARGET_ARCH_ARM64 are set
+            # patch "runtime/platform/unwinding_records.h" to remove the declaration
+            vers = info.version.split('.', 2)
+            if int(vers[0]) >= 3 and int(vers[1]) >= 8:
+                with open(os.path.join(clonedir, 'runtime', 'platform', 'unwinding_records.h'), 'r+b') as f:
+                    mm = mmap.mmap(f.fileno(), 0)
+                    pos = mm.find(b'
+#if !defined(DART_HOST_OS_WINDOWS) || !defined(HOST_ARCH_ARM64)')
+                    if pos != -1:
+                        # replace "||" with "//" to comment out "!defined(HOST_ARCH_ARM64)"
+                        mm[pos+36:pos+38] = b'//'
+                    else:
+                        # newer Dart version use static_assert for checking RUNTIME_FUNCTION size, comment out that line
+                        pos = mm.find(b'
+static_assert(sizeof(')
+                        if pos != -1:
+                            mm[pos+1:pos+3] = b'//'
 
     return clonedir
 

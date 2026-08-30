@@ -25,7 +25,9 @@ def extract_snapshot_hash_flags(libapp_file):
         dynsym = elf.get_section_by_name('.dynsym')
         if dynsym is None:
             raise ValueError('No .dynsym section found in ' + libapp_file)
-        syms = dynsym.get_symbol_by_name('_kDartVmSnapshotData')
+        # Dart 3.13 merged the VM and isolate snapshots and renamed the symbol.
+        syms = (dynsym.get_symbol_by_name('_kDartVmSnapshotData') or
+                dynsym.get_symbol_by_name('_kDartSnapshotData'))
         if not syms:
             raise ValueError('Symbol _kDartVmSnapshotData not found in ' + libapp_file)
         sym = syms[0]

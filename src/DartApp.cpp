@@ -294,6 +294,30 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 
 void DartApp::loadStubs(dart::ObjectStore* store)
 {
+#ifdef BLUTTER_DART_SINGLE_SNAPSHOT
+	(void)store;
+	uint64_t ep_addr;
+	DartStub* stub;
+
+	throwStubAddr = dart::StubCode::Throw().EntryPoint();
+
+#define DO(name) { \
+			const auto& code = dart::StubCode::name(); \
+			ep_addr = code.EntryPoint() - base(); \
+			if (!stubs.contains(ep_addr)) { \
+				stub = new DartStub(code.ptr(), DartStub::name ## Stub, ep_addr, code.Size(), #name); \
+				stubs[ep_addr] = stub; \
+				auto it = functions.find(ep_addr); \
+				if (it != functions.end()) { \
+					auto dartFn = it->second; \
+					std::erase(dartFn->Class().functions, dartFn); \
+					functions.erase(it); \
+				} \
+			} \
+		}
+	VM_STUB_CODE_LIST(DO);
+#undef DO
+#else
 	dart::CodePtr ptr;
 	auto& code = dart::Code::Handle();
 	uint64_t ep_addr;
@@ -302,44 +326,45 @@ void DartApp::loadStubs(dart::ObjectStore* store)
 	// Note: some stub might contain multiple of duplicated stubs
 	// these stubs are called "_iso_stub_" in runtime/vm/stub_code.cc
 #define DO(member, name) \
-	ptr = store->member(); \
-	code = ptr; \
-	ep_addr = code.EntryPoint() - base(); \
-	stub = new DartStub(ptr, DartStub::name ## Stub, ep_addr, code.Size(), #name); \
-	ASSERT(!stubs.contains(ep_addr)); \
-	stubs[ep_addr] = stub;
+		ptr = store->member(); \
+		code = ptr; \
+		ep_addr = code.EntryPoint() - base(); \
+		stub = new DartStub(ptr, DartStub::name ## Stub, ep_addr, code.Size(), #name); \
+		ASSERT(!stubs.contains(ep_addr)); \
+		stubs[ep_addr] = stub;
 	OBJECT_STORE_STUB_CODE_LIST(DO);
 #ifndef NO_METHOD_EXTRACTOR_STUB
 	DO(build_nongeneric_method_extractor_code, BuildNonGenericMethodExtractor);
 	DO(build_generic_method_extractor_code, BuildGenericMethodExtractor);
 #endif
 #undef DO
-	
+    
 	code = store->throw_stub();
 	throwStubAddr = code.EntryPoint();
 
 	// load VM stub code
 	// the dart entry point "static void main()" is a LazyCompileVMStub which call "main" stub (a real main)
 	ASSERT(dart::StubCode::HasBeenInitialized());
-#define DO(name) {\
-		const auto& code = dart::StubCode::name(); \
-		ep_addr = code.EntryPoint() - base(); \
-		if (stubs.contains(ep_addr)) { \
-			ASSERT(stubs[ep_addr]->Name() == #name); \
-		} \
-		else { \
-			stub = new DartStub(code.ptr(), DartStub::name ## VMStub, ep_addr, code.Size(), #name); \
-			stubs[ep_addr] = stub; \
-			auto it = functions.find(ep_addr); \
-			if (it != functions.end()) { \
-				auto dartFn = it->second; \
-				std::erase(dartFn->Class().functions, dartFn); \
-				functions.erase(it); \
+#define DO(name) \{
+			const auto& code = dart::StubCode::name(); \
+			ep_addr = code.EntryPoint() - base(); \
+			if (stubs.contains(ep_addr)) { \
+				ASSERT(stubs[ep_addr]->Name() == #name); \
 			} \
-		} \
-	}
+			else { \
+				stub = new DartStub(code.ptr(), DartStub::name ## VMStub, ep_addr, code.Size(), #name); \
+				stubs[ep_addr] = stub; \
+				auto it = functions.find(ep_addr); \
+				if (it != functions.end()) { \
+					auto dartFn = it->second; \
+					std::erase(dartFn->Class().functions, dartFn); \
+					functions.erase(it); \
+				} \
+			} \
+		}
 	VM_STUB_CODE_LIST(DO);
 #undef DO
+#endif
 }
 
 DartFunction* DartApp::addFunctionNoCheck(const dart::Function& func)

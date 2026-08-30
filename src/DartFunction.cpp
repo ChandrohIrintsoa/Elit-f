@@ -11,6 +11,39 @@
 // place static member because no DartFnBase source file
 intptr_t DartFnBase::lib_base;
 
+#ifdef BLUTTER_DART_SINGLE_SNAPSHOT
+static int64_t findDiscardedCodeSize(dart::uword entry_point)
+{
+        auto& tables = dart::GrowableObjectArray::Handle(dart::Thread::Current()->zone(),
+                dart::IsolateGroup::Current()->object_store()->instructions_tables());
+        auto& table = dart::InstructionsTable::Handle();
+        for (intptr_t t = 0; t < tables.Length(); t++) {
+                table ^= tables.At(t);
+                if (!table.ContainsPc(entry_point))
+                        continue;
+                const auto len = static_cast<intptr_t>(table.rodata()->length);
+                intptr_t lo = 0;
+                intptr_t hi = len - 1;
+                while (lo <= hi) {
+                        const auto mid = (hi - lo + 1) / 2 + lo;
+                        if (entry_point < table.EntryPointAt(mid)) {
+                                hi = mid - 1;
+                        }
+                        else if ((mid != hi) && (entry_point >= table.EntryPointAt(mid + 1))) {
+                                lo = mid + 1;
+                        }
+                        else {
+                                if (mid == len - 1)
+                                        break;
+                                return static_cast<int64_t>(table.EntryPointAt(mid + 1)) - static_cast<int64_t>(table.EntryPointAt(mid));
+                        }
+                }
+                break;
+        }
+        return 0;
+}
+#endif
+
 DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFnBase(), cls(cls), parent(nullptr), ptr(ptr), kind(NORMAL)
 {
 	auto* zone = dart::Thread::Current()->zone();
@@ -70,7 +103,18 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 	// Code.EntryPoint() in obfuscated app might be pointed at start of snapshot (wrong)
 	const auto ep = func.entry_point() - lib_base;
 	const auto& code = dart::Code::Handle(zone, func.CurrentCode());
-	payload_addr = code.PayloadStart();
+#ifdef BLUTTER_DART_SINGLE_SNAPSHOT
+	if (dart::Code::IsUnknownDartCode(code.ptr())) {
+		// discarded function (Dart 3.13). entry point is correct but code info comes from the shared stub
+		ep_addr = ep;
+		payload_addr = ep;
+		morphic_addr = ep;
+		size = findDiscardedCodeSize(func.entry_point());
+	}
+	else
+#endif
+	{
+		payload_addr = code.PayloadStart();
 	if (payload_addr > 0)
 		payload_addr -= lib_base;
 	morphic_addr = code.MonomorphicEntryPoint();
@@ -81,6 +125,7 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 	if (ep != ep_addr) {
 		ep_addr = ep;
 		//std::cout << std::format("Fn: {}, payload: {:#x}, ep_addr: {:#x}, ep: {:#x}\n", name.c_str(), payload_addr, ep_addr, ep);
+	}
 	}
 
 	//if (ep_addr != payload_addr) {

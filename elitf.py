@@ -222,16 +222,16 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
     if not _search_in_file(os.path.join(vm_path, 'object.h'), b'AsTruncatedInt64Value()'):
         macros.append('-DUNIFORM_INTEGER_ACCESS=1')
 
-    # NOTE: blutter upstream does NOT define OLD_MARKING_STACK_BLOCK or IDA_FCN.
-    # The CMakeLists.txt and C++ source of blutter do not reference these macros
-    # at all, so we must NOT emit them either — doing so would compile a
-    # different binary and break the 1=1 output parity guarantee.
+    # OLD_MARKING_STACK_BLOCK: Dart 3.5.0+ split marking_stack_block into old/new
+    # https://github.com/worawit/blutter/issues/96#issue-2470674670
+    major, _ = _parse_major_minor(dart_version)
+    if major >= 3 and _parse_major_minor(dart_version)[1] >= 5:
+        macros.append('-DOLD_MARKING_STACK_BLOCK=1')
 
     if no_analysis:
         macros.append('-DNO_CODE_ANALYSIS=1')
-    # ida_fcn is accepted as a CLI arg for forward-compat with elit-f, but it
-    # is intentionally NOT translated to a -D flag here because blutter does
-    # not support it. Building with ida_fcn would diverge from blutter.
+    if ida_fcn:
+        macros.append('-DIDA_FCN=1')
     return macros
 
 
