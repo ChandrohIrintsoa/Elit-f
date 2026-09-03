@@ -26,7 +26,6 @@ struct DartFunctionSignature
 	FnParam& Param(int i) { return params[i]; }
 
 	DartAbstractType* returnType;
-	//typeParams;
 	std::vector<FnParam> params;
 	int numOptionalParam;
 	bool hasNamedParam;
@@ -42,7 +41,6 @@ public:
 		SETTER,
 	};
 	explicit DartFunction(DartClass& cls, const dart::FunctionPtr ptr);
-	// for creating naked code (only used for obfuscated app)
 	explicit DartFunction(DartClass& cls, const dart::Code& code);
 	DartFunction() = delete;
 	DartFunction(const DartFunction&) = delete;
@@ -52,8 +50,6 @@ public:
 
 	DartClass& Class() const { return cls; }
 	dart::FunctionPtr Ptr() const { return ptr; }
-	//uint64_t Address() { return ep_addr; }
-	//uint32_t Size() { return code_size; }
 	FunctionKind Kind() const { return kind; }
 
 	uint64_t PayloadAddress() const { return payload_addr; }
@@ -91,20 +87,19 @@ public:
 
 private:
 	DartClass& cls;
-	DartFunction* parent; // this value is nullptr for function. parent function/closure for a closure
+	DartFunction* parent;
 	dart::FunctionPtr ptr;
 	FunctionKind kind;
 	bool is_native;
 	bool is_closure;
-	bool is_ffi; // if a function is FFI, no use of is_static, is_const, is_abstract
+	bool is_ffi;
 	bool is_static;
 	bool is_const;
 	bool is_abstract;
 	bool is_async;
 
-	uint64_t payload_addr; // the start of whole function data (most of them are same as entry point)
-	uint64_t morphic_addr; // Monomorphic entry point (used for check class id before normal entry point)
-	//uint32_t code_size; // code size
+	uint64_t payload_addr;
+	uint64_t morphic_addr;
 
 	DartFunctionSignature signature;
 	std::unique_ptr<AnalyzedFnData> analyzedData;

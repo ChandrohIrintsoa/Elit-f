@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "DartDumper.h"
 #include <fstream>
 #include <format>
@@ -11,7 +10,6 @@
 #include "DartThreadInfo.h"
 #include "CodeAnalyzer.h"
 
-// TODO: move arm64 specific code to *_arm64 file
 
 static std::unordered_map<std::string, std::string> OP_MAP {
 	{ "==", "eq" },
@@ -35,10 +33,8 @@ static std::string getFunctionName4Ida(const DartFunction& dartFn, const std::st
 	auto periodPos = fnName.find('.');
 	std::string prefix;
 	if (dartFn.IsStatic() && dartFn.Kind() == DartFunction::NORMAL && periodPos != std::string::npos) {
-		// this one is extension
 		prefix = fnName.substr(0, periodPos + 1);
 		if (prefix.starts_with("_extension#")) {
-			// anonymous extension. '#' is invalid name in IDA.
 			std::replace(prefix.begin(), prefix.end(), '#', '@');
 		}
 		fnName = fnName.substr(periodPos + 1);
@@ -130,8 +126,6 @@ void DartDumper::Dump4Ida(std::filesystem::path outDir)
 	}
 
 
-	// Note: create struct with a lot of member by ida script is very slow
-	//   use header file then adding comment is much faster
 	auto comments = DumpStructHeaderFile((outDir / "ida_dart_struct.h").string());
 	of << R"CBLOCK(
 import ida_struct
@@ -187,8 +181,6 @@ std::vector<std::pair<intptr_t, std::string>> DartDumper::DumpStructHeaderFile(s
 
 	auto& obj = dart::Object::Handle();
 	for (intptr_t i = num - 1; i >= 0; i--) {
-		// the Dart Code access ObjectPool with offset that is not subtract by kHeapObjectTag (1)
-		//   so we have to add 1 to make the offset same as offset in the code
 		intptr_t offset = dart::ObjectPool::OffsetFromIndex(i) + 1;
 		std::string name;
 
@@ -196,7 +188,6 @@ std::vector<std::pair<intptr_t, std::string>> DartDumper::DumpStructHeaderFile(s
 		if (objType == dart::ObjectPool::EntryType::kTaggedObject) {
 			obj = pool.ObjectAt(i);
 			if (obj.IsUnlinkedCall()) {
-				// since Dart 3.10, target type might be kTaggedObject
 				auto unlinkTargetType = pool.TypeAt(i + 1);
 				if (unlinkTargetType == dart::ObjectPool::EntryType::kImmediate) {
 					const auto imm = pool.RawValueAt(i + 1);
@@ -215,7 +206,6 @@ std::vector<std::pair<intptr_t, std::string>> DartDumper::DumpStructHeaderFile(s
 				}
 			}
 			else {
-				// TODO: more meaningful variable name
 				name = std::format("Obj_{:#x}", offset);
 				auto comment = ObjectToString(obj);
 				comments.push_back(std::make_pair(offset, comment));
@@ -225,9 +215,6 @@ std::vector<std::pair<intptr_t, std::string>> DartDumper::DumpStructHeaderFile(s
 			name = std::format("IMM_{:#x}_{:#x}", pool.RawValueAt(i), offset);
 		}
 		else if (objType == dart::ObjectPool::EntryType::kNativeFunction) {
-			// the name of NativeFunction can be retrieved from dart::NativeSymbolResolver::LookupSymbolName
-			//   but normally flutter code never access it
-			// if we use the name, we should cache it because many Pool Objects reference same NativeFunction
 			name = std::format("NativeFn_{:#x}_{:#x}", pool.RawValueAt(i), offset);
 		}
 		else {
@@ -276,7 +263,6 @@ void DartDumper::applyStruct4Ida(std::ostream& of)
 							break;
 						}
 						else if (reg == CSREG_DART_PP) {
-							// TODO: if it is not MEM operand, reg cannot be struct offset
 							of << "ida_ua.decode_insn(insn, " << insn.address() << ")\n";
 							of << "idc.op_stroff(insn, " << (int)j << ", pps, 0)\n";
 							break;
@@ -292,7 +278,6 @@ const std::string& DartDumper::getQuoteString(dart::Object& obj)
 {
 	const auto ptr = (intptr_t)obj.ptr();
 	auto& txt = quoteStringCache[ptr];
-	// because string is always quotes, empty string means inserting a new one
 	if (txt.empty()) {
 		txt = Util::UnescapeWithQuote(obj.ToCString());
 	}
@@ -328,7 +313,6 @@ void DartDumper::DumpCode(const char* out_dir)
 				dartFn->PrintHead(of);
 
 #ifndef NO_CODE_ANALYSIS
-				// use as app is loaded at zero
 				if (dartFn->Size() > 0) {
 					auto& asmTexts = dartFn->GetAnalyzedData()->asmTexts.Data();
 					auto& il_insns = dartFn->GetAnalyzedData()->il_insns;
@@ -390,7 +374,7 @@ void DartDumper::DumpCode(const char* out_dir)
 							of << std::format("{:#x}: {}  ; {}\n", asmText.addr, &asmText.text[0], extra);
 					}
 				}
-#endif // NO_CODE_ANALYSIS
+#endif
 
 				dartFn->PrintFoot(of);
 			}
@@ -400,13 +384,11 @@ void DartDumper::DumpCode(const char* out_dir)
 	}
 }
 
-// collect instance ptr to dump the full contents in DumpObjects()
 static std::set<intptr_t> knownObjectPtrs;
 
 std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool nestedObj, int depth)
 {
 	const auto cid = obj.GetClassId();
-	//auto dartCls = app_.classes[obj.GetClassId()];
 
 	if (obj.IsString()) {
 		auto& val = getQuoteString(obj);
@@ -415,9 +397,7 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 		return "String: " + val;
 	}
 
-	// use TypedData or TypedDataBase ?
 	if (obj.IsTypedData()) {
-		//dart::kTypedDataInt32ArrayCid;
 		auto& arr = dart::TypedData::Cast(obj);
 		const auto arr_len = arr.Length();
 		auto ptr = arr.DataAddr(0);
@@ -473,7 +453,6 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 
 			txt += ']';
 		}
-		//arr.ElementSizeInBytes();
 		return std::format("{}({}) {}", app.GetClass(cid)->Name(), arr_len, txt);
 	}
 
@@ -499,7 +478,6 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 	case dart::kSubtypeTestCacheCid:
 		return "SubtypeTestCache";
 	case dart::kFunctionCid: {
-		// stub never be in Object Pool
 		auto fnBase = app.GetFunction(dart::Function::Cast(obj).entry_point() - app.base());
 		if (fnBase == nullptr || fnBase->IsStub()) {
 			return std::format("Function: [unknown] ({:#x})", dart::Function::Cast(obj).entry_point() - app.base());
@@ -508,7 +486,6 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 		if (dartFn->IsClosure()) {
 			auto parentFn = dartFn->GetOutermostFunction();
 			if (parentFn) {
-				// AOT anonymous closure contains only static information
 				return std::format("AnonymousClosure: {}({:#x}), in {} ({:#x})",
 					dartFn->IsStatic() ? "static " : "", dartFn->Address(),
 					parentFn->FullName(), parentFn->Address());
@@ -522,12 +499,10 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 		return std::format("Function: {} ({:#x})", dartFn->FullName(), dartFn->Address());
 	}
 	case dart::kClosureCid: {
-		// TODO: show owner
 		const auto& closure = dart::Closure::Cast(obj);
 		if (!app.functions.contains(closure.entry_point() - app.base())) {
 			std::cout << std::format("[!] missing closure at {:#x}\n", closure.entry_point() - app.base());
 		}
-		//RELEASE_ASSERT(app.functions.contains(closure.entry_point() - app.base()));
 		return std::format("{} ({:#x})", closure.ToCString(), closure.entry_point());
 	}
 	case dart::kCodeCid: {
@@ -541,19 +516,14 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 	}
 	case dart::kArrayCid:
 	case dart::kImmutableArrayCid: {
-		// Note: since Dart 3.7, Ojbect Pool is mutable. so, Array is used too
-		// Objects in Object Pool immutable, so only immutable array is used for array
-		// Most of no type arguments in Object Pool are Argument Descriptor
 		const auto& arr = dart::Array::Cast(obj);
 		const auto arr_len = arr.Length();
 		const auto typeArg = app.typeDb->FindOrAdd(arr.GetTypeArguments());
-		// without type arguments, assume it is argument descriptor. show it even simple form is true.
 		if (simpleForm && typeArg->Length() > 0)
 			return std::format("List{}({})", typeArg->ToString(), arr_len);
 
 		std::ostringstream ss;
 		if (arr_len > 0) {
-			// in ImmutableList here, only Dart type (native type is not used)
 			auto arrPtr = dart::Array::DataOf(arr.ptr());
 			for (intptr_t i = 0; i < arr_len; i++) {
 				if (i != 0)
@@ -605,7 +575,6 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 	case dart::kTypeRefCid:
 #endif
 	case dart::kTypeParametersCid:
-		// might be in a Type but not in Object Pool directly
 		return std::format("{} (ptr: {:#x})", obj.ToCString(), (uint64_t)obj.ptr());
 	case dart::kFieldCid: {
 		const auto& field = dart::Field::Cast(obj);
@@ -628,7 +597,6 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 			if (cnt++) ss << ",\n";
 			key = iter.CurrentKey();
 			val = iter.CurrentValue();
-			// key always be simple form
 			ss << indent << ObjectToString(key, true, false, depth + 1) << ": " << ObjectToString(val, simpleForm, nestedObj, depth + 1);
 		}
 		if (cnt) ss << "\n";
@@ -659,8 +627,6 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 		const auto& libPrefix = dart::LibraryPrefix::Cast(obj);
 		const auto& name = dart::String::Handle(libPrefix.name());
 		RELEASE_ASSERT(libPrefix.num_imports() == 1);
-		// don't know what importer is
-		//const auto& importer = dart::Library::Handle(libPrefix.importer());
 		const auto& imports = dart::Array::Handle(libPrefix.imports());
 		const auto& importObj = dart::Object::Handle(imports.At(0));
 		RELEASE_ASSERT(importObj.GetClassId() == dart::kNamespaceCid);
@@ -683,17 +649,14 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 	}
 	case dart::kInstanceCid:
 		return std::format("Obj!Object@{:x}", (uint32_t)(intptr_t)obj.ptr());
-	// TODO: enum subclass
 	}
 
-	// many cids are instance. handling them after special classes.
 	ASSERT(obj.IsInstance());
 
 	if (cid < dart::kNumPredefinedCids) {
 		FATAL("Unhandle internal class %s (%ld)", app.GetClass(cid)->Name().c_str(), cid);
 	}
 
-	// TODO: print library and package prefix
 	knownObjectPtrs.insert((intptr_t)obj.ptr());
 	return dumpInstance(obj, simpleForm, nestedObj, depth);
 }
@@ -725,7 +688,6 @@ std::string DartDumper::dumpInstance(dart::Object& obj, bool simpleForm, bool ne
 	auto offset = dart::Instance::NextFieldOffset();
 	for (auto parent : parents | std::views::reverse) {
 		if (offset < parent->Size()) {
-			// parent fields depth MUST increment by 2 because 1 is for "Super!..."
 			auto txt = dumpInstanceFields(obj, *parent, ptr, offset, simpleForm, nestedObj, depth + 2);
 			offset = parent->Size();
 			if (!txt.empty()) {
@@ -759,14 +721,10 @@ std::string DartDumper::dumpInstanceFields(dart::Object& obj, DartClass& dartCls
 	const auto bitmap = dartCls.UnboxedFieldsBitmap();
 	while (offset < dartCls.Size()) {
 		std::string txtField;
-		// TODO: match the offset to field name if possible
 		if (bitmap.Get(offset / dart::kCompressedWordSize)) {
-			// AOT uses native integer if it is less than 31 bits (compressed pointer)
-			// integer (4/8 bytes) or double (8 bytes)
 			if (dart::kCompressedWordSize == 4)
 				RELEASE_ASSERT(bitmap.Get((offset + dart::kCompressedWordSize) / dart::kCompressedWordSize));
 			auto p = reinterpret_cast<uint64_t*>(ptr + offset);
-			// it is rare to find integer that larger than 0x1000_0000_0000_0000
 			if (*p <= 0x1000000000000000 || *p >= 0xffffffffffff0000) {
 				txtField = std::format("off_{:x}: int({:#x})", offset, *p);
 			}
@@ -776,7 +734,6 @@ std::string DartDumper::dumpInstanceFields(dart::Object& obj, DartClass& dartCls
 			offset += dart::kCompressedWordSize;
 		}
 		else if (offset != dartCls.TypeArgumentsOffset()) {
-			// compressed object ptr
 			auto p = reinterpret_cast<dart::CompressedObjectPtr*>(ptr + offset);
 			if (*p != dart::CompressedObjectPtr(nullptr)) {
 				if (p->IsHeapObject()) {
@@ -812,11 +769,9 @@ std::string DartDumper::getPoolObjectDescription(intptr_t offset, bool simpleFor
 	const auto& pool = app.GetObjectPool();
 	intptr_t idx = dart::ObjectPool::IndexFromOffset(offset);
 	auto objType = pool.TypeAt(idx);
-	// see how the EntryType is handled from vm/object_service.cc - ObjectPool::PrintJSONImpl()
 	if (objType == dart::ObjectPool::EntryType::kTaggedObject) {
 		auto& obj = dart::Object::Handle(pool.ObjectAt(idx));
 		if (obj.IsUnlinkedCall()) {
-			// since Dart 3.10, target type might be kTaggedObject
 			auto unlinkTargetType = pool.TypeAt(idx + 1);
 			if (unlinkTargetType == dart::ObjectPool::EntryType::kImmediate) {
 				const auto imm = pool.RawValueAt(idx + 1);
@@ -874,8 +829,6 @@ void DartDumper::DumpObjectPool(const char* filename)
 	of << std::format("pool heap offset: {:#x}\n", raw_addr - app.heap_base());
 
 	for (intptr_t i = 0; i < num; i++) {
-		// offset here is from ObjectPool pointer subtracted by kHeapObjectTag
-		// add 1 to make the offset value same as offset in compiled code
 		intptr_t offset = dart::ObjectPool::OffsetFromIndex(i);
 		auto txt = getPoolObjectDescription(offset + 1, false);
 		of << txt << "\n";
@@ -897,3 +850,4 @@ void DartDumper::DumpObjects(const char* filename)
 		of << "\n\n";
 	}
 }
+

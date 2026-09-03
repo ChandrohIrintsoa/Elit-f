@@ -1,13 +1,10 @@
 #pragma once
 
-// forward declaration
 class DartClass;
 class DartType;
-// RecordType is added in Dart 3.0
 #ifdef HAS_RECORD_TYPE
 class DartRecordType;
 #endif
-// TypeRef is removed in Dart 3.1
 #ifdef HAS_TYPE_REF
 class DartTypeRef;
 #endif
@@ -24,7 +21,7 @@ public:
 		RecordType,
 #endif
 #ifdef HAS_TYPE_REF
-		TypeRef,  // it is ref to Type, use it when self reference
+		TypeRef,
 #endif
 		FunctionType,
 	};
@@ -98,8 +95,6 @@ public:
 
 protected:
 	explicit DartType(bool nullable, DartClass& cls, const DartTypeArguments* args) : DartAbstractType(Kind::Type, nullable), cls(cls), args(args) {}
-	// incomplete initialization. we need it to prevent infinite loop when creating a new type
-	//explicit DartType(bool nullable, DartClass& cls) : DartAbstractType(Kind::Type, nullable), cls(cls), args(nullptr) {}
 
 	DartClass& cls;
 	const DartTypeArguments* args;
@@ -117,7 +112,6 @@ public:
 	virtual std::string ToString() const;
 
 protected:
-	// incomplete initialization. we need it to prevent infinite loop when creating a new type
 	explicit DartRecordType(bool nullable, std::vector<std::string> fieldNames) : DartAbstractType(Kind::RecordType, nullable), fieldNames(std::move(fieldNames)) {}
 
 	std::vector<DartAbstractType*> fieldTypes;
@@ -136,7 +130,6 @@ public:
 	virtual std::string ToString() const;
 
 protected:
-	// incomplete initialization. we need it to prevent infinite loop when creating a new type
 	explicit DartTypeRef(DartType& type) : DartAbstractType(Kind::TypeRef, false), type(type) {}
 
 	DartType& type;
@@ -152,11 +145,9 @@ public:
 	virtual std::string ToString() const;
 
 protected:
-	// incomplete initialization. we need it to prevent infinite loop when creating a new type
 	explicit DartTypeParameter(bool nullable, uint16_t base, uint16_t index, bool isClassTypeParam)
 		: DartAbstractType(Kind::TypeParam, nullable), base(base), index(index), isClassTypeParam(isClassTypeParam), bound(nullptr) {}
 
-	// in UntaggedTypeParameter, base and index use uint16_t
 	uint16_t base;
 	uint16_t index;
 	bool isClassTypeParam;
@@ -171,7 +162,6 @@ public:
 
 	virtual std::string ToString() const;
 
-	// Note: positional parameter names are removed in AOT
 	struct Parameter {
 		Parameter(std::string name, DartAbstractType* type) : name(std::move(name)), type(type) {}
 
@@ -181,32 +171,27 @@ public:
 	struct OptionalParameter : public Parameter {
 		OptionalParameter(std::string name, DartAbstractType* type, void* defaultValue) : Parameter(std::move(name), type), defaultValue(defaultValue) {}
 
-		// Note: parameter default value is compiled into ObjectPool and code
 		void* defaultValue;
 	};
 
 protected:
-	// incomplete initialization. we need it to prevent infinite loop when creating a new type
 	explicit DartFunctionType(bool nullable, bool hasImplicitParam, bool hasNamedParam, std::vector<DartTypeParameter*> typeParams)
 		: DartAbstractType(Kind::FunctionType, nullable), hasImplicitParam(hasImplicitParam), hasNamedParam(hasNamedParam), resultType(nullptr), typeParams(std::move(typeParams)) {}
 
-	bool hasImplicitParam; // this paramter for object method (so can be only 0 or 1)
-	// Function parameter cannot contain both optional positional parameters and optional named parameters
-	// if hasNamedParam is true, optionalParams are named pareters, else positional parameters
+	bool hasImplicitParam;
 	bool hasNamedParam;
 
-	std::vector<DartTypeParameter*> typeParams; // function type parameters in "<>"
-	DartAbstractType *resultType; // function return type
+	std::vector<DartTypeParameter*> typeParams;
+	DartAbstractType *resultType;
 
-	std::vector<Parameter> params; // fixed function parameters
-	std::vector<OptionalParameter> optionalParams; // function parameters in "[]" or "{}"
+	std::vector<Parameter> params;
+	std::vector<OptionalParameter> optionalParams;
 
 	friend class DartTypeDb;
 };
 
 class DartTypeDb {
 public:
-	//~DartTypeDb();
 
 	DartType* Get(uint32_t cid);
 
@@ -227,11 +212,9 @@ public:
 protected:
 	DartTypeDb(std::vector<DartClass*>& classes) : classes(classes) { typesByCid.resize(classes.size()); }
 
-	std::unordered_map<intptr_t, DartAbstractType*> typesMap; // map dart ptr to the type
+	std::unordered_map<intptr_t, DartAbstractType*> typesMap;
 	std::vector<std::vector<DartType*>> typesByCid;
-	
-	// Normally, type arguments are all read-only. no duplicated type arguments in Dart snapshot
-	// cache it here for quick lookup
+
 	std::unordered_map<intptr_t, DartTypeArguments*> typeArgsMap;
 
 	std::vector<DartClass*>& classes;

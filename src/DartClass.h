@@ -9,12 +9,11 @@ class DartClass
 {
 public:
 	enum ClassType {
-		CLASS,    // [normal] class
-		ABSTRACT, // abstract class
-		ENUM,     // enum (parent class is _Enum)
+		CLASS,
+		ABSTRACT,
+		ENUM,
 	};
 	explicit DartClass(const DartLibrary& lib, const dart::Class& cls);
-	// for creating dummy class (only used for obfuscated app)
 	explicit DartClass(const DartLibrary& lib);
 	DartClass() = delete;
 	DartClass(const DartClass&) = delete;
@@ -28,7 +27,6 @@ public:
 	DartField* AddField(intptr_t offset, DartAbstractType* type, bool nativeNumber = false);
 	DartField* FindField(intptr_t offset);
 
-	//bool IsNative() { return lib.ptr == nullptr; }
 	bool IsTopClass() const { return dart::ClassTable::IsTopLevelCid(id); }
 	uint32_t Id() const { return id; }
 	const DartLibrary& Library() const { return lib; }
@@ -60,26 +58,18 @@ public:
 private:
 	const DartLibrary& lib;
 	dart::UnboxedFieldBitmap unboxed_fields_bitmap;
-	uint32_t id; // class id
-	//uint32_t superCid; // parent class id
-	DartClass* superCls; // super class, initialized as NULL, set after all classes are loaded
+	uint32_t id;
+	DartClass* superCls;
 	const dart::ClassPtr ptr;
 	DartType* declarationType;
 	std::string name;
-	std::string typeVectorName; // <type parameters>
-	std::string parentTypeVectorName; // <type parameters> of parent class for this class
+	std::string typeVectorName;
+	std::string parentTypeVectorName;
 	ClassType type;
-	//uint32_t parent_id;
-	// num_type_arguments is declaration_args length
-	// it is args in <>. the number is from number of this class and the parent
-	//DartTypeArguments* declaration_args;
 	uint32_t num_type_arguments;
-	// num_type_params is this length (number of this class arguments)
 	uint32_t num_type_parameters;
-	//DartTypeParametersItem* type_params;
 	std::vector<DartClass*> interfaces;
 	DartClass* mixin;
-	//uint32_t parent_size; // offset to start of this class fields
 	int32_t type_argument_offset;
 	int32_t size;
 	bool is_const_constructor;

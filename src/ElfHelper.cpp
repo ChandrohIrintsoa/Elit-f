@@ -1,10 +1,7 @@
-#include "pch.h"
 #include "ElfHelper.h"
 PRAGMA_WARNING(push, 0)
 #include <platform/elf.h>
 #if defined(DART_TARGET_OS_MACOS)
-// old dart version has no mach_o.h
-//#include <platform/mach_o.h>
 #endif
 PRAGMA_WARNING(pop)
 #include <algorithm>
@@ -15,9 +12,8 @@ PRAGMA_WARNING(pop)
 #else
 #include <fcntl.h>
 #include <sys/stat.h>
-//#include <dlfcn.h>
 #include <sys/mman.h>
-#endif // #if defined(_WIN32) || defined(WIN32)
+#endif
 
 struct ElfIdent {
 	uint8_t ei_magic[4];
@@ -40,13 +36,10 @@ static void* load_map_file(const char* path)
 		return NULL;
 	}
 
-	// because Dart API requires only snapshot buffer addresses (no relative access across snapshot),
-	//   so we can just mapping a whole file and find address of snapshots
 	HANDLE hMapFile = CreateFileMapping(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
 	if (hMapFile == INVALID_HANDLE_VALUE)
 		return NULL;
 
-	// need RW because dart initialization need writing data in BSS
 	void* mem = MapViewOfFile(hMapFile, FILE_MAP_COPY, 0, 0, 0);
 	CloseHandle(hMapFile);
 
@@ -56,7 +49,6 @@ static void* load_map_file(const char* path)
 #else
 static void* load_map_file(const char* path)
 {
-	// need RW because dart initialization need writing data in BSS
 	int fd = open(path, O_RDONLY);
 	struct stat st;
 
@@ -77,20 +69,16 @@ LibAppInfo ElfHelper::findSnapshots(const uint8_t* elf)
 	const auto* section = (SectionHeader*)(elf + hdr->section_table_offset);
 	const auto sh_num = hdr->num_section_headers;
 
-	// find .dynstr and .dynsym sections, so we can map the section names
 	const char* dynstr = nullptr;
 	const Symbol* dynsym = nullptr;
 	const Symbol* dynsym_end = nullptr;
 	for (uint16_t i = 0; i < sh_num; i++, section++) {
 		if (section->type == SectionHeaderType::SHT_STRTAB && dynstr == nullptr) {
-			// we want only .dynstr for .dynsym
 			const char* strtab = (const char*)elf + section->file_offset;
 			const char* last = strtab + section->file_size;
 			const char* s_first = kVmSnapshotDataAsmSymbol;
 			const char* s_last = s_first + strlen(kVmSnapshotDataAsmSymbol) + 1;
-			//if (memmem(strtab, section->s_size, kVmSnapshotDataAsmSymbol, strlen(kVmSnapshotDataAsmSymbol))) {
 			if (std::search(strtab, last, s_first, s_last) != last) {
-				// found it
 				dynstr = strtab;
 			}
 		}
@@ -104,7 +92,6 @@ LibAppInfo ElfHelper::findSnapshots(const uint8_t* elf)
 			break;
 	}
 
-	// find the required symbol addresses
 	const uint8_t* vm_snapshot_data = nullptr;
 	const uint8_t* vm_snapshot_instructions = nullptr;
 	const uint8_t* isolate_snapshot_data = nullptr;
@@ -114,7 +101,6 @@ LibAppInfo ElfHelper::findSnapshots(const uint8_t* elf)
 			continue;
 
 		const char* name = dynstr + dynsym->name;
-		// Note: sym_size is no needed for dart VM (its blob contains size)
 		if (strcmp(name, kVmSnapshotDataAsmSymbol) == 0) {
 			vm_snapshot_data = elf + dynsym->value;
 		}
@@ -150,13 +136,8 @@ LibAppInfo ElfHelper::findSnapshots(const uint8_t* elf)
 LibAppInfo ElfHelper::MapLibAppSo(const char* path)
 {
 	void* lib = load_map_file(path);
-	// quick and dirty parsing ELF to get symbol addresses
 	uint8_t* elf = (uint8_t*)(lib);
 #if defined(DART_TARGET_OS_MACOS)
-	// Note: only new dart version getting snapshots from load command
-	// <=2.17, use EXPORT name
-	// <= v2.18,  load from sub SEGMENT_64, named "__CUSTOM" and section named "__dart_app_snap"
-	// >= 2.19, LC_NOTE command is used
 	auto header = (dart::mach_o::mach_header_64*)lib;
 	switch (header->magic) {
 	case dart::mach_o::MH_MAGIC:
@@ -173,19 +154,15 @@ LibAppInfo ElfHelper::MapLibAppSo(const char* path)
 	const auto* hdr = (ElfHeader*)elf;
 	const auto* ident = (ElfIdent*)hdr->ident;
 	if (memcmp(ident->ei_magic, "\x7f" "ELF", 4) != 0)
-		throw std::invalid_argument("ELF: Invalid magic header"); // need ELF file
+		throw std::invalid_argument("ELF: Invalid magic header");
 	if (ident->ei_data != 1)
-		throw std::invalid_argument("ELF: Support only little endian"); // expect little-endian
+		throw std::invalid_argument("ELF: Support only little endian");
 
-	if (ident->ei_class != ELFCLASS64) { // 1 is 32 bits, 2 is 64 bits
-		throw std::invalid_argument("ELF: Support only 64 bits"); // support only 64 bits
+	if (ident->ei_class != ELFCLASS64) {
+		throw std::invalid_argument("ELF: Support only 64 bits");
 	}
-	// expected e_machine
-	//   3: x86, 0x28: ARM
-	//   0x3e: x86-64, 0xB7: Aarch64
-	// EM_386, EM_ARM, EM_X86_64, EM_AARCH64
-	//hdr->e_machine;
 #endif
 
 	return findSnapshots(elf);
 }
+

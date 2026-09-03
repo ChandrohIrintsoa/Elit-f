@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "il.h"
 #include "CodeAnalyzer.h"
 #include "DartThreadInfo.h"
@@ -14,3 +13,4 @@ std::string CallLeafRuntimeInstr::ToString()
 	const auto info = GetThreadLeafFunction(thrOffset);
 	return std::format("CallRuntime_{}({}) -> {}", name, info->params, info->returnType);
 }
+

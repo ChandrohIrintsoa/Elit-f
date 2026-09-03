@@ -1,9 +1,7 @@
-#include "pch.h"
 #include "Util.h"
 #include <sstream>
 #include <iomanip>
 
-// only ascii and no \0
 static void unescape_char(std::string& s, char c)
 {
     switch (c)
@@ -26,12 +24,12 @@ static void unescape_char(std::string& s, char c)
 
 std::string Util::Unescape(const std::string& s)
 {
-	std::string res;
-	res.reserve(s.length() * 2);
+        std::string res;
+        res.reserve(s.length() * 2);
     for (char c : s) {
         unescape_char(res, c);
     }
-	return res;
+        return res;
 }
 
 std::string Util::Unescape(const char* s)
@@ -58,15 +56,8 @@ std::string Util::UnescapeWithQuote(const char* s)
 
 std::string Util::Quote(const std::string& s)
 {
-	std::ostringstream ss;
-	ss << std::quoted(s);
-	return ss.str();
+        std::ostringstream ss;
+        ss << std::quoted(s);
+        return ss.str();
 }
 
-std::string Util::Unquote(const std::string& s)
-{
-	std::string result;
-	std::istringstream ss(s);
-	ss >> std::quoted(result);
-	return result;
-}

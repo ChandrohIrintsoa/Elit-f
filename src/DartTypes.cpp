@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "DartTypes.h"
 #include "DartClass.h"
 #include <numeric>
@@ -82,7 +81,6 @@ std::string DartTypeRef::ToString() const
 
 std::string DartTypeParameter::ToString() const
 {
-	// CanonicalName might not start from 0
 	std::string txt;
 	if (base != 0)
 		txt += (isClassTypeParam ? "C" : "F") + std::to_string(base);
@@ -120,7 +118,7 @@ std::string DartFunctionType::ToString() const
 		txt += ">";
 	}
 
-	txt += "("; // open for function arguments
+	txt += "(";
 	if (!params.empty()) {
 		auto first = params[0].type->ToString();
 		if (hasImplicitParam)
@@ -150,7 +148,7 @@ std::string DartFunctionType::ToString() const
 			);
 		}
 	}
-	txt += ") => " + resultType->ToString(); // close for function arguments and return type
+	txt += ") => " + resultType->ToString();
 	if (IsNullable()) {
 		txt += ")?";
 	}
@@ -168,15 +166,12 @@ DartType* DartTypeDb::FindOrAdd(dart::TypePtr typePtr)
 	auto cid = type.type_class_id();
 	auto dartCls = classes[type.type_class_id()];
 	ASSERT(dartCls);
-	// Add it to DB first. the type arguments might be many recursive calls
 	auto dartType = new DartType(type.IsNullable(), *dartCls, &DartTypeArguments::Null);
 	typesMap[ptr] = dartType;
 
 	dartType->args = FindOrAdd(type.arguments());
 
 	auto& types = typesByCid[dartCls->Id()];
-	// can use pointer comparison because we create only one type args for one pointer
-	// so different pointer means another type
 	auto it = std::find(types.begin(), types.end(), dartType);
 	if (it == types.end()) {
 		types.push_back(dartType);
@@ -227,17 +222,12 @@ DartTypeParameter* DartTypeDb::FindOrAdd(dart::TypeParameterPtr typeParamPtr)
 	}
 
 	const auto& typeParam = dart::TypeParameter::Handle(typeParamPtr);
-	// Add it to DB first. the bound might be many recursive calls
 	auto dartTypeParam = new DartTypeParameter(typeParam.IsNullable(), (uint16_t)typeParam.base(), (uint16_t)typeParam.index(), typeParam.IsClassTypeParameter());
 	typesMap[ptr] = dartTypeParam;
 
-	// Removing TypeRef also replaces TypeParameter.bound with TypeParameter.owner
 #ifdef HAS_TYPE_REF
 	dartTypeParam->bound = FindOrAdd(typeParam.bound());
 #else
-	// in Dart 3.5, owner.ptr() might be NULL (zero value)
-	// code in TypeParameter::bound() is changed between Dart version, do NOT copy it to here
-	//   only add the edge case here
 	if ((intptr_t)typeParamPtr.untag()->owner() == 0 || (intptr_t)typeParam.parameterized_class() == 0)
 		dartTypeParam->bound = FindOrAdd(dart::Isolate::Current()->group()->object_store()->nullable_object_type());
 	else
@@ -256,7 +246,6 @@ DartFunctionType* DartTypeDb::FindOrAdd(dart::FunctionTypePtr fnTypePtr)
 
 	const auto& fnType = dart::FunctionType::Handle(fnTypePtr);
 
-	// handle function type parameters
 	std::vector<DartTypeParameter*> typeParams;
 	if (fnType.NumTypeParameters() != 0) {
 		const auto& type_params = dart::TypeParameters::Handle(fnType.type_parameters());
@@ -267,13 +256,11 @@ DartFunctionType* DartTypeDb::FindOrAdd(dart::FunctionTypePtr fnTypePtr)
 		for (intptr_t i = 0; i < num_type_params; i++) {
 			auto dartTypeParam = new DartTypeParameter(false, (uint16_t)base, (uint16_t)(base + i), kIsClassTypeParameter);
 			dartTypeParam->bound = FindOrAdd(type_params.BoundAt(i));
-			// Note: there might be defaults to
 
 			typeParams.push_back(dartTypeParam);
 		}
 	}
 
-	// Add it to DB first. the bound might be many recursive calls
 	auto dartFnType = new DartFunctionType(fnType.IsNullable(), fnType.num_implicit_parameters() != 0, fnType.HasOptionalNamedParameters(), std::move(typeParams));
 	typesMap[ptr] = dartFnType;
 
@@ -292,8 +279,6 @@ DartFunctionType* DartTypeDb::FindOrAdd(dart::FunctionTypePtr fnTypePtr)
 		auto& name = dart::String::Handle();
 		const char* tmp = "";
 		for (auto i = num_fixed_params; i < num_params; i++) {
-			//dartFnType->params[i].type = FindOrAdd(fnType.ParameterTypeAt(i));
-			//dartFnType->params[i].name = name.ToCString();
 			if (dartFnType->hasNamedParam) {
 				name = fnType.ParameterNameAt(i);
 				tmp = name.ToCString();
@@ -326,7 +311,6 @@ DartAbstractType* DartTypeDb::FindOrAdd(dart::AbstractTypePtr abTypePtr)
 	case dart::kFunctionTypeCid:
 		return FindOrAdd(dart::FunctionType::RawCast(abTypePtr));
 	}
-	//return nullptr;
 	FATAL("Invalid abstract type");
 }
 
@@ -345,7 +329,6 @@ const DartTypeArguments* DartTypeDb::FindOrAdd(dart::TypeArgumentsPtr typeArgsPt
 	const auto typeArgsLen = typeArgs.Length();
 	std::vector<DartAbstractType*> args(typeArgsLen);
 
-	// Add it to DB first. the bound might be many recursive calls
 	auto dartTypeArgs = new DartTypeArguments(std::move(args));
 	typeArgsMap[ptr] = dartTypeArgs;
 
@@ -361,8 +344,6 @@ DartType* DartTypeDb::FindOrAdd(DartClass& dartCls, const dart::TypeArgumentsPtr
 {
 	auto args = FindOrAdd(typeArgsPtr);
 	auto& types = typesByCid[dartCls.Id()];
-	// we want to find same type args
-	// so different pointer means another type
 	DartType* dartType;
 	auto it = std::find_if(types.begin(), types.end(), [&args](const DartType* dtype) {
 		return dtype->args == args;
@@ -381,11 +362,9 @@ DartType* DartTypeDb::FindOrAdd(DartClass& dartCls, const dart::TypeArgumentsPtr
 DartType* DartTypeDb::FindOrAdd(DartClass& dartCls, const dart::Instance& inst)
 {
 	if (dartCls.NumTypeParameters() == 0) {
-		// this class cannot be parameterized
 		return dartCls.DeclarationType();
 	}
 
-	// the instance always has type arguments because the class can be parameterized
 	return FindOrAdd(dartCls, inst.GetTypeArguments());
 }
 
@@ -407,3 +386,4 @@ DartType* DartTypeDb::Get(uint32_t cid)
 	ASSERT(dartCls->NumTypeParameters() == 0);
 	return dartCls->DeclarationType();
 }
+

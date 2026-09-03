@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "DartFunction.h"
 #include "DartClass.h"
 #include "DartLibrary.h"
@@ -8,7 +7,6 @@
 #include <numeric>
 #include <array>
 
-// place static member because no DartFnBase source file
 intptr_t DartFnBase::lib_base;
 
 DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFnBase(), cls(cls), parent(nullptr), ptr(ptr), kind(NORMAL)
@@ -17,25 +15,18 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 
 	const auto& func = dart::Function::Handle(zone, ptr);
 
-	// might need internal name for complete getter and setter name
 	name = func.UserVisibleNameCString();
 
 	is_native = func.is_native();
-	//is_closure = name == "<anonymous closure>";
-	is_closure = func.IsClosureFunction(); //func.IsNonImplicitClosureFunction();
-	//ASSERT(is_closure == (name == "<anonymous closure>"));
-	// Note: https://github.com/dart-lang/sdk/commit/dcdfcc2b8decc8bf47881f2e93ee5503ea98b7cf#diff-fba8499e9b9e86f518a0ad80eeda6a4309ac5a82c5e9e0b0bf962505e1ecddba
-	//   IsFfiTrampoline() is changed to IsFfiCallbackTrampoline()
+	is_closure = func.IsClosureFunction();
 	is_ffi = func.kind() == dart::UntaggedFunction::kFfiTrampoline;
 	if (!is_ffi) {
-		//is_static = func.IsStaticFunction();
 		is_static = func.is_static();
 		is_const = func.is_const();
 		is_abstract = func.is_abstract();
 		is_async = func.IsAsyncFunction();
 		func.IsGetterFunction();
 
-		// function attributes
 		switch (func.kind()) {
 		case dart::UntaggedFunction::kConstructor:
 			kind = CONSTRUCTOR;
@@ -47,7 +38,6 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 		case dart::UntaggedFunction::kGetterFunction:
 		case dart::UntaggedFunction::kImplicitGetter:
 		case dart::UntaggedFunction::kImplicitStaticGetter:
-		//case dart::UntaggedFunction::kRecordFieldGetter:
 			kind = GETTER;
 			break;
 		default:
@@ -59,15 +49,8 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 		is_const = false;
 		is_abstract = false;
 		is_async = false;
-		//auto fnType = func.FfiCSignature();
-		//if (!fnType.IsRawNull()) {
-		//	auto& sig = dart::FunctionType::Handle(zone, fnType);
-		//	std::cout << "FFI: " << name << ", sig: " << sig.ToCString() << "\n";
-		//}
 	}
 
-	// the generated code can be checked from Assembler::MonomorphicCheckedEntryAOT()
-	// Code.EntryPoint() in obfuscated app might be pointed at start of snapshot (wrong)
 	const auto ep = func.entry_point() - lib_base;
 	const auto& code = dart::Code::Handle(zone, func.CurrentCode());
 	payload_addr = code.PayloadStart();
@@ -80,36 +63,21 @@ DartFunction::DartFunction(DartClass& cls, const dart::FunctionPtr ptr) : DartFn
 	ep_addr = code.EntryPoint() - lib_base;
 	if (ep != ep_addr) {
 		ep_addr = ep;
-		//std::cout << std::format("Fn: {}, payload: {:#x}, ep_addr: {:#x}, ep: {:#x}\n", name.c_str(), payload_addr, ep_addr, ep);
 	}
 
-	//if (ep_addr != payload_addr) {
-	//	std::cout << std::format("Fn: {}, payload: {:#x}, morphic: {:#x}, ep: {:#x}\n", name.c_str(), payload_addr, morphic_addr, ep_addr);
-	//}
 
-	// closure parent (what function use this closure)
 	if (is_closure) {
 		is_static = func.is_static();
 		auto parentPtr = func.parent_function();
 		if ((intptr_t)parentPtr != (intptr_t)dart::Function::null()) {
-			//auto outmost_parent = func.GetOutermostFunction();
-			//auto& parentFn = dart::Function::Handle(zone, parentPtr);
-			// Now, the parent function might be missing.
-			//   store parent as entry point first. it will be changed to pointer later.
-			//parent = (DartFunction*)(parentFn.entry_point() - lib_base);
 			parent = (DartFunction*)(intptr_t)parentPtr;
 		}
 		else {
-			//std::cout << std::format("[?] closure {} ({:#x}) has null parent\n", name, ep_addr);
 		}
 	}
 
-	// TODO:
-	// more info: https://mrale.ph/dartvm/compiler/exceptions.html
-	//auto& catchData = dart::TypedData::Handle(zone, code.catch_entry_moves_maps());
 }
 
-// kind should be raw code
 DartFunction::DartFunction(DartClass& cls, const dart::Code& code)
 	: DartFnBase(), cls(cls), parent(nullptr), ptr(dart::Function::null()), kind(NORMAL),
 	is_native(true), is_closure(false), is_ffi(false), is_static(false), is_const(false), is_abstract(false), is_async(false)
@@ -133,7 +101,6 @@ std::string DartFunction::FullName() const
 
 DartFunction* DartFunction::GetOutermostFunction() const
 {
-	// Only closure should call this method
 	if (!parent)
 		return nullptr;
 
@@ -147,9 +114,8 @@ DartFunction* DartFunction::GetOutermostFunction() const
 
 void DartFunction::SetAnalyzedData(std::unique_ptr<AnalyzedFnData> data)
 {
-	// must never be called more than once
 	ASSERT(!analyzedData);
-	
+
 	analyzedData = std::move(data);
 }
 
@@ -195,14 +161,12 @@ std::string DartFunction::ToCallStatement(const std::vector<std::shared_ptr<VarI
 
 void DartFunction::PrintHead(std::ostream& of) const
 {
-	//of << std::format("    {} /* addr: {:#x}, size: {:#x} */\n", func.ToCString(), ep, code_size);
 	auto zone = dart::Thread::Current()->zone();
 	auto& func = dart::Function::Handle(zone, ptr);
 
-	// Note: Signature is not dropped in aot when any named parameter is required. (from Function::IsRequiredAt() body)
 	const auto& sig = dart::FunctionType::Handle(zone, func.signature());
 
-	of << "  "; // indentation
+	of << "  ";
 	if (is_closure)
 		of << "[closure] ";
 
@@ -242,7 +206,6 @@ void DartFunction::PrintHead(std::ostream& of) const
 		const auto& result_type = dart::AbstractType::Handle(sig.result_type());
 		result_type.PrintName(dart::Object::kScrubbedName, &buffer);
 		of << buffer.buffer() << " " << name;
-		// function type paramaters
 		const auto& type_params = dart::TypeParameters::Handle(zone, sig.type_parameters());
 		if (!type_params.IsNull()) {
 			buffer.Clear();
@@ -266,3 +229,4 @@ void DartFunction::PrintFoot(std::ostream& of) const
 {
 	of << "  }\n";
 }
+

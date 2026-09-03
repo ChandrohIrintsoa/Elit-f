@@ -3,7 +3,6 @@
 #include "il.h"
 #include <array>
 
-// forward declaration
 class DartApp;
 class DartFunction;
 
@@ -17,7 +16,7 @@ struct AsmText {
 	};
 
 	uint64_t addr;
-	char text[71]; // first 16 bytes are for mnemonic and spaces, after that is operands
+	char text[71];
 	uint8_t dataType;
 	union {
 		uint64_t threadOffset;
@@ -30,15 +29,13 @@ struct AsmText {
 class AsmTexts {
 public:
 	AsmTexts(std::vector<AsmText> asm_texts, uint64_t first_stack_limit_addr, int max_param_stack_offset)
-		: first_addr{ asm_texts.front().addr }, last_addr{ asm_texts.back().addr }, first_stack_limit_addr{ first_stack_limit_addr }, 
+		: first_addr{ asm_texts.front().addr }, last_addr{ asm_texts.back().addr }, first_stack_limit_addr{ first_stack_limit_addr },
 		  max_param_stack_offset{ max_param_stack_offset }, asm_texts{ std::move(asm_texts) } {}
 
 	std::vector<AsmText>& Data() { return asm_texts; }
 
 	size_t AtIndex(uint64_t addr) {
 		ASSERT(addr >= first_addr && addr <= last_addr);
-		// TODO: below is specific to arm64
-		// estimate index (normally 4 bytes per instruction for arm64)
 		auto idx = (addr - first_addr) / 4;
 		while (asm_texts[idx].addr < addr)
 			++idx;
@@ -60,10 +57,10 @@ private:
 };
 
 struct FnParamInfo {
-	A64::Register paramReg; // when parameter is passed with register
-	int32_t paramOffset{ 0 }; // offset from FP (first param offset is 0x10. if it is optional param, value is 0)
+	A64::Register paramReg;
+	int32_t paramOffset{ 0 };
 	A64::Register valReg;
-	int32_t localOffset{ 0 }; // offset from FP (local variable)
+	int32_t localOffset{ 0 };
 	DartType* type{ nullptr };
 	std::string name;
 	std::unique_ptr<VarValue> val;
@@ -109,7 +106,7 @@ public:
 		auto val = regs[srcReg];
 		if (dstReg != srcReg) {
 			regs[dstReg] = val;
-			regs[srcReg] = nullptr; // normally, Dart moves register for freeing the src register
+			regs[srcReg] = nullptr;
 		}
 		return val;
 	}
@@ -120,8 +117,6 @@ public:
 	void SetLocal(int offset, VarValue* val) { local_vars[localOffsetToIndex(offset)] = val; }
 	VarValue* GetLocal(int offset) { return local_vars[localOffsetToIndex(offset)]; }
 
-//private:
-	// variable storage. only reference here.
 	std::array<VarValue*, A64::Register::kNumberOfRegisters> regs;
 	std::vector<VarValue*> local_vars;
 	std::vector<VarValue*> callee_args;
@@ -142,13 +137,10 @@ public:
 	}
 	VarValue* ValArgsDesc() const { return valArgsDesc.get(); }
 
-	// we need it to suppress an error about use without define.
 	VarValue* ValCurrNumNameParam() const { return valCurrNumNameParam.get(); }
 
-	// pending load value ILs for variables initialization in prologue
 	std::vector<std::unique_ptr<ILInstr>> pending_ils;
 private:
-	// VarValue of function parameter owner
 	std::vector<std::unique_ptr<VarValue>> valParams;
 	std::unique_ptr<VarValue> valArgsDesc;
 	std::unique_ptr<VarValue> valCurrNumNameParam;
@@ -173,18 +165,15 @@ public:
 	DartFunction& dartFn;
 	AsmTexts asmTexts;
 	cs_insn* last_ret{ nullptr };
-	uint32_t stackSize{ 0 }; // for local variables (this includes space for call arguments)
+	uint32_t stackSize{ 0 };
 	bool useFramePointer{ false };
 	uint64_t firstCheckStackOverflowAddr{ 0 };
 	FnParams params;
 	std::vector<std::unique_ptr<ILInstr>> il_insns;
 	DartType* returnType{ nullptr };
 
-	//int firstParamOffset{ 0 };
-	// TODO: initialization list in prologue, type argument (from ArgumentsDescriptor or Closure)
 	A64::Register closureContextReg;
-	int32_t closureContextLocalOffset{ 0 }; // offset from FP (local variable)
-	// type argument from ArgumentsDescriptor
+	int32_t closureContextLocalOffset{ 0 };
 	A64::Register typeArgumentReg;
 	int32_t typeArgumentLocalOffset{ 0 };
 
@@ -211,8 +200,7 @@ public:
 
 private:
 	static AsmTexts convertAsm(AsmInstructions& asm_insns);
-	
-	// implementation is specific to architecture
+
 	void asm2il(DartFunction* dartFn, AsmInstructions& asm_insns);
 
 	DartApp& app;

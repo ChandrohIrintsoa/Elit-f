@@ -1,55 +1,34 @@
 #!/usr/bin/env python3
-"""
-elitf_r2.py — Génération et exécution de scripts radare2 / lecture d'infos binaires.
-
-Contient :
-  * Templates de scripts r2 (R2_SCRIPT_TEMPLATE, R2_DISASM_TEMPLATE, R2_BATCH_TEMPLATE)
-  * Templates par mode d'analyse (R2_TEMPLATES par niveau : minimal, quick, standard, full, ...)
-  * `generate_r2_scripts(so_list, outdir, log_mgr=None)` : génère les .r2 et le batch .sh
-  * `run_r2_scripts(so_list, outdir, log_mgr=None)`      : génère + exécute r2 si présent
-  * `r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None)` : fonction unifiée
-    avec sélection de cibles + sous-menu de tous les modes d'analyse r2.
-  * `display_binary_info(so_list, outdir, log_mgr=None)` : readelf-like, écrit dans un fichier
-
-Ces fonctions acceptent un `LogManager` optionnel (issu de `elitf_ui`) pour reporter
-la progression sans dépendre directement de Rich.
-"""
 import os
 import shutil
 import subprocess
 
-# =========================================================================
-#  R2 Analysis command blocks (reusable pieces)
-# =========================================================================
-
-# Header commun à tous les scripts r2
 R2_HEADER = r"""e scr.color=0
 e scr.utf8=0
 e anal.strings=true
 e bin.cache=true
 """
 
-# Niveaux d'analyse radare2 (du plus léger au plus complet)
 R2_ANALYSIS_LEVELS = {
-    # 'a' seul : analyse minimale — détecte quelques fonctions de base
+
     "a": {
         "label": "a  — Analyse minimale",
         "desc": "Analyse la plus légère (a uniquement)",
         "commands": "a\nafl\n",
     },
-    # 'aa' : analyse de base — références, strings, fonctions principales
+
     "aa": {
         "label": "aa — Analyse de base",
         "desc": "Analyse standard (aa : refs, strings, fonctions)",
         "commands": "aa\nafl\n",
     },
-    # 'aaa' : analyse avancée — appels, classes, récupération de types
+
     "aaa": {
         "label": "aaa — Analyse avancée",
         "desc": "Analyse automatique poussée (aaa)",
         "commands": "aaa\nafl\n",
     },
-    # Toutes les commandes d'analyse disponibles
+
     "all_anal": {
         "label": "Toutes les commandes d'analyse",
         "desc": "aa + aaa + aac + aar + afr + aae + aaft + aao + aav + aas + aat + aap + aau + ad",
@@ -73,7 +52,6 @@ afl
     },
 }
 
-# Blocs d'extraction d'informations (réutilisables selon le mode)
 R2_EXTRACTION_BLOCKS = {
     "functions": {
         "label": "Fonctions uniquement",
@@ -236,12 +214,10 @@ e log.dest=stderr
     },
 }
 
-# Extraction complète (tout R2_EXTRACTION_BLOCKS)
 _ALL_EXTRACTION = "\n".join(
     block["commands"] for block in R2_EXTRACTION_BLOCKS.values()
 )
 
-# Modes d'analyse préconfigurés (combinaison analyse + extraction)
 R2_PRESETS = {
     "full": {
         "label": "Analyse complète (aaa + toute extraction)",
@@ -280,8 +256,6 @@ R2_PRESETS = {
     },
 }
 
-# Radare2 comprehensive analysis + extraction script (legacy — gardé pour rétrocompatibilité).
-# Identique au preset "full".
 R2_SCRIPT_TEMPLATE = r"""e scr.color=0
 e scr.utf8=0
 e anal.strings=true
@@ -411,7 +385,6 @@ ic* > __OUTDIR__/__NAME__classes_json.txt
 q
 """
 
-# Minimal r2 script: run analysis + write the list of function addresses
 R2_DISASM_TEMPLATE = r"""e scr.color=0
 e scr.utf8=0
 e asm.bytes=true
@@ -439,45 +412,26 @@ __SCRIPTS_BLOCK__
 echo "[OK] Radare2 analysis complete: $OUTDIR/"
 """
 
-# Radare2 timeout per .so (overridable via env). libflutter.so can take several minutes.
 _R2_TIMEOUT_ENV = os.getenv("R2_TIMEOUT", "600")
 
-
 def _find_r2():
-    """Return the path to the radare2 binary, looking for both `r2` and `radare2`."""
     for candidate in ("r2", "radare2"):
         path = shutil.which(candidate)
         if path:
             return path
     return None
 
-
 def _find_readelf():
-    """Return the path to a readelf-like binary, or None if not available."""
     for candidate in ("readelf", "greadelf", "llvm-readelf"):
         path = shutil.which(candidate)
         if path:
             return path
     return None
 
-
 def _build_r2_script(analysis_key, extraction_keys, use_write=False,
                      asm_bytes=False, asm_lines=False):
-    """Construire un script r2 dynamique à partir des blocs d'analyse et d'extraction.
-
-    Args:
-        analysis_key: clé dans R2_ANALYSIS_LEVELS ("a", "aa", "aaa", "all_anal")
-        extraction_keys: liste de clés dans R2_EXTRACTION_BLOCKS
-        use_write: si True, active le mode écriture (r2 -w)
-        asm_bytes: si True, affiche les octets dans le désassemblage
-        asm_lines: si True, affiche les lignes graphiques
-
-    Returns:
-        Le contenu du script r2 (str)
-    """
     parts = [R2_HEADER]
 
-    # Configuration asm
     if asm_bytes:
         parts.append("e asm.bytes=true\n")
     else:
@@ -488,12 +442,10 @@ def _build_r2_script(analysis_key, extraction_keys, use_write=False,
         parts.append("e asm.lines=false\n")
     parts.append("e asm.offset=true\n")
 
-    # Bloc d'analyse
     if analysis_key and analysis_key in R2_ANALYSIS_LEVELS:
         parts.append("\n")
         parts.append(R2_ANALYSIS_LEVELS[analysis_key]["commands"])
 
-    # Blocs d'extraction
     if extraction_keys:
         for ek in extraction_keys:
             if ek in R2_EXTRACTION_BLOCKS:
@@ -503,26 +455,13 @@ def _build_r2_script(analysis_key, extraction_keys, use_write=False,
     parts.append("q\n")
     return "".join(parts)
 
-
 def _build_write_script(patch_mode, patch_data, extraction_keys=None):
-    """Construire un script r2 en mode écriture (-w).
-
-    Args:
-        patch_mode: "wa" (write assembly), "wx" (write hex), "w" (write string)
-        patch_data: données à écrire (assemble, hex, ou string selon le mode)
-        extraction_keys: blocs d'extraction optionnels après le patch
-
-    Returns:
-        Le contenu du script r2 (str)
-    """
     parts = [R2_HEADER]
     parts.append("e asm.bytes=true\n")
     parts.append("e asm.lines=true\n")
     parts.append("e asm.offset=true\n")
     parts.append("e asm.cmt.right=true\n")
 
-    # Le patch sera inséré après la sélection de l'adresse par l'utilisateur
-    # On utilise un marqueur que la fonction appelante remplacera
     parts.append("\n__PATCH_BLOCK__\n")
 
     if extraction_keys:
@@ -534,12 +473,7 @@ def _build_write_script(patch_mode, patch_data, extraction_keys=None):
     parts.append("q\n")
     return "".join(parts)
 
-
 def generate_r2_scripts(so_list, outdir, log_mgr=None):
-    """Generate per-.so r2 scripts and a global batch launcher.
-
-    Returns the list of generated `.r2` script paths.
-    """
     r2_out = os.path.join(outdir, "r2_output")
     os.makedirs(r2_out, exist_ok=True)
     generated = []
@@ -581,13 +515,7 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
         log_mgr.add(f"Generated batch script: r2_analyze_all.sh ({len(generated)} .so)", "success")
     return generated
 
-
 def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name):
-    """Exécuter r2 sur un seul .so avec un script donné.
-
-    Returns:
-        True si succès, False sinon.
-    """
     try:
         result = subprocess.run(
             [r2_bin, "-q", "-i", script_path, so_path],
@@ -614,12 +542,7 @@ def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name):
             log_mgr.add(f"r2 failed on {so_name}: {e}", "error")
         return False
 
-
 def run_r2_scripts(so_list, outdir, log_mgr=None):
-    """Generate r2 scripts and execute them if radare2 is available.
-
-    Returns the list of generated script paths.
-    """
     r2_out = os.path.join(outdir, "r2_output")
     os.makedirs(r2_out, exist_ok=True)
     r2_bin = _find_r2()
@@ -654,23 +577,8 @@ def run_r2_scripts(so_list, outdir, log_mgr=None):
         log_mgr.add(f"r2 analysis finished: {succeeded}/{len(generated)} succeeded", "success")
     return generated
 
-
 def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
                    use_write=False, execute=True):
-    """Générer et optionnellement exécuter des scripts r2 avec des paramètres personnalisés.
-
-    Args:
-        so_list: liste de dicts {"path", "name", "size"}
-        outdir: répertoire de sortie
-        analysis_key: clé dans R2_ANALYSIS_LEVELS ou None
-        extraction_keys: liste de clés dans R2_EXTRACTION_BLOCKS
-        log_mgr: LogManager optionnel
-        use_write: si True, utilise r2 -w (mode écriture)
-        execute: si True, exécute r2 ; sinon génère les scripts uniquement
-
-    Returns:
-        Liste des chemins de scripts générés.
-    """
     r2_out = os.path.join(outdir, "r2_output")
     os.makedirs(r2_out, exist_ok=True)
     r2_bin = _find_r2() if execute else None
@@ -684,7 +592,6 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
     except ValueError:
         timeout = 600
 
-    # Construction du nom de mode pour les fichiers
     mode_parts = []
     if analysis_key:
         mode_parts.append(analysis_key)
@@ -713,7 +620,6 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
         if log_mgr:
             log_mgr.add(f"Generated: r2_{so['name']}_{mode_tag}.r2", "success")
 
-        # Exécution
         if execute:
             r2_args = ["-q", "-i", script_path, so["path"]]
             if use_write:
@@ -745,7 +651,6 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
         if log_mgr:
             log_mgr.step()
 
-    # Générer le batch script
     if generated:
         for i, so in enumerate(so_list):
             mode_tag_i = mode_tag
@@ -769,30 +674,8 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
         log_mgr.add(f"r2 {mode_tag}: {succeeded}/{len(generated)} succeeded", "success")
     return generated
 
-
 def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
-    """Fonction unifiée d'analyse r2 : sélection de cibles + sous-menu interactif.
 
-    Cette fonction combine les anciennes options [2] et [3] en une seule entrée
-    avec un sous-menu complet offrant tous les niveaux d'analyse radare2.
-
-    Le sous-menu propose :
-      - Presets d'analyse (complet, standard, rapide, minimal, audit sécurité)
-      - Choix du niveau d'analyse (a, aa, aaa, toutes les commandes)
-      - Choix des blocs d'extraction individuels (fonctions, strings, xrefs, etc.)
-      - Mode écriture r2 -w (wa, wx, w)
-      - Génération de scripts sans exécution
-
-    Args:
-        so_list: liste complète des .so détectés (dicts {"path", "name", "size"})
-        outdir: répertoire de sortie
-        log_mgr: LogManager optionnel
-        ui: instance ElitfUI optionnelle (pour l'affichage riche)
-
-    Returns:
-        La liste des scripts générés, ou None si l'utilisateur annule.
-    """
-    # --- Étape 1 : Sélection des cibles ---
     selected = None
     if ui is not None:
         selected = ui.get_target_selection()
@@ -800,7 +683,7 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
             return None
         targets = [so_list[i] for i in selected]
     else:
-        # Mode non-interactif : utiliser toutes les .so
+
         targets = so_list
 
     if not targets:
@@ -811,21 +694,18 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
     if log_mgr:
         log_mgr.add(f"Cibles sélectionnées: {len(targets)} fichier(s) .so", "info")
 
-    # --- Étape 2 : Sous-menu r2 ---
     if ui is not None:
         choice = ui.get_r2_choice()
     else:
-        # Sans UI, utiliser le preset complet par défaut
+
         choice = "full"
 
     if choice is None or choice == "back":
         return None
 
-    # --- Étape 3 : Exécuter le mode choisi ---
     if log_mgr:
         log_mgr.add(f"Mode r2: {choice}", "info")
 
-    # --- Presets ---
     if choice in R2_PRESETS:
         preset = R2_PRESETS[choice]
         return run_r2_custom(
@@ -837,27 +717,24 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
             execute=True,
         )
 
-    # --- Niveaux d'analyse purs (sans extraction) ---
     if choice in R2_ANALYSIS_LEVELS:
         return run_r2_custom(
             targets, outdir,
             analysis_key=choice,
-            extraction_keys=["functions"],  # Toujours extraire les fonctions
+            extraction_keys=["functions"],
             log_mgr=log_mgr,
             execute=True,
         )
 
-    # --- Blocs d'extraction individuels ---
     if choice in R2_EXTRACTION_BLOCKS:
         return run_r2_custom(
             targets, outdir,
-            analysis_key="aaa",  # Analyse aaa par défaut pour l'extraction
+            analysis_key="aaa",
             extraction_keys=[choice],
             log_mgr=log_mgr,
             execute=True,
         )
 
-    # --- Mode écriture r2 -w ---
     if choice == "write_wa":
         return _r2_write_mode(targets, outdir, log_mgr, ui, "wa")
     elif choice == "write_wx":
@@ -865,7 +742,6 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
     elif choice == "write_w":
         return _r2_write_mode(targets, outdir, log_mgr, ui, "w")
 
-    # --- Génération seule (sans exécution) ---
     if choice == "generate_only":
         if ui is not None:
             gen_choice = ui.get_r2_generate_choice()
@@ -887,22 +763,14 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
         else:
             return generate_r2_scripts(targets, outdir, log_mgr)
 
-    # --- Custom : choix libre de l'analyse + extraction ---
     if choice == "custom":
         return _r2_custom_mode(targets, outdir, log_mgr, ui)
 
-    # Fallback
     if log_mgr:
         log_mgr.add(f"Mode inconnu: {choice}", "warn")
     return None
 
-
 def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
-    """Mode écriture r2 : permettre à l'utilisateur de patcher un binaire.
-
-    Args:
-        write_cmd: "wa" (assemble), "wx" (hex), "w" (string)
-    """
     r2_bin = _find_r2()
     if not r2_bin:
         if log_mgr:
@@ -924,7 +792,6 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
             ui._print(f"\n  [bold bright_cyan]Patching: {so['name']}[/]" if ui.console
                       else f"\n  Patching: {so['name']}")
 
-            # Demander l'adresse
             addr = ui._prompt_text(
                 "  Adresse (hex, ex: 0x12345 ou sym.imp.printf)",
                 default=""
@@ -932,7 +799,6 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
             if not addr:
                 continue
 
-            # Demander les données à écrire
             if write_cmd == "wa":
                 data = ui._prompt_text(
                     '  Instructions assembleur (ex: "mov r0, 0; bx lr")',
@@ -951,7 +817,6 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
             if not data:
                 continue
 
-            # Construire et exécuter la commande r2
             r2_cmd = f'{write_cmd} {data} @ {addr}'
             r2_script = f"e scr.color=0\ne scr.utf8=0\n{s}\nq\n"
 
@@ -996,30 +861,22 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
         log_mgr.add(f"Mode écriture terminé: {len(results)} script(s)", "success")
     return results
 
-
 def _r2_custom_mode(targets, outdir, log_mgr, ui):
-    """Mode personnalisé : l'utilisateur choisit l'analyse + les blocs d'extraction.
-
-    Returns:
-        Liste des scripts générés.
-    """
     if ui is not None:
-        # Sous-menu de sélection de l'analyse
+
         ui.display_r2_analysis_picker()
         analysis_choice = ui.get_r2_analysis_choice()
         if analysis_choice is None:
             return None
 
-        # Sous-menu de sélection des blocs d'extraction
         ui.display_r2_extraction_picker()
         extraction_choices = ui.get_r2_extraction_choices()
         if not extraction_choices:
             return None
 
-        # Demander si exécution ou génération seule
         do_execute = ui.get_r2_execute_choice()
     else:
-        # Mode non-interactif : tout par défaut
+
         analysis_choice = "aaa"
         extraction_choices = list(R2_EXTRACTION_BLOCKS.keys())
         do_execute = True
@@ -1032,13 +889,7 @@ def _r2_custom_mode(targets, outdir, log_mgr, ui):
         execute=do_execute,
     )
 
-
 def display_binary_info(so_list, outdir, log_mgr=None):
-    """Run readelf-like on each .so and write the result to `outdir/binary_info.txt`.
-
-    The full output is also reported line-by-line at "info" level when a log_mgr
-    is provided, so the TUI's live panel reflects real content.
-    """
     readelf = _find_readelf()
     if readelf is None:
         if log_mgr:

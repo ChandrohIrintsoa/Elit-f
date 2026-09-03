@@ -8,12 +8,6 @@ if (NOT ${DARTLIB} MATCHES "^dartvm")
         message(FATAL_ERROR "DARTLIB name should start with 'dartvm'")
 endif()
 
-# Elit-f override: produce an `elitf_` prefixed binary name so the Python
-# wrapper (elitf.py) finds it via `ElitfInput.bin_name = "elitf_..."`. The
-# upstream blutter uses `${PROJECT_NAME}_...` (= `blutter_...`); we keep
-# `project(blutter)` to stay source-identical with upstream, but override
-# BINNAME so the install path matches elit-f's expectations. The binary's
-# behaviour is byte-for-byte identical to upstream blutter.
 set(BINNAME "elitf_${DARTLIB}${NAME_SUFFIX}")
 
 set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/bin" CACHE PATH "" FORCE)
@@ -22,13 +16,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        # <format> library is experimental in clang 15 and 16.
-        # On all clang platforms (Linux, macOS, Termux), we enable the experimental
-        # library so that std::format is available.
         add_compile_options(-fexperimental-library)
         add_link_options(-fexperimental-library)
         if (APPLE)
-                # macOS only: the experimental libc++ is in a non-standard path.
                 cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH LLVM_BIN_DIR)
                 add_link_options(-L${LLVM_BIN_DIR}/../lib/c++ -dead_strip)
         endif()
@@ -44,14 +34,6 @@ else()
         include(FindPkgConfig)
         pkg_search_module(CAPSTONE REQUIRED capstone)
         link_directories(${CAPSTONE_LIBDIR})
-        # Robustly locate capstone.h.
-        # On Debian/macOS, pkg-config returns -I.../include/capstone and
-        # CAPSTONE_INCLUDE_DIRS is set. On Termux, the capstone.pc file has
-        # empty Cflags (headers assumed to be in the default include path),
-        # but capstone.h is actually in $PREFIX/include/capstone/ — so
-        # #include <capstone.h> fails because the compiler only looks in
-        # $PREFIX/include/ by default, not the capstone/ subdirectory.
-        # find_path with PATH_SUFFIXES capstone handles all cases.
         find_path(CAPSTONE_INCLUDE_DIR capstone.h
                 HINTS ${CAPSTONE_INCLUDE_DIRS} ${CAPSTONE_INCLUDEDIR}
                 PATH_SUFFIXES capstone
@@ -62,7 +44,6 @@ else()
         include_directories(AFTER ${CAPSTONE_INCLUDE_DIR})
 endif()
 
-# Add source to this project's executable.
 set(SRCDIR "src")
 include(sourcelist.cmake)
 list(TRANSFORM SRCS PREPEND "${SRCDIR}/")
@@ -70,42 +51,25 @@ add_executable(${BINNAME} ${SRCS})
 
 target_link_libraries(${BINNAME} PRIVATE ${DARTLIB} capstone)
 
-# On Android/Termux, the Dart VM static library references __android_log_vprint
-# (from os_android.cc and syslog_android.cc), which is provided by liblog.
-# Without -llog, the link fails with: undefined symbol: __android_log_vprint
-# This affects both native Android NDK builds and Termux (which also reports
-# CMAKE_SYSTEM_NAME=Android).
 if (CMAKE_SYSTEM_NAME STREQUAL "Android")
         target_link_libraries(${BINNAME} PRIVATE log)
 endif()
 
-target_precompile_headers(${BINNAME} PRIVATE "${SRCDIR}/pch.h")
-
 if (MSVC)
-        # for dynamic function (exception) table
         target_link_libraries(${BINNAME} PRIVATE ntdll)
-        # remove compiler exception handler options
-        #string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-        # remove compiler RTTI option
         string(REPLACE "/GR" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-        #set(cc_opts /Oy /GR- /EHs-c-)
         if (CMAKE_GENERATOR MATCHES "Visual Studio")
-                # use SEMIDBG for enabling ASSERT macro while linking against release build of Dart VM
                 set(cc_opts /GR- /MD /D SEMIDBG)
                 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${BINNAME})
                 set_target_properties(${BINNAME} PROPERTIES VS_DEBUGGER_COMMAND_ARGUMENTS "${DBG_CMD}")
         else()
-                # assume Ninja
                 set(cc_opts /Oy /GR- /sdl- /Oi /GL /Gy /Zc:wchar_t /Zc:inline)
                 target_link_options(${BINNAME} PRIVATE /LTCG /OPT:REF /OPT:ICF)
         endif()
 else()
-        # TODO: gcc options to remove dead code in static dartvm library
         set(cc_opts
                 -O3 -fno-rtti
                 -fvisibility=hidden -fvisibility-inlines-hidden -fno-omit-frame-pointer
-                #-Wl,--gc-sections
-                #-fno-exceptions -Wall
         )
 endif()
 
@@ -147,3 +111,4 @@ target_compile_options(${BINNAME} PRIVATE ${cc_opts})
 
 cmake_path(SET DST_DIR NORMALIZE "${PROJECT_SOURCE_DIR}/bin")
 install (TARGETS ${BINNAME} RUNTIME DESTINATION ${DST_DIR})
+

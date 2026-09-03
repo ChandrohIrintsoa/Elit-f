@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "DartLibrary.h"
 #include "DartClass.h"
 #include <filesystem>
@@ -13,12 +12,9 @@ DartLibrary::DartLibrary(const dart::Library& lib) : ptr(lib.ptr()), topClass(NU
 
 	if (lib.is_dart_scheme())
 		isInternal = true;
-	//else if (url.starts_with("package:flutter/src/") || url.starts_with("package:typed_data/src/") || url.starts_with("package:collection/src/"))
-	//	isInternal = true;
 	else
 		isInternal = false;
 
-	// add all classes belong to this library
 	auto& cls = dart::Class::Handle();
 	cls = lib.toplevel_class();
 	topClass = AddClass(cls);
@@ -27,16 +23,13 @@ DartLibrary::DartLibrary(const dart::Library& lib) : ptr(lib.ptr()), topClass(NU
 	dart::DictionaryIterator iter(lib);
 	while (iter.HasNext()) {
 		auto objPtr = iter.GetNext();
-		// only 4 possible types but functions and fields are in top level class
 		if (objPtr.IsClass()) {
 			cls = dart::Class::RawCast(objPtr);
 			AddClass(cls);
 		}
 		else if (objPtr.IsFunction()) {
-			// TODO: check if top level class contain this function
 		}
 		else if (objPtr.IsField()) {
-			// TODO: check if top level class contain this field
 		}
 		else if (objPtr.IsLibraryPrefix()) {
 			throw std::runtime_error("library prefix in AOT");
@@ -56,10 +49,8 @@ DartLibrary::~DartLibrary()
 
 std::string DartLibrary::GetName()
 {
-	// name is empty for non-internal dart lib
 	std::string out;
 	if (url.starts_with("package:")) {
-		//out = url.substr(8, url.find('/', 8) - 8);
 		out = url.substr(8);
 	}
 	else if (url.starts_with("file:")) {
@@ -68,7 +59,6 @@ std::string DartLibrary::GetName()
 		out = url.substr(offset + 1);
 	}
 	else {
-		// expect "dart:*"
 		out = url;
 		out[4] = '_';
 	}
@@ -89,12 +79,11 @@ DartClass* DartLibrary::AddClass(const dart::Class& cls)
 
 std::string DartLibrary::CreatePath(const char* base_dir)
 {
-	// create subdirectories for the library file
 	std::string path = base_dir;
 	path.push_back('/');
 	size_t start_pos = 0;
 	if (url.starts_with("package:")) {
-		start_pos = 8; // skip "package:"
+		start_pos = 8;
 	}
 	else if (url.starts_with("file:///")) {
 		start_pos = url.find("/.dart_tool/") + 1;
@@ -105,11 +94,10 @@ std::string DartLibrary::CreatePath(const char* base_dir)
 		return path.append("/").append(&url[5]).append(".dart");
 	}
 	else {
-		// obfuscated
 		ASSERT(url.find('/') == -1);
 		return path.append(url).append(".dart");
 	}
-	const char* lib_path = &url[start_pos]; // skip directory name
+	const char* lib_path = &url[start_pos];
 	const char* end = strrchr(lib_path, '/');
 	path.append(lib_path, end);
 	std::filesystem::create_directories(path);
@@ -121,3 +109,4 @@ void DartLibrary::PrintCommentInfo(std::ostream& of)
 {
 	of << std::format("// lib: {}, url: {}\n", name.c_str(), url.c_str());
 }
+

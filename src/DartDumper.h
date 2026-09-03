@@ -29,6 +29,5 @@ private:
 	const std::string& getQuoteString(dart::Object& obj);
 
 	DartApp& app;
-	// map for object ptr to unescape string with quote
 	std::unordered_map<intptr_t, std::string> quoteStringCache;
 };

@@ -4,7 +4,6 @@ import re
 import platform
 import threading
 import time
-import sys
 from datetime import datetime
 from collections import deque
 
@@ -18,7 +17,6 @@ try:
     from rich.layout import Layout
     from rich.live import Live
     from rich.prompt import IntPrompt, Prompt
-    from rich.rule import Rule
     from rich.style import Style
     from rich import box as rbox
     HAS_RICH = True
@@ -694,7 +692,7 @@ class ElitfUI:
         if choice == "generate_only":
             return "full"
         if choice == "custom":
-            return "full"  # Simplification pour la génération
+            return "full"
         return choice
 
     def _prompt_text(self, prompt_str, default=""):

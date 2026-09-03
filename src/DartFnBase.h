@@ -2,16 +2,12 @@
 #include <stdint.h>
 #include <string>
 
-// forward declaration
 class DartFunction;
 class DartStub;
 
 class DartFnBase
 {
 public:
-	// For setting current library loaded address
-	// because the Dart code and global data are independent (access through Object Pool)
-	// so we can set a code address to be as if the library is loaded at 0 (to be same for every run)
 	static void SetLibBase(intptr_t addr) { lib_base = addr; }
 
 	DartFnBase(const DartFnBase&) = default;
@@ -27,7 +23,6 @@ public:
 
 	virtual std::string FullName() const { return name; }
 	virtual std::string Name() const { return name; }
-	// TODO: use dart type to support function type and type parameters ()
 	virtual uint32_t ReturnType() const { return dart::kIllegalCid; }
 	virtual bool IsStub() const { return false; }
 

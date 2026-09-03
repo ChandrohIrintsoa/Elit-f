@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "CodeAnalyzer.h"
 #include "DartApp.h"
 
@@ -21,8 +20,6 @@ void CodeAnalyzer::AnalyzeAll()
 				if (dartFn->Size() == 0)
 					continue;
 
-				// start from PayloadAddress or Address?
-				// the assemblies will be deleted after finish analysis because assembly with details consume too much memory
 				auto asm_insns = disasmer.Disasm((uint8_t*)dartFn->MemAddress(), dartFn->Size(), dartFn->Address());
 
 				dartFn->SetAnalyzedData(std::make_unique<AnalyzedFnData>(app, *dartFn, convertAsm(asm_insns)));
@@ -33,7 +30,7 @@ void CodeAnalyzer::AnalyzeAll()
 	}
 }
 
-#endif // NO_CODE_ANALYSIS
+#endif
 
 std::string FnParamInfo::ToString() const
 {
@@ -100,3 +97,4 @@ std::string FnParams::ToString() const
 
 	return txt;
 }
+

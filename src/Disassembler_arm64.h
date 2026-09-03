@@ -73,7 +73,7 @@ constexpr dart::Register ToDartReg(arm64_reg r)
 constexpr arm64_reg CSREG_ARGS_DESC = ToCapstoneReg(dart::ARGS_DESC_REG);
 constexpr arm64_reg CSREG_DART_SP = ToCapstoneReg(dart::SPREG);
 constexpr arm64_reg CSREG_DART_FP = ToCapstoneReg(dart::FPREG);
-constexpr arm64_reg CSREG_DART_LR = ToCapstoneReg(dart::Register::R30); // LR is now allowed use directly in Dart
+constexpr arm64_reg CSREG_DART_LR = ToCapstoneReg(dart::Register::R30);
 constexpr arm64_reg CSREG_DART_DISPATCH_TABLE = ToCapstoneReg(dart::DISPATCH_TABLE_REG);
 constexpr arm64_reg CSREG_DART_NULL = ToCapstoneReg(dart::NULL_REG);
 constexpr arm64_reg CSREG_DART_WB_OBJECT = ToCapstoneReg(dart::kWriteBarrierObjectReg);
@@ -86,11 +86,6 @@ constexpr arm64_reg CSREG_DART_HEAP = ToCapstoneReg(dart::HEAP_BITS);
 #endif
 constexpr arm64_reg CSREG_DART_TMP = ToCapstoneReg(dart::TMP);
 constexpr arm64_reg CSREG_DART_TMP2 = ToCapstoneReg(dart::TMP2);
-// Note: kTagReg is normally in wrapper function. can ignore it.
-//constexpr arm64_reg CSREG_ALLOCATE_OBJ_TYPEARGS = ToCapstoneReg(dart::AllocateObjectABI::kTypeArgumentsReg);
-//constexpr arm64_reg CSREG_ALLOCATE_CLOSURE_FUNCTION = ToCapstoneReg(dart::AllocateClosureABI::kFunctionReg);
-//constexpr arm64_reg CSREG_ALLOCATE_CLOSURE_CONTEXT = ToCapstoneReg(dart::AllocateClosureABI::kContextReg);
-//constexpr arm64_reg CSREG_ALLOCATE_CLOSURE_SCRATCH = ToCapstoneReg(dart::AllocateClosureABI::kScratchReg);
 
 const char* GetCsRegisterName(arm64_reg reg);
 
@@ -99,7 +94,6 @@ inline constexpr uint32_t GetCsRegSize(arm64_reg reg){
 		return 16;
 	if ((reg >= ARM64_REG_W0 && reg <= ARM64_REG_W30) || reg == ARM64_REG_WZR)
 		return 4;
-	// assume Xnn regsiter
 	return 8;
 }
 
@@ -107,7 +101,6 @@ namespace A64 {
 
 class alignas(int32_t) Register {
 public:
-	// copy from dart constants_arm64.h by merging VRegister into Register
 	enum Value : int32_t {
 		R0 = 0,
 		R1 = 1,
@@ -124,26 +117,24 @@ public:
 		R12 = 12,
 		R13 = 13,
 		R14 = 14,
-		R15 = 15,  // SP in Dart code.
-		R16 = 16,  // IP0 aka TMP
-		R17 = 17,  // IP1 aka TMP2
-		R18 = 18,  // reserved on iOS, shadow call stack on Fuchsia, TEB on Windows.
+		R15 = 15,
+		R16 = 16,
+		R17 = 17,
+		R18 = 18,
 		R19 = 19,
 		R20 = 20,
-		R21 = 21,  // DISPATCH_TABLE_REG (AOT only)
-		R22 = 22,  // NULL_REG
+		R21 = 21,
+		R22 = 22,
 		R23 = 23,
-		R24 = 24,  // CODE_REG
+		R24 = 24,
 		R25 = 25,
-		R26 = 26,  // THR
-		R27 = 27,  // PP
-		R28 = 28,  // HEAP_BITS
-		R29 = 29,  // FP
-		R30 = 30,  // LR
-		R31 = 31,  // ZR, CSP
-		// ## floating point (Q, D, S, H, B) and vector registers
-		V0 = 32, // v0 Volatile; Parameter/scratch register, result register.
-		// v1-v7 Volatile; Parameter/scratch register.
+		R26 = 26,
+		R27 = 27,
+		R28 = 28,
+		R29 = 29,
+		R30 = 30,
+		R31 = 31,
+		V0 = 32,
 		V1 = 33,
 		V2 = 34,
 		V3 = 35,
@@ -151,8 +142,6 @@ public:
 		V5 = 37,
 		V6 = 38,
 		V7 = 39,
-		// v8-v15 Non-volatile; Scratch registers
-		// Only the bottom 64 bits are non-volatile! [ARM IHI 0055B, 5.1.2]
 		V8 = 40,
 		V9 = 41,
 		V10 = 42,
@@ -161,7 +150,6 @@ public:
 		V13 = 45,
 		V14 = 46,
 		V15 = 47,
-		// v16-v31 Volatile; Scratch registers.
 		V16 = 48,
 		V17 = 49,
 		V18 = 50,
@@ -183,28 +171,18 @@ public:
 
 		VTMP = V31,
 
-		// These registers both use the encoding R31, but to avoid mistakes we give
-		// them different values, and then translate before encoding.
 		CSP = 64,
 		ZR = 65,
-		NZCV = 66, // condition flags
+		NZCV = 66,
 
-		// Aliases.
-		//SP = R15,
 		TMP = R16,
 		TMP2 = R17,
-		//IP0 = R16,
-		//IP1 = R17,
-		//THR = R26,
-		//PP = R27,
-		//HEAP_BITS = R28,
 		FP = R29,
-		LR = R30,  // Note: direct access to this constant is not allowed. See above.
+		LR = R30,
 	};
 
 	constexpr Register() : reg(kNoRegister) {}
 	constexpr Register(Value reg) : reg(reg) {}
-	// map from Dart Register enum
 	constexpr Register(dart::Register r) {
 		switch (r) {
 #define REG_CASE(n) case dart::Register::R##n: \
@@ -228,7 +206,6 @@ public:
 			break;
 		}
 	}
-	// map from capstone register
 	constexpr Register(arm64_reg r) {
 		switch (r) {
 #define REG_CASE(n) case ARM64_REG_X##n: \
@@ -249,7 +226,7 @@ public:
 		case ARM64_REG_SP:
 			reg = Register{ dart::SPREG }.reg;
 			break;
-		case ARM64_REG_NZCV: // Condition Flags
+		case ARM64_REG_NZCV:
 			reg = NZCV;
 			break;
 #define REG_CASE(n) case ARM64_REG_V##n: \
@@ -309,7 +286,7 @@ constexpr auto SP_REG = Register{ dart::SPREG };
 constexpr auto TMP_REG = Register{ dart::TMP };
 constexpr auto TMP2_REG = Register{ dart::TMP2 };
 constexpr auto NULL_REG = Register{ dart::NULL_REG };
-}; // namespace ARM64
+};
 
 constexpr arm64_reg ToCapstoneReg(A64::Register r)
 {
@@ -333,7 +310,6 @@ constexpr arm64_reg ToCapstoneReg(A64::Register r)
 
 class AsmInstruction {
 private:
-	// keep this class object small size for cheap copy
 	cs_insn* insn;
 public:
 	class Operands {
@@ -346,7 +322,6 @@ public:
 
 	AsmInstruction(cs_insn* insn) : insn((insn->id == ARM64_INS_NOP) ? ++insn : insn), ops(insn->detail->arm64.operands) {}
 	AsmInstruction& operator=(const AsmInstruction&) = default;
-	// prefix increment
 	AsmInstruction& operator++() {
 		++insn;
 		if (insn->id == ARM64_INS_NOP)
@@ -378,7 +353,6 @@ public:
 		return lhs.insn->size == rhs.insn->size && memcmp(lhs.insn->bytes, rhs.insn->bytes, lhs.insn->size) == 0;
 	}
 
-	// libcapstone5 use MOV instead of MOVZ. so, we need this special function.
 	bool IsMovz() {
 		return insn->id == ARM64_INS_MOVZ || (insn->id == ARM64_INS_MOV && op_count() == 2 && ops[1].type == ARM64_OP_IMM);
 	}
@@ -440,7 +414,7 @@ struct AddrRange {
 class AsmIterator {
 	cs_insn* insnStart;
 	cs_insn* insnEnd;
-	cs_insn* insn; // current instruction
+	cs_insn* insn;
 	cs_insn dummyInsnEnd;
 public:
 	AsmIterator(cs_insn* start, cs_insn* end) : insnStart(start), insnEnd(end), insn(insnStart) {
@@ -460,13 +434,10 @@ public:
 	cs_insn* Current() { return insn; }
 	void SetCurrent(cs_insn* ins) { insn = ins; }
 	cs_insn* Next() {
-		//return (++*this).insn;
 		return operator++().insn;
 	}
-	// prefix increment
 	AsmIterator& operator++() {
 		ASSERT(insn != &dummyInsnEnd);
-		// assume no consecutive NOP
 		if (insn == insnEnd) {
 			insn = &dummyInsnEnd;
 		}
@@ -492,7 +463,6 @@ public:
 		return insn == &dummyInsnEnd;
 	}
 
-	// libcapstone5 use MOV instead of MOVZ. so, we need this special function.
 	bool IsMovz() const {
 		return insn->id == ARM64_INS_MOVZ || (insn->id == ARM64_INS_MOV && op_count() == 2 && ops(1).type == ARM64_OP_IMM);
 	}

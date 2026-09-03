@@ -1,31 +1,15 @@
 #!/usr/bin/env python3
-"""
-elitf.py — Point d'entrée d'Elit-f (reversing d'applications Flutter/Dart AOT).
-
-Ce module contient la logique métier (extraction APK, détection version Dart,
-macros de compatibilité, build CMake/Ninja, exécution de l'analyseur C++).
-L'interface utilisateur (TUI Rich, LogManager) est dans `elitf_ui.py`.
-Les fonctions r2 / readelf sont dans `elitf_r2.py`.
-
-Trois modes d'utilisation :
-  * Mode interactif (TUI) — défaut si `rich` est installé et qu'aucun indir/outdir
-    n'est fourni sur la ligne de commande.
-  * Mode CLI one-shot — `python3 elitf.py <indir> <outdir> [--cli]`
-    (le flag `--cli` force le mode CLI même avec `rich`).
-  * Mode sans libflutter — `python3 elitf.py <libapp.so> --dart-version X.Y.Z_os_arch <outdir>`
-"""
 import argparse
 import mmap
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
 
 from dartvm_fetch_build import DartLibInfo
-from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH, strip_rich_tags
-from elitf_r2 import generate_r2_scripts, run_r2_scripts, display_binary_info, r2_unified_analysis
+from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH
+from elitf_r2 import display_binary_info, r2_unified_analysis
 
 CMAKE_CMD = os.getenv('CMAKE', 'cmake')
 NINJA_CMD = os.getenv('NINJA', 'ninja')
@@ -38,18 +22,9 @@ BUILD_DIR = os.path.join(SCRIPT_DIR, 'build')
 
 EXPECTED_LIBS = ('libapp.so', 'libflutter.so')
 
-# ABI directories searched (in order) when extracting libs from an APK.
 ABI_DIRS = ['lib/arm64-v8a/', 'lib/armeabi-v7a/', 'lib/x86_64/', 'lib/x86/']
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 def _safe_zip_extract(zf: zipfile.ZipFile, member_name: str, out_dir: str) -> str:
-    """Extract `member_name` from `zf` into `out_dir`, protecting against Zip Slip.
-
-    Returns the absolute path of the extracted file.
-    """
     target_path = os.path.abspath(os.path.join(out_dir, member_name))
     base_dir = os.path.abspath(out_dir) + os.sep
     if not target_path.startswith(base_dir):
@@ -57,19 +32,12 @@ def _safe_zip_extract(zf: zipfile.ZipFile, member_name: str, out_dir: str) -> st
     zf.extract(member_name, out_dir)
     return target_path
 
-
 def _search_in_file(path: str, needle: bytes) -> bool:
-    """True if `needle` appears in the file at `path` (memory-mapped search)."""
     with open(path, 'rb') as f:
         with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
             return mm.find(needle) != -1
 
-
 def _parse_major_minor(version: str):
-    """Return (major, minor) tuple from a "X.Y.Z" version string.
-
-    Missing minor defaults to 0. Malformed values also return (0, 0).
-    """
     parts = version.split('.')
     if not parts or not parts[0]:
         return 0, 0
@@ -85,45 +53,29 @@ def _parse_major_minor(version: str):
         return major, 0
     return major, minor
 
-
-# ---------------------------------------------------------------------------
-# Input validation / extraction
-# ---------------------------------------------------------------------------
 def validate_two_libs(indir: str):
-    """Ensure `indir` contains exactly libapp.so and libflutter.so.
-
-    Searches recursively in subdirectories (e.g. lib/arm64-v8a/) so that
-    users can point to a parent directory that contains an ABI folder
-    structure extracted from an APK.
-
-    Returns a tuple of absolute paths (libapp_path, libflutter_path).
-    Raises `ValueError` (rather than sys.exit) so callers can recover.
-    """
     if not os.path.isdir(indir):
         raise ValueError(
             f"Input is not a directory containing {EXPECTED_LIBS[0]} and {EXPECTED_LIBS[1]}")
 
     import glob as globmod
 
-    # First try: direct children (fast path, preserves strict behaviour)
     try:
         so_files = sorted(f for f in os.listdir(indir) if f.endswith('.so'))
     except OSError as e:
         raise ValueError(f"Cannot list directory '{indir}': {e}")
 
-    # If both expected libs found directly, return them (original behaviour)
     expected = sorted(EXPECTED_LIBS)
     if all(f in so_files for f in expected):
         return (os.path.abspath(os.path.join(indir, EXPECTED_LIBS[0])),
                 os.path.abspath(os.path.join(indir, EXPECTED_LIBS[1])))
 
-    # Second try: recursive glob to find .so in subdirectories (e.g. lib/arm64-v8a/)
     try:
         all_so = globmod.glob(os.path.join(indir, '**', '*.so'), recursive=True)
     except (PermissionError, OSError):
         all_so = []
 
-    found = {}  # basename -> absolute path
+    found = {}
     for p in all_so:
         name = os.path.basename(p)
         if name in EXPECTED_LIBS and name not in found:
@@ -137,12 +89,7 @@ def validate_two_libs(indir: str):
 
     return (found[EXPECTED_LIBS[0]], found[EXPECTED_LIBS[1]])
 
-
 def extract_libs_from_apk(apk_file: str, out_dir: str):
-    """Extract libapp.so and libflutter.so from an APK, trying all known ABIs.
-
-    Returns (libapp_path, libflutter_path). Raises `ValueError` if not found.
-    """
     try:
         with zipfile.ZipFile(apk_file, "r") as zf:
             names = set(zf.namelist())
@@ -165,18 +112,7 @@ def extract_libs_from_apk(apk_file: str, out_dir: str):
     except zipfile.BadZipFile as e:
         raise ValueError(f"Invalid APK file '{apk_file}': {e}")
 
-
-# ---------------------------------------------------------------------------
-# Compatibility macros
-# ---------------------------------------------------------------------------
 def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = False):
-    """Detect required -D... macros by scanning the installed Dart SDK headers.
-
-    Strictly mirrors the upstream blutter `find_compat_macro()` so that the
-    compiled C++ binary is byte-for-byte compatible with the one produced by
-    blutter (1=1 output). Any divergence here would compile a different binary
-    and break the parity guarantee.
-    """
     macros = []
     include_path = os.path.join(PKG_INC_DIR, f'dartvm{dart_version}')
     vm_path = os.path.join(include_path, 'vm')
@@ -191,7 +127,6 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
                 f"Required Dart header not found: {os.path.join(vm_path, required)}. "
                 "Did you run `dartvm_fetch_build.py` to fetch the SDK headers?")
 
-    # class_id.h
     if _search_in_file(os.path.join(vm_path, 'class_id.h'), b'V(LinkedHashMap)'):
         macros.append('-DOLD_MAP_SET_NAME=1')
         if not _search_in_file(os.path.join(vm_path, 'class_id.h'), b'V(ImmutableLinkedHashMap)'):
@@ -204,42 +139,25 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
     if major >= 3 and _search_in_file(os.path.join(vm_path, 'class_id.h'), b'V(RecordType)'):
         macros.append('-DHAS_RECORD_TYPE=1')
 
-    # class_table.h
     if _search_in_file(os.path.join(vm_path, 'class_table.h'), b'class SharedClassTable {'):
         macros.append('-DHAS_SHARED_CLASS_TABLE=1')
 
-    # stub_code_list.h
     if not _search_in_file(os.path.join(vm_path, 'stub_code_list.h'), b'V(InitLateStaticField)'):
         macros.append('-DNO_INIT_LATE_STATIC_FIELD=1')
 
-    # object_store.h
     if not _search_in_file(os.path.join(vm_path, 'object_store.h'),
                            b'build_generic_method_extractor_code)'):
         macros.append('-DNO_METHOD_EXTRACTOR_STUB=1')
 
-    # object.h — UNIFORM_INTEGER_ACCESS is set when AsTruncatedInt64Value is absent.
-    # (HtArrayIterator.h then always uses Smi::Value() — see the C++ source.)
     if not _search_in_file(os.path.join(vm_path, 'object.h'), b'AsTruncatedInt64Value()'):
         macros.append('-DUNIFORM_INTEGER_ACCESS=1')
 
-    # NOTE: blutter upstream does NOT define OLD_MARKING_STACK_BLOCK or IDA_FCN.
-    # The CMakeLists.txt and C++ source of blutter do not reference these macros
-    # at all, so we must NOT emit them either — doing so would compile a
-    # different binary and break the 1=1 output parity guarantee.
-
     if no_analysis:
         macros.append('-DNO_CODE_ANALYSIS=1')
-    # ida_fcn is accepted as a CLI arg for forward-compat with elit-f, but it
-    # is intentionally NOT translated to a -D flag here because blutter does
-    # not support it. Building with ida_fcn would diverge from blutter.
+
     return macros
 
-
-# ---------------------------------------------------------------------------
-# Build & run
-# ---------------------------------------------------------------------------
 class ElitfInput:
-    """Configuration for a single Elit-f execution (libapp + dart_info + outdir)."""
     def __init__(self, libapp_path: str, dart_info: DartLibInfo, outdir: str,
                  rebuild: bool, no_analysis: bool, ida_fcn: bool = False,
                  log_mgr: LogManager = None):
@@ -270,9 +188,7 @@ class ElitfInput:
         self.bin_name = f'elitf_{dart_info.lib_name}{self.name_suffix}'
         self.bin_file = os.path.join(BIN_DIR, self.bin_name)
 
-
 def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
-    """Configure + build + install the Elit-f binary via CMake/Ninja."""
     builddir = os.path.join(BUILD_DIR, elitf_input.bin_name)
     macros = find_compat_macro(elitf_input.dart_info.version,
                                elitf_input.no_analysis, elitf_input.ida_fcn)
@@ -282,9 +198,6 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
            f'-DDARTLIB={elitf_input.dart_info.lib_name}',
            f'-DNAME_SUFFIX={elitf_input.name_suffix}',
            '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE'] + macros
-    fmt_inc = os.getenv('FMT_INCLUDE_DIR')
-    if fmt_inc:
-        cmd.append(f'-DFMT_INCLUDE_DIR={fmt_inc}')
     if log_mgr:
         log_mgr.add("Running cmake configure...", "info")
     try:
@@ -315,9 +228,7 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
     if log_mgr:
         log_mgr.step()
 
-
 def get_dart_lib_info(libapp_path: str, libflutter_path: str, log_mgr: LogManager = None):
-    """Return (dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs)."""
     from extract_dart_info import extract_dart_info
     dart_version, snapshot_hash, flags, arch, os_name = extract_dart_info(libapp_path, libflutter_path)
     msg = f'Dart version: {dart_version}, Snapshot: {snapshot_hash}, Target: {os_name} {arch}'
@@ -328,9 +239,7 @@ def get_dart_lib_info(libapp_path: str, libflutter_path: str, log_mgr: LogManage
     has_compressed_ptrs = 'compressed-pointers' in flags
     return dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs
 
-
 def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
-    """Build the Elit-f binary if needed, then run it on `elitf_input.libapp_path`."""
     if not os.path.isfile(elitf_input.bin_file) or elitf_input.rebuild:
         libfile_variants = [
             os.path.join(PKG_LIB_DIR, 'lib' + elitf_input.dart_info.lib_name + '.a'),
@@ -388,13 +297,8 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
         subprocess.run([elitf_input.bin_file, '-i', elitf_input.libapp_path,
                         '-o', elitf_input.outdir], check=True)
 
-
-# ---------------------------------------------------------------------------
-# Orchestration helpers (factorized, used by both CLI and TUI)
-# ---------------------------------------------------------------------------
 def _analyze_libs(libapp_file, libflutter_file, outdir, rebuild, no_analysis, ida_fcn,
                   ui, log_mgr):
-    """Common path: extract dart info → build DartLibInfo → build & run Elit-f."""
     dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs = \
         get_dart_lib_info(libapp_file, libflutter_file, log_mgr)
     if ui is not None:
@@ -412,9 +316,7 @@ def _analyze_libs(libapp_file, libflutter_file, outdir, rebuild, no_analysis, id
                            ida_fcn, log_mgr)
     build_and_run(input_obj, log_mgr)
 
-
 def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_mgr):
-    """Analyze either an APK or a directory containing libapp.so + libflutter.so."""
     if indir.endswith(".apk"):
         if log_mgr:
             log_mgr.add(f"Extracting APK: {indir}", "info")
@@ -434,34 +336,21 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_m
         log_mgr.add("Flutter/Dart AOT analysis complete", "success")
         log_mgr.step()
 
-
 def check_dependencies():
-    """Return list of (name, install_cmd) for each missing Python dependency."""
     missing = []
     try:
-        import elftools  # noqa: F401
+        import elftools
     except ImportError:
         missing.append(('pyelftools', 'pip install pyelftools'))
     try:
-        import requests  # noqa: F401
+        import requests
     except ImportError:
         missing.append(('requests', 'pip install requests'))
     if not HAS_RICH:
         missing.append(('rich', 'pip install rich'))
     return missing
 
-
-# ---------------------------------------------------------------------------
-# CLI mode (one-shot)
-# ---------------------------------------------------------------------------
 def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=False):
-    """CLI one-shot mode: show menu once, run the chosen action, exit.
-
-    Args:
-        force_plain: if True, disable Rich Live animations even when Rich is
-            available — recommended on Termux or any terminal where Live
-            refresh doesn't work correctly.
-    """
     ui = ElitfUI(force_plain=force_plain)
     missing = check_dependencies()
     if missing and ui.console:
@@ -480,7 +369,7 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
             print(f"  - {name} ({cmd})")
 
     if not HAS_RICH:
-        # Minimal fallback: just run the Flutter analysis directly.
+
         print(f"\n  Auteur : {AUTHOR}")
         print("  Pour l'interface complète, installez: pip install rich\n")
         run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, None)
@@ -549,12 +438,7 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
         return 1
     return 0
 
-
-# ---------------------------------------------------------------------------
-# Interactive TUI mode
-# ---------------------------------------------------------------------------
 def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
-    """Interactive menu loop (clears screen + redraws at each iteration)."""
     from rich.rule import Rule as _Rule
     from rich.style import Style as _Style
     from rich.panel import Panel as _Panel
@@ -711,18 +595,8 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
             except (KeyboardInterrupt, EOFError):
                 break
 
-
-# ---------------------------------------------------------------------------
-# Mode without libflutter (libapp.so only + user-provided dart version)
-# ---------------------------------------------------------------------------
 def main_no_flutter(libapp_path: str, dart_version: str, outdir: str,
                     rebuild: bool, no_analysis: bool, ida_fcn: bool = False):
-    """Run with libapp.so only, using a user-provided `<version>_<os>_<arch>` string.
-
-    The dart_version string MUST follow the format `<X.Y.Z>_<os>_<arch>` (e.g.
-    `3.4.2_android_arm64`). Restored from v1 because the previous version of
-    `a/elitf.py` dropped this entry point silently.
-    """
     parts = dart_version.split('_')
     if len(parts) != 3:
         sys.exit(f'Invalid dart-version format: "{dart_version}". '
@@ -732,10 +606,6 @@ def main_no_flutter(libapp_path: str, dart_version: str, outdir: str,
     input_obj = ElitfInput(libapp_path, dart_info, outdir, rebuild, no_analysis, ida_fcn)
     build_and_run(input_obj)
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
         prog='Elit-f',
@@ -761,7 +631,6 @@ def main():
                              '(recommended on Termux or limited terminals)')
     args = parser.parse_args()
 
-    # --dart-version mode: libapp.so + user-provided version (no libflutter needed)
     if args.dart_version is not None:
         if not args.indir:
             sys.exit('--dart-version requires indir (libapp.so path)')
@@ -770,25 +639,18 @@ def main():
                         args.rebuild, args.no_analysis, args.ida_fcn)
         return 0
 
-    # Dispatch logic (B3 fix: --cli is now meaningful):
-    #   * indir + outdir + --cli          -> CLI one-shot menu (main_cli)
-    #   * indir + outdir (no --cli) + rich -> full interactive TUI (main_interactive)
-    #   * indir + outdir (no --cli) + !rich -> CLI one-shot menu (fallback)
-    #   * partial or none + rich          -> interactive TUI prompting for missing args
-    #   * partial or none + !rich         -> prompt + direct flutter analysis
     if args.indir and args.outdir:
         if args.cli or not HAS_RICH:
             return main_cli(args.indir, args.outdir, args.rebuild,
                             args.no_analysis, args.ida_fcn,
                             force_plain=args.plain) or 0
-        # Rich available, no --cli: launch full TUI with indir+outdir preset.
+
         ui = ElitfUI(force_plain=args.plain)
         ui.indir = args.indir
         ui.outdir = args.outdir
         main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn)
         return 0
 
-    # No indir+outdir: prompt interactively.
     if not HAS_RICH:
         print("\n  Elit-f - Flutter/Dart AOT Reversing Engine")
         print(f"  Auteur : {AUTHOR}")
@@ -814,7 +676,6 @@ def main():
             return 2
         return 0
 
-    # Rich available: launch interactive TUI (indir/outdir preset if provided).
     ui = ElitfUI(force_plain=args.plain)
     if args.indir:
         ui.indir = args.indir
@@ -822,7 +683,6 @@ def main():
         ui.outdir = args.outdir
     main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn)
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main() or 0)

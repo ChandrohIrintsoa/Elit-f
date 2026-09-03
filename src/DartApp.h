@@ -41,7 +41,7 @@ private:
 	void findFunctionInHeap();
 	void finalizeFunctionsInfo();
 	void loadFromObjectPool();
-	void walkObject(dart::Object& obj); // to check field types from existed object
+	void walkObject(dart::Object& obj);
 
 	const void* lib_base;
 	const uint8_t* vm_snapshot_data;
@@ -54,10 +54,8 @@ private:
 	dart::ObjectPool* ppool;
 	bool inScope;
 
-	// nativeLib contains all classes that has no library
 	DartLibrary nativeLib;
 	std::vector<DartLibrary*> libs;
-	// some class might be null
 	std::vector<DartClass*> classes;
 	std::vector<DartClass*> topClasses;
 	std::unordered_map<uint64_t, DartFunction*> functions;
@@ -65,12 +63,11 @@ private:
 	std::unordered_map<uint64_t, DartField*> staticFields;
 	std::unique_ptr<DartTypeDb> typeDb;
 
-	// the dart Bulit-in type class id
 	intptr_t dartIntCid;
 	intptr_t dartDoubleCid;
 	intptr_t dartStringCid;
 	intptr_t dartBoolCid;
-	intptr_t dartRecordCid; // dart verion >= 3.0
+	intptr_t dartRecordCid;
 	intptr_t dartListCid;
 	intptr_t dartSetCid;
 	intptr_t dartMapCid;

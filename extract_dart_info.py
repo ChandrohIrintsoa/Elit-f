@@ -9,7 +9,6 @@ from struct import unpack
 
 from elftools.elf.elffile import ELFFile
 
-
 def _va_to_file_offset(elf, va):
     for seg in elf.iter_segments():
         if seg.header.p_type == 'PT_LOAD':
@@ -17,8 +16,6 @@ def _va_to_file_offset(elf, va):
                 return va - seg.header.p_vaddr + seg.header.p_offset
     return None
 
-
-# TODO: support both ELF and Mach-O file
 def extract_snapshot_hash_flags(libapp_file):
     with open(libapp_file, 'rb') as f:
         elf = ELFFile(f)
@@ -51,7 +48,6 @@ def extract_snapshot_hash_flags(libapp_file):
 
     return snapshot_hash, flags
 
-
 def extract_libflutter_info(libflutter_file):
     with open(libflutter_file, 'rb') as f:
         elf = ELFFile(f)
@@ -80,7 +76,6 @@ def extract_libflutter_info(libflutter_file):
 
     return engine_ids, dart_version, arch
 
-
 def get_dart_sdk_url_size(engine_ids, os_name='android', arch='arm64'):
     os_map = {'android': 'linux', 'ios': 'mac', 'macos': 'mac'}
     arch_map = {'arm64': 'arm64', 'x64': 'x64'}
@@ -98,7 +93,6 @@ def get_dart_sdk_url_size(engine_ids, os_name='android', arch='arm64'):
             return engine_id, url, sdk_size
 
     return None, None, None
-
 
 def get_dart_commit(url):
     if url is None:
@@ -143,7 +137,6 @@ def get_dart_commit(url):
 
     return commit_id, dart_version
 
-
 def extract_dart_info(libapp_file: str, libflutter_file: str, os_name: str = 'android', arch: str = 'arm64'):
     snapshot_hash, flags = extract_snapshot_hash_flags(libapp_file)
     engine_ids, dart_version, detected_arch = extract_libflutter_info(libflutter_file)
@@ -155,7 +148,6 @@ def extract_dart_info(libapp_file: str, libflutter_file: str, os_name: str = 'an
         commit_id, dart_version = get_dart_commit(sdk_url)
 
     return dart_version, snapshot_hash, flags, arch, os_name
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

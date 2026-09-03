@@ -1,4 +1,4 @@
-set(SRCS 
+set(SRCS
     CodeAnalyzer.cpp
     CodeAnalyzer.h
     CodeAnalyzer_arm64.cpp
@@ -40,6 +40,5 @@ set(SRCS
     il.cpp
     il.h
     main.cpp
-    #pch.cpp
-    pch.h
 )
+

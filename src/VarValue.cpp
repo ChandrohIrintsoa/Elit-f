@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "VarValue.h"
 #include <sstream>
 
@@ -24,19 +23,16 @@ std::string VarStorage::Name()
 	case InInstruction:
 		return "tmp";
 	default:
-		// Immediate has no storage type
 		FATAL("Unknown storage type");
 	}
 }
 
 void VarValue::SetIntType(ValueType tid)
 {
-	// only 2 possibles containers are VarExpression and VarInteger
 	if (RawTypeId() == VarValue::Expression) {
 		reinterpret_cast<VarExpression*>(this)->SetType(tid);
 	}
 	else {
-		// should be only VarInteger
 		ASSERT(RawTypeId() == dart::kIntegerCid);
 		reinterpret_cast<VarInteger*>(this)->intTypeId = tid;
 	}
@@ -48,7 +44,6 @@ void VarValue::SetSmiIfInt()
 		reinterpret_cast<VarExpression*>(this)->SetType(dart::kSmiCid);
 	}
 	else if (RawTypeId() == dart::kIntegerCid) {
-		// Note: should not convert from Mint
 		reinterpret_cast<VarInteger*>(this)->intTypeId = dart::kSmiCid;
 	}
 }
@@ -57,7 +52,6 @@ std::string VarArray::ToString()
 {
 	std::string out;
 	if ((intptr_t)ptr == (intptr_t)dart::Object::null()) {
-		// no data
 		out = "List";
 		if (eleType) {
 			out += "<" + eleType->ToString() + ">";
@@ -69,14 +63,11 @@ std::string VarArray::ToString()
 		out += ")";
 	}
 	else {
-		// has data (const array)
 		const auto& arr = dart::Array::Handle(ptr);
 		const auto arr_len = arr.Length();
-		//const auto& type_args = dart::TypeArguments::Handle(arr.GetTypeArguments());
 		std::ostringstream ss;
 		ss << "const [";
 		if (arr_len > 0) {
-			// in ImmutableList, only Dart type (native type is not used)
 			const auto heap_base = dart::Thread::Current()->heap_base();
 			auto& obj = dart::Object::Handle();
 			auto arrPtr = dart::Array::DataOf(arr.ptr());
@@ -86,7 +77,6 @@ std::string VarArray::ToString()
 
 				if (arrPtr->IsHeapObject()) {
 					obj = arrPtr->Decompress(heap_base);
-					// TODO: better string representation
 					ss << obj.ToCString();
 				}
 				else {
@@ -124,3 +114,4 @@ std::string VarItem::CallArgName()
 		return storage.Name();
 	}
 }
+

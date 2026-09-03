@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "FridaWriter.h"
 #include <fstream>
 #include <filesystem>
@@ -52,10 +51,6 @@ void FridaWriter::Create(const char* filename)
 			case dart::kBoolCid:
 				of << "{id:" << dartCls->Id() << ",";
 				of << "name:\"bool\",";
-				// the bool in Dart use only 2 Immutable objects (true and false)
-				//of << "tptr:" << (uint64_t)dart::Bool::True().ptr() - app.heap_base() << ",";
-				//of << "fptr:" << (uint64_t)dart::Bool::False().ptr() - app.heap_base() << ",";
-				// value_ offset in raw_object.h is inaccessible
 				of << "valOffset:" << AOT_Instance_InstanceSize << "},\n";
 				break;
 			case dart::kMintCid:
@@ -83,7 +78,6 @@ void FridaWriter::Create(const char* filename)
 			case dart::kArrayCid:
 				of << "{id:" << dartCls->Id() << ",";
 				of << "name:\"List\",";
-				//dart::Array::kBytesPerElement is same as a compressed pointer size
 				of << "lenOffset:" << AOT_Array_length_offset << ",";
 				of << "dataOffset:" << AOT_Array_data_offset << ",";
 				of << "typeOffset:" << AOT_Array_type_arguments_offset << "},\n";
@@ -129,8 +123,6 @@ void FridaWriter::Create(const char* filename)
 				of << "{id:" << dartCls->Id() << ",";
 				of << "name:" << Util::Quote(dartCls->Name()) << ",";
 				of << "lenOffset:" << AOT_TypedDataBase_length_offset << ",";
-				// current version name is "AOT_TypedData_payload_offset" but old version name is "AOT_TypedData_data_offset"
-				// function from UntaggedTypedData is always same
 				of << "dataOffset:" << dart::UntaggedTypedData::payload_offset() << "},\n";
 				break;
 			case dart::kInstanceCid:
@@ -151,9 +143,10 @@ void FridaWriter::Create(const char* filename)
 			of << "fbitmap:" << dartCls->FieldBitmap() << ",";
 			of << "sid:" << dartCls->Parent()->Id() << ",";
 			of << "size:" << dartCls->Size() << ",";
-			of << "argOffset:" << dartCls->TypeArgumentOffset();// << ",";
+			of << "argOffset:" << dartCls->TypeArgumentOffset();
 			of << "},\n";
 		}
 	}
 	of << "];\n";
 }
+

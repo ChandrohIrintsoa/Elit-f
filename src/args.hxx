@@ -1,34 +1,4 @@
-/* A simple header-only C++ argument parser library.
- *
- * https://github.com/Taywee/args
- *
- * Copyright (c) 2016-2021 Taylor C. Richberger <taywee@gmx.com> and Pavel
- * Belikov
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- */
 
-/** \file args.hxx
- * \brief this single-header lets you use all of the args functionality
- *
- * The important stuff is done inside the args namespace
- */
 
 #ifndef ARGS_HXX
 #define ARGS_HXX
@@ -62,31 +32,15 @@ namespace argstest
 {
 #else
 
-/** \namespace args
- * \brief contains all the functionality of the args library
- */
 namespace args
 {
 #endif
-    /** Getter to grab the value from the argument type.
-     *
-     * If the Get() function of the type returns a reference, so does this, and
-     * the value will be modifiable.
-     */
     template <typename Option>
     auto get(Option &option_) -> decltype(option_.Get())
     {
         return option_.Get();
     }
 
-    /** (INTERNAL) Count UTF-8 glyphs
-     *
-     * This is not reliable, and will fail for combinatory glyphs, but it's
-     * good enough here for now.
-     *
-     * \param string The string to count glyphs from
-     * \return The UTF-8 glyphs in the string
-     */
     inline std::string::size_type Glyphs(const std::string &string_)
     {
         std::string::size_type length = 0;
@@ -100,17 +54,6 @@ namespace args
         return length;
     }
 
-    /** (INTERNAL) Wrap a vector of words into a vector of lines
-     *
-     * Empty words are skipped. Word "\n" forces wrapping.
-     *
-     * \param begin The begin iterator
-     * \param end The end iterator
-     * \param width The width of the body
-     * \param firstlinewidth the width of the first line, defaults to the width of the body
-     * \param firstlineindent the indent of the first line, defaults to 0
-     * \return the vector of lines
-     */
     template <typename It>
     inline std::vector<std::string> Wrap(It begin,
                                          It end,
@@ -201,18 +144,8 @@ namespace args
         }
     }
 
-    /** (INTERNAL) Wrap a string into a vector of lines
-     *
-     * This is quick and hacky, but works well enough.  You can specify a
-     * different width for the first line
-     *
-     * \param width The width of the body
-     * \param firstlinewid the width of the first line, defaults to the width of the body
-     * \return the vector of lines
-     */
     inline std::vector<std::string> Wrap(const std::string &in, const std::string::size_type width, std::string::size_type firstlinewidth = 0)
     {
-        // Preserve existing line breaks
         const auto newlineloc = in.find('\n');
         if (newlineloc != in.npos)
         {
@@ -242,7 +175,6 @@ namespace args
     }
 
 #ifdef ARGS_NOEXCEPT
-    /// Error class, for when ARGS_NOEXCEPT is defined
     enum class Error
     {
         None,
@@ -257,8 +189,6 @@ namespace args
         Completion,
     };
 #else
-    /** Base error class
-     */
     class Error : public std::runtime_error
     {
         public:
@@ -266,8 +196,6 @@ namespace args
             virtual ~Error() {}
     };
 
-    /** Errors that occur during usage
-     */
     class UsageError : public Error
     {
         public:
@@ -275,8 +203,6 @@ namespace args
             virtual ~UsageError() {}
     };
 
-    /** Errors that occur during regular parsing
-     */
     class ParseError : public Error
     {
         public:
@@ -284,8 +210,6 @@ namespace args
             virtual ~ParseError() {}
     };
 
-    /** Errors that are detected from group validation after parsing finishes
-     */
     class ValidationError : public Error
     {
         public:
@@ -293,8 +217,6 @@ namespace args
             virtual ~ValidationError() {}
     };
 
-    /** Errors that when a required flag is omitted
-     */
     class RequiredError : public ValidationError
     {
         public:
@@ -302,8 +224,6 @@ namespace args
             virtual ~RequiredError() {}
     };
 
-    /** Errors in map lookups
-     */
     class MapError : public ParseError
     {
         public:
@@ -311,8 +231,6 @@ namespace args
             virtual ~MapError() {}
     };
 
-    /** Error that occurs when a singular flag is specified multiple times
-     */
     class ExtraError : public ParseError
     {
         public:
@@ -320,8 +238,6 @@ namespace args
             virtual ~ExtraError() {}
     };
 
-    /** An exception that indicates that the user has requested help
-     */
     class Help : public Error
     {
         public:
@@ -329,8 +245,6 @@ namespace args
             virtual ~Help() {}
     };
 
-    /** (INTERNAL) An exception that emulates coroutine-like control flow for subparsers.
-     */
     class SubparserError : public Error
     {
         public:
@@ -338,8 +252,6 @@ namespace args
             virtual ~SubparserError() {}
     };
 
-    /** An exception that contains autocompletion reply
-     */
     class Completion : public Error
     {
         public:
@@ -348,8 +260,6 @@ namespace args
     };
 #endif
 
-    /** A simple unified option type for unified initializer lists for the Matcher class.
-     */
     struct EitherFlag
     {
         const bool isShort;
@@ -359,8 +269,6 @@ namespace args
         EitherFlag(const char *flag) : isShort(false), shortFlag(), longFlag(flag) {}
         EitherFlag(const char flag) : isShort(true), shortFlag(flag), longFlag() {}
 
-        /** Get just the long flags from an initializer list of EitherFlags
-         */
         static std::unordered_set<std::string> GetLong(std::initializer_list<EitherFlag> flags)
         {
             std::unordered_set<std::string>  longFlags;
@@ -374,8 +282,6 @@ namespace args
             return longFlags;
         }
 
-        /** Get just the short flags from an initializer list of EitherFlags
-         */
         static std::unordered_set<char> GetShort(std::initializer_list<EitherFlag> flags)
         {
             std::unordered_set<char>  shortFlags;
@@ -402,12 +308,6 @@ namespace args
 
 
 
-    /** A class of "matchers", specifying short and flags that can possibly be
-     * matched.
-     *
-     * This is supposed to be constructed and then passed in, not used directly
-     * from user code.
-     */
     class Matcher
     {
         private:
@@ -415,10 +315,6 @@ namespace args
             const std::unordered_set<std::string> longFlags;
 
         public:
-            /** Specify short and long flags separately as iterators
-             *
-             * ex: `args::Matcher(shortFlags.begin(), shortFlags.end(), longFlags.begin(), longFlags.end())`
-             */
             template <typename ShortIt, typename LongIt>
             Matcher(ShortIt shortFlagsStart, ShortIt shortFlagsEnd, LongIt longFlagsStart, LongIt longFlagsEnd) :
                 shortFlags(shortFlagsStart, shortFlagsEnd),
@@ -433,34 +329,17 @@ namespace args
             }
 
 #ifdef ARGS_NOEXCEPT
-            /// Only for ARGS_NOEXCEPT
             Error GetError() const noexcept
             {
                 return shortFlags.empty() && longFlags.empty() ? Error::Usage : Error::None;
             }
 #endif
 
-            /** Specify short and long flags separately as iterables
-             *
-             * ex: `args::Matcher(shortFlags, longFlags)`
-             */
             template <typename Short, typename Long>
             Matcher(Short &&shortIn, Long &&longIn) :
                 Matcher(std::begin(shortIn), std::end(shortIn), std::begin(longIn), std::end(longIn))
             {}
 
-            /** Specify a mixed single initializer-list of both short and long flags
-             *
-             * This is the fancy one.  It takes a single initializer list of
-             * any number of any mixed kinds of flags.  Chars are
-             * automatically interpreted as short flags, and strings are
-             * automatically interpreted as long flags:
-             *
-             *     args::Matcher{'a'}
-             *     args::Matcher{"foo"}
-             *     args::Matcher{'h', "help"}
-             *     args::Matcher{"foo", 'f', 'F', "FoO"}
-             */
             Matcher(std::initializer_list<EitherFlag> in) :
                 Matcher(EitherFlag::GetShort(in), EitherFlag::GetLong(in)) {}
 
@@ -469,29 +348,21 @@ namespace args
 
             ~Matcher() {}
 
-            /** (INTERNAL) Check if there is a match of a short flag
-             */
             bool Match(const char flag) const
             {
                 return shortFlags.find(flag) != shortFlags.end();
             }
 
-            /** (INTERNAL) Check if there is a match of a long flag
-             */
             bool Match(const std::string &flag) const
             {
                 return longFlags.find(flag) != longFlags.end();
             }
 
-            /** (INTERNAL) Check if there is a match of a flag
-             */
             bool Match(const EitherFlag &flag) const
             {
                 return flag.isShort ? Match(flag.shortFlag) : Match(flag.longFlag);
             }
 
-            /** (INTERNAL) Get all flag strings as a vector, with the prefixes embedded
-             */
             std::vector<EitherFlag> GetFlagStrings() const
             {
                 std::vector<EitherFlag> flagStrings;
@@ -507,8 +378,6 @@ namespace args
                 return flagStrings;
             }
 
-            /** (INTERNAL) Get long flag if it exists or any short flag
-             */
             EitherFlag GetLongOrAny() const
             {
                 if (!longFlags.empty())
@@ -521,12 +390,9 @@ namespace args
                     return *shortFlags.begin();
                 }
 
-                // should be unreachable
                 return ' ';
             }
 
-            /** (INTERNAL) Get short flag if it exists or any long flag
-             */
             EitherFlag GetShortOrAny() const
             {
                 if (!shortFlags.empty())
@@ -539,49 +405,28 @@ namespace args
                     return *longFlags.begin();
                 }
 
-                // should be unreachable
                 return ' ';
             }
     };
 
-    /** Attributes for flags.
-     */
     enum class Options
     {
-        /** Default options.
-         */
         None = 0x0,
 
-        /** Flag can't be passed multiple times.
-         */
         Single = 0x01,
 
-        /** Flag can't be omitted.
-         */
         Required = 0x02,
 
-        /** Flag is excluded from usage line.
-         */
         HiddenFromUsage = 0x04,
 
-        /** Flag is excluded from options help.
-         */
         HiddenFromDescription = 0x08,
 
-        /** Flag is global and can be used in any subcommand.
-         */
         Global = 0x10,
 
-        /** Flag stops a parser.
-         */
         KickOut = 0x20,
 
-        /** Flag is excluded from auto completion.
-         */
         HiddenFromCompletion = 0x40,
 
-        /** Flag is excluded from options help and usage line
-         */
         Hidden = HiddenFromUsage | HiddenFromDescription | HiddenFromCompletion,
     };
 
@@ -600,165 +445,81 @@ namespace args
     class Command;
     class ArgumentParser;
 
-    /** A simple structure of parameters for easy user-modifyable help menus
-     */
     struct HelpParams
     {
-        /** The width of the help menu
-         */
         unsigned int width = 80;
-        /** The indent of the program line
-         */
         unsigned int progindent = 2;
-        /** The indent of the program trailing lines for long parameters
-         */
         unsigned int progtailindent = 4;
-        /** The indent of the description and epilogs
-         */
         unsigned int descriptionindent = 4;
-        /** The indent of the flags
-         */
         unsigned int flagindent = 6;
-        /** The indent of the flag descriptions
-         */
         unsigned int helpindent = 40;
-        /** The additional indent each group adds
-         */
         unsigned int eachgroupindent = 2;
 
-        /** The minimum gutter between each flag and its help
-         */
         unsigned int gutter = 1;
 
-        /** Show the terminator when both options and positional parameters are present
-         */
         bool showTerminator = true;
 
-        /** Show the {OPTIONS} on the prog line when this is true
-         */
         bool showProglineOptions = true;
 
-        /** Show the positionals on the prog line when this is true
-         */
         bool showProglinePositionals = true;
 
-        /** The prefix for short flags
-         */
         std::string shortPrefix;
 
-        /** The prefix for long flags
-         */
         std::string longPrefix;
 
-        /** The separator for short flags
-         */
         std::string shortSeparator;
 
-        /** The separator for long flags
-         */
         std::string longSeparator;
 
-        /** The program name for help generation
-         */
         std::string programName;
 
-        /** Show command's flags
-         */
         bool showCommandChildren = false;
 
-        /** Show command's descriptions and epilog
-         */
         bool showCommandFullHelp = false;
 
-        /** The postfix for progline when showProglineOptions is true and command has any flags
-         */
         std::string proglineOptions = "{OPTIONS}";
 
-        /** The prefix for progline when command has any subcommands
-         */
         std::string proglineCommand = "COMMAND";
 
-        /** The prefix for progline value
-         */
         std::string proglineValueOpen = " <";
 
-        /** The postfix for progline value
-         */
         std::string proglineValueClose = ">";
 
-        /** The prefix for progline required argument
-         */
         std::string proglineRequiredOpen = "";
 
-        /** The postfix for progline required argument
-         */
         std::string proglineRequiredClose = "";
 
-        /** The prefix for progline non-required argument
-         */
         std::string proglineNonrequiredOpen = "[";
 
-        /** The postfix for progline non-required argument
-         */
         std::string proglineNonrequiredClose = "]";
 
-        /** Show flags in program line
-         */
         bool proglineShowFlags = false;
 
-        /** Use short flags in program lines when possible
-         */
         bool proglinePreferShortFlags = false;
 
-        /** Program line prefix
-         */
         std::string usageString;
 
-        /** String shown in help before flags descriptions
-         */
         std::string optionsString = "OPTIONS:";
 
-        /** Display value name after all the long and short flags
-         */
         bool useValueNameOnce = false;
 
-        /** Show value name
-         */
         bool showValueName = true;
 
-        /** Add newline before flag description
-         */
         bool addNewlineBeforeDescription = false;
 
-        /** The prefix for option value
-         */
         std::string valueOpen = "[";
 
-        /** The postfix for option value
-         */
         std::string valueClose = "]";
 
-        /** Add choices to argument description
-         */
         bool addChoices = false;
 
-        /** The prefix for choices
-         */
         std::string choiceString = "\nOne of: ";
 
-        /** Add default values to argument description
-         */
         bool addDefault = false;
 
-        /** The prefix for default values
-         */
         std::string defaultString = "\nDefault: ";
     };
 
-    /** A number of arguments which can be consumed by an option.
-     *
-     * Represents a closed interval [min, max].
-     */
     struct Nargs
     {
         const size_t min;
@@ -789,8 +550,6 @@ namespace args
         }
     };
 
-    /** Base class for all match types
-     */
     class Base
     {
         private:
@@ -800,7 +559,6 @@ namespace args
             bool matched = false;
             const std::string help;
 #ifdef ARGS_NOEXCEPT
-            /// Only for ARGS_NOEXCEPT
             mutable Error error = Error::None;
             mutable std::string errorMsg;
 #endif
@@ -886,7 +644,6 @@ namespace args
                 return {};
             }
 
-            /// Sets a kick-out value for building subparsers
             void KickOut(bool kickout_) noexcept
             {
                 if (kickout_)
@@ -899,7 +656,6 @@ namespace args
                 }
             }
 
-            /// Gets the kick-out value for building subparsers
             bool KickOut() const noexcept
             {
                 return (options & Options::KickOut) != Options::None;
@@ -915,13 +671,11 @@ namespace args
             }
 
 #ifdef ARGS_NOEXCEPT
-            /// Only for ARGS_NOEXCEPT
             virtual Error GetError() const
             {
                 return error;
             }
 
-            /// Only for ARGS_NOEXCEPT
             virtual std::string GetErrorMsg() const
             {
                 return errorMsg;
@@ -929,8 +683,6 @@ namespace args
 #endif
     };
 
-    /** Base class for all match types that have a name
-     */
     class NamedBase : public Base
     {
         protected:
@@ -965,33 +717,23 @@ namespace args
             NamedBase(const std::string &name_, const std::string &help_, Options options_ = {}) : Base(help_, options_), name(name_) {}
             virtual ~NamedBase() {}
 
-            /** Sets default value string that will be added to argument description.
-             *  Use empty string to disable it for this argument.
-             */
             void HelpDefault(const std::string &str)
             {
                 defaultStringManual = true;
                 defaultString = str;
             }
 
-            /** Gets default value string that will be added to argument description.
-             */
             std::string HelpDefault(const HelpParams &params) const
             {
                 return defaultStringManual ? defaultString : GetDefaultString(params);
             }
 
-            /** Sets choices strings that will be added to argument description.
-             *  Use empty vector to disable it for this argument.
-             */
             void HelpChoices(const std::vector<std::string> &array)
             {
                 choicesStringManual = true;
                 choicesStrings = array;
             }
 
-            /** Gets choices strings that will be added to argument description.
-             */
             std::vector<std::string> HelpChoices(const HelpParams &params) const
             {
                 return choicesStringManual ? choicesStrings : GetChoicesStrings(params);
@@ -1020,9 +762,9 @@ namespace args
     {
         template<typename T>
         using vector = std::vector<T, std::allocator<T>>;
-        
+
         template<typename K, typename T>
-        using unordered_map = std::unordered_map<K, T, std::hash<K>, 
+        using unordered_map = std::unordered_map<K, T, std::hash<K>,
             std::equal_to<K>, std::allocator<std::pair<const K, T> > >;
 
         template<typename S, typename T>
@@ -1076,8 +818,6 @@ namespace args
         }
     }
 
-    /** Base class for all flag options
-     */
     class FlagBase : public NamedBase
     {
         protected:
@@ -1188,7 +928,6 @@ namespace args
             }
 
 #ifdef ARGS_NOEXCEPT
-            /// Only for ARGS_NOEXCEPT
             virtual Error GetError() const override
             {
                 const auto nargs = NumberOfArguments();
@@ -1207,21 +946,11 @@ namespace args
             }
 #endif
 
-            /** Defines how many values can be consumed by this option.
-             *
-             * \return closed interval [min, max]
-             */
             virtual Nargs NumberOfArguments() const noexcept = 0;
 
-            /** Parse values of this option.
-             *
-             * \param value Vector of values. It's size must be in NumberOfArguments() interval.
-             */
             virtual void ParseValue(const std::vector<std::string> &value) = 0;
     };
 
-    /** Base class for value-accepting flag options
-     */
     class ValueFlagBase : public FlagBase
     {
         public:
@@ -1261,8 +990,6 @@ namespace args
                 std::istringstream(value_.at(1)) >> cword;
             }
 
-            /** Get the completion reply
-             */
             std::string Get() noexcept
             {
                 return detail::Join(reply, "\n");
@@ -1278,8 +1005,6 @@ namespace args
     };
 
 
-    /** Base class for positional options
-     */
     class PositionalBase : public NamedBase
     {
         protected:
@@ -1338,8 +1063,6 @@ namespace args
             }
     };
 
-    /** Class for all kinds of validating groups, including ArgumentParser
-     */
     class Group : public Base
     {
         private:
@@ -1347,8 +1070,6 @@ namespace args
             std::function<bool(const Group &)> validator;
 
         public:
-            /** Default validators
-             */
             struct Validators
             {
                 static bool Xor(const Group &group)
@@ -1398,34 +1119,23 @@ namespace args
                     return group.MatchedChildren() == 0;
                 }
             };
-            /// If help is empty, this group will not be printed in help output
             Group(const std::string &help_ = std::string(), const std::function<bool(const Group &)> &validator_ = Validators::DontCare, Options options_ = {}) : Base(help_, options_), validator(validator_) {}
-            /// If help is empty, this group will not be printed in help output
             Group(Group &group_, const std::string &help_ = std::string(), const std::function<bool(const Group &)> &validator_ = Validators::DontCare, Options options_ = {}) : Base(help_, options_), validator(validator_)
             {
                 group_.Add(*this);
             }
             virtual ~Group() {}
 
-            /** Append a child to this Group.
-             */
             void Add(Base &child)
             {
                 children.emplace_back(&child);
             }
 
-            /** Get all this group's children
-             */
             const std::vector<Base *> &Children() const
             {
                 return children;
             }
 
-            /** Return the first FlagBase that matches flag, or nullptr
-             *
-             * \param flag The flag with prefixes stripped
-             * \return the first matching FlagBase pointer, or nullptr if there is no match
-             */
             virtual FlagBase *Match(const EitherFlag &flag) override
             {
                 for (Base *child: Children())
@@ -1457,10 +1167,6 @@ namespace args
                 }
             }
 
-            /** Get the next ready positional, or nullptr if there is none
-             *
-             * \return the first ready PositionalBase pointer, or nullptr if there is no match
-             */
             virtual PositionalBase *GetNextPositional() override
             {
                 for (Base *child: Children())
@@ -1473,63 +1179,41 @@ namespace args
                 return nullptr;
             }
 
-            /** Get whether this has any FlagBase children
-             *
-             * \return Whether or not there are any FlagBase children
-             */
             virtual bool HasFlag() const override
             {
                 return std::any_of(Children().begin(), Children().end(), [](Base *child) { return child->HasFlag(); });
             }
 
-            /** Get whether this has any PositionalBase children
-             *
-             * \return Whether or not there are any PositionalBase children
-             */
             virtual bool HasPositional() const override
             {
                 return std::any_of(Children().begin(), Children().end(), [](Base *child) { return child->HasPositional(); });
             }
 
-            /** Get whether this has any Command children
-             *
-             * \return Whether or not there are any Command children
-             */
             virtual bool HasCommand() const override
             {
                 return std::any_of(Children().begin(), Children().end(), [](Base *child) { return child->HasCommand(); });
             }
 
-            /** Count the number of matched children this group has
-             */
             std::vector<Base *>::size_type MatchedChildren() const
             {
-                // Cast to avoid warnings from -Wsign-conversion
                 return static_cast<std::vector<Base *>::size_type>(
                         std::count_if(std::begin(Children()), std::end(Children()), [](const Base *child){return child->Matched();}));
             }
 
-            /** Whether or not this group matches validation
-             */
             virtual bool Matched() const noexcept override
             {
                 return validator(*this);
             }
 
-            /** Get validation
-             */
             bool Get() const
             {
                 return Matched();
             }
 
-            /** Get all the child descriptions for help generation
-             */
             virtual std::vector<std::tuple<std::string, std::string, unsigned>> GetDescription(const HelpParams &params, const unsigned int indent) const override
             {
                 std::vector<std::tuple<std::string, std::string, unsigned int>> descriptions;
 
-                // Push that group description on the back if not empty
                 unsigned addindent = 0;
                 if (!help.empty())
                 {
@@ -1553,8 +1237,6 @@ namespace args
                 return descriptions;
             }
 
-            /** Get the names of positional parameters
-             */
             virtual std::vector<std::string> GetProgramLine(const HelpParams &params) const override
             {
                 std::vector <std::string> names;
@@ -1605,7 +1287,6 @@ namespace args
             }
 
 #ifdef ARGS_NOEXCEPT
-            /// Only for ARGS_NOEXCEPT
             virtual Error GetError() const override
             {
                 if (error != Error::None)
@@ -1623,7 +1304,6 @@ namespace args
                 }
             }
 
-            /// Only for ARGS_NOEXCEPT
             virtual std::string GetErrorMsg() const override
             {
                 if (error != Error::None)
@@ -1644,8 +1324,6 @@ namespace args
 
     };
 
-    /** Class for using global options in ArgumentParser.
-     */
     class GlobalOptions : public Group
     {
         public:
@@ -1655,23 +1333,6 @@ namespace args
             }
     };
 
-    /** Utility class for building subparsers with coroutines/callbacks.
-     *
-     * Brief example:
-     * \code
-     * Command command(argumentParser, "command", "my command", [](args::Subparser &s)
-     * {
-     *      // your command flags/positionals
-     *      s.Parse(); //required
-     *      //your command code
-     * });
-     * \endcode
-     *
-     * For ARGS_NOEXCEPT mode don't forget to check `s.GetError()` after `s.Parse()`
-     * and return if it isn't equals to args::Error::None.
-     *
-     * \sa Command
-     */
     class Subparser : public Group
     {
         private:
@@ -1702,31 +1363,19 @@ namespace args
                 return command;
             }
 
-            /** (INTERNAL) Determines whether Parse was called or not.
-             */
             bool IsParsed() const
             {
                 return isParsed;
             }
 
-            /** Continue parsing arguments for new command.
-             */
             void Parse();
 
-            /** Returns a vector of kicked out arguments.
-             *
-             * \sa Base::KickOut
-             */
             const std::vector<std::string> &KickedOut() const noexcept
             {
                 return kicked;
             }
     };
 
-    /** Main class for building subparsers.
-     *
-     * /sa Subparser
-     */
     class Command : public Group
     {
         private:
@@ -1831,50 +1480,30 @@ namespace args
                 base_.Add(*this);
             }
 
-            /** The description that appears on the prog line after options
-             */
             const std::string &ProglinePostfix() const
             { return proglinePostfix; }
 
-            /** The description that appears on the prog line after options
-             */
             void ProglinePostfix(const std::string &proglinePostfix_)
             { this->proglinePostfix = proglinePostfix_; }
 
-            /** The description that appears above options
-             */
             const std::string &Description() const
             { return description; }
-            /** The description that appears above options
-             */
 
             void Description(const std::string &description_)
             { this->description = description_; }
 
-            /** The description that appears below options
-             */
             const std::string &Epilog() const
             { return epilog; }
 
-            /** The description that appears below options
-             */
             void Epilog(const std::string &epilog_)
             { this->epilog = epilog_; }
 
-            /** The name of command
-             */
             const std::string &Name() const
             { return name; }
 
-            /** The description of command
-             */
             const std::string &Help() const
             { return help; }
 
-            /** If value is true, parser will fail if no command was parsed.
-             *
-             * Default: true.
-             */
             void RequireCommand(bool value)
             { commandIsRequired = value; }
 
@@ -2242,7 +1871,6 @@ namespace args
             }
 
 #ifdef ARGS_NOEXCEPT
-            /// Only for ARGS_NOEXCEPT
             virtual Error GetError() const override
             {
                 if (!Matched())
@@ -2265,8 +1893,6 @@ namespace args
 #endif
     };
 
-    /** The main user facing command line argument parser class
-     */
     class ArgumentParser : public Command
     {
         friend class Subparser;
@@ -2332,15 +1958,6 @@ namespace args
 #endif
             }
 
-            /** (INTERNAL) Parse flag's values
-             *
-             * \param arg The string to display in error message as a flag name
-             * \param[in, out] it The iterator to first value. It will point to the last value
-             * \param end The end iterator
-             * \param joinedArg Joined value (e.g. bar in --foo=bar)
-             * \param canDiscardJoined If true joined value can be parsed as flag not as a value (as in -abcd)
-             * \param[out] values The vector to store parsed arg's values
-             */
             template <typename It>
             std::string ParseArgsValues(FlagBase &flag, const std::string &arg, It &it, It end,
                                         const bool allowSeparate, const bool allowJoined,
@@ -2419,9 +2036,7 @@ namespace args
             {
                 const auto &chunk = *it;
                 const auto argchunk = chunk.substr(longprefix.size());
-                // Try to separate it, in case of a separator:
                 const auto separator = longseparator.empty() ? argchunk.npos : argchunk.find(longseparator);
-                // If the separator is in the argument, separate it.
                 const auto arg = (separator != argchunk.npos ?
                     std::string(argchunk, 0, separator)
                     : argchunk);
@@ -2637,7 +2252,6 @@ namespace args
                             if (chunk.size() > shortprefix.size() + 1)
                             {
                                 auto arg = chunk.at(shortprefix.size());
-                                //TODO: support -abcVALUE where a and b take no value
                                 if (auto flag = this->Match(arg))
                                 {
                                     for (auto &choice : flag->HelpChoices(helpParams))
@@ -2663,7 +2277,6 @@ namespace args
                 bool terminated = false;
                 std::vector<Command *> commands = GetCommands();
 
-                // Check all arg chunks
                 for (auto it = begin; it != end; ++it)
                 {
                     if (Complete(it, end))
@@ -2777,13 +2390,11 @@ namespace args
 
                         if (completion->syntax == "bash")
                         {
-                            // bash tokenizes --flag=value as --flag=value
                             for (size_t idx = 0; idx < curArgs.size(); )
                             {
                                 if (idx > 0 && curArgs[idx] == "=")
                                 {
                                     curArgs[idx - 1] += "=";
-                                    // Avoid warnings from -Wsign-conversion
                                     const auto signedIdx = static_cast<std::ptrdiff_t>(idx);
                                     if (idx + 1 < curArgs.size())
                                     {
@@ -2845,45 +2456,29 @@ namespace args
                 Add(completionFlag);
             }
 
-            /** The program name for help generation
-             */
             const std::string &Prog() const
             { return helpParams.programName; }
-            /** The program name for help generation
-             */
             void Prog(const std::string &prog_)
             { this->helpParams.programName = prog_; }
 
-            /** The prefix for long flags
-             */
             const std::string &LongPrefix() const
             { return longprefix; }
-            /** The prefix for long flags
-             */
             void LongPrefix(const std::string &longprefix_)
             {
                 this->longprefix = longprefix_;
                 this->helpParams.longPrefix = longprefix_;
             }
 
-            /** The prefix for short flags
-             */
             const std::string &ShortPrefix() const
             { return shortprefix; }
-            /** The prefix for short flags
-             */
             void ShortPrefix(const std::string &shortprefix_)
             {
                 this->shortprefix = shortprefix_;
                 this->helpParams.shortPrefix = shortprefix_;
             }
 
-            /** The separator for long flags
-             */
             const std::string &LongSeparator() const
             { return longseparator; }
-            /** The separator for long flags
-             */
             void LongSeparator(const std::string &longseparator_)
             {
                 if (longseparator_.empty())
@@ -2902,19 +2497,11 @@ namespace args
                 }
             }
 
-            /** The terminator that forcibly separates flags from positionals
-             */
             const std::string &Terminator() const
             { return terminator; }
-            /** The terminator that forcibly separates flags from positionals
-             */
             void Terminator(const std::string &terminator_)
             { this->terminator = terminator_; }
 
-            /** Get the current argument separation parameters.
-             *
-             * See SetArgumentSeparations for details on what each one means.
-             */
             void GetArgumentSeparations(
                 bool &allowJoinedShortValue_,
                 bool &allowJoinedLongValue_,
@@ -2927,13 +2514,6 @@ namespace args
                 allowSeparateLongValue_ = this->allowSeparateLongValue;
             }
 
-            /** Change allowed option separation.
-             *
-             * \param allowJoinedShortValue_ Allow a short flag that accepts an argument to be passed its argument immediately next to it (ie. in the same argv field)
-             * \param allowJoinedLongValue_ Allow a long flag that accepts an argument to be passed its argument separated by the longseparator (ie. in the same argv field)
-             * \param allowSeparateShortValue_ Allow a short flag that accepts an argument to be passed its argument separated by whitespace (ie. in the next argv field)
-             * \param allowSeparateLongValue_ Allow a long flag that accepts an argument to be passed its argument separated by whitespace (ie. in the next argv field)
-             */
             void SetArgumentSeparations(
                 const bool allowJoinedShortValue_,
                 const bool allowJoinedLongValue_,
@@ -2949,8 +2529,6 @@ namespace args
                 this->helpParams.shortSeparator = allowJoinedShortValue ? "" : " ";
             }
 
-            /** Pass the help menu into an ostream
-             */
             void Help(std::ostream &help_) const
             {
                 auto &command = SelectedCommand();
@@ -3018,13 +2596,11 @@ namespace args
                     }
 
                     auto infoit = std::begin(info);
-                    // groupindent is on both sides of this inequality, and therefore can be removed
                     if ((helpParams.flagindent + flagssize + helpParams.gutter) > helpParams.helpindent || infoit == std::end(info) || helpParams.addNewlineBeforeDescription)
                     {
                         help_ << '\n';
                     } else
                     {
-                        // groupindent is on both sides of the minus sign, and therefore doesn't actually need to be in here
                         help_ << std::string(helpParams.helpindent - (helpParams.flagindent + flagssize), ' ') << *infoit << '\n';
                         ++infoit;
                     }
@@ -3053,10 +2629,6 @@ namespace args
                 }
             }
 
-            /** Generate a help menu as a string.
-             *
-             * \return the help text as a single string
-             */
             std::string Help() const
             {
                 std::ostringstream help_;
@@ -3071,16 +2643,9 @@ namespace args
                 readCompletion = false;
             }
 
-            /** Parse all arguments.
-             *
-             * \param begin an iterator to the beginning of the argument list
-             * \param end an iterator to the past-the-end element of the argument list
-             * \return the iterator after the last parsed value.  Only useful for kick-out
-             */
             template <typename It>
             It ParseArgs(It begin, It end)
             {
-                // Reset all Matched statuses and errors
                 Reset();
 #ifdef ARGS_NOEXCEPT
                 error = GetError();
@@ -3092,23 +2657,12 @@ namespace args
                 return Parse(begin, end);
             }
 
-            /** Parse all arguments.
-             *
-             * \param args an iterable of the arguments
-             * \return the iterator after the last parsed value.  Only useful for kick-out
-             */
             template <typename T>
             auto ParseArgs(const T &args) -> decltype(std::begin(args))
             {
                 return ParseArgs(std::begin(args), std::end(args));
             }
 
-            /** Convenience function to parse the CLI from argc and argv
-             *
-             * Just assigns the program name and vectorizes arguments for passing into ParseArgs()
-             *
-             * \return whether or not all arguments were parsed.  This works for detecting kick-out, but is generally useless as it can't do anything with it.
-             */
             bool ParseCLI(const int argc, const char * const * argv)
             {
                 if (Prog().empty())
@@ -3118,7 +2672,7 @@ namespace args
                 const std::vector<std::string> args(argv + 1, argv + argc);
                 return ParseArgs(args) == std::end(args);
             }
-            
+
             template <typename T>
             bool ParseCLI(const T &args)
             {
@@ -3171,8 +2725,6 @@ namespace args
         return os;
     }
 
-    /** Boolean argument matcher
-     */
     class Flag : public FlagBase
     {
         public:
@@ -3187,8 +2739,6 @@ namespace args
 
             virtual ~Flag() {}
 
-            /** Get whether this was matched
-             */
             bool Get() const
             {
                 return Matched();
@@ -3204,10 +2754,6 @@ namespace args
             }
     };
 
-    /** Help flag class
-     *
-     * Works like a regular flag, but throws an instance of Help when it is matched
-     */
     class HelpFlag : public Flag
     {
         public:
@@ -3225,16 +2771,12 @@ namespace args
 #endif
             }
 
-            /** Get whether this was matched
-             */
             bool Get() const noexcept
             {
                 return Matched();
             }
     };
 
-    /** A flag class that simply counts the number of times it's matched
-     */
     class CounterFlag : public Flag
     {
         private:
@@ -3257,8 +2799,6 @@ namespace args
                 return me;
             }
 
-            /** Get the count
-             */
             int &Get() noexcept
             {
                 return count;
@@ -3267,7 +2807,7 @@ namespace args
             int &operator *() noexcept {
                 return count;
             }
-            
+
             const int &operator *() const noexcept {
                 return count;
             }
@@ -3279,8 +2819,6 @@ namespace args
             }
     };
 
-    /** A flag class that calls a function when it's matched
-     */
     class ActionFlag : public FlagBase
     {
         private:
@@ -3315,12 +2853,6 @@ namespace args
             { action(value); }
     };
 
-    /** A default Reader class for argument classes
-     *
-     * If destination type is assignable to std::string it uses an assignment to std::string.
-     * Otherwise ValueReader simply uses a std::istringstream to read into the destination type, and
-     * raises a ParseError if there are any characters left.
-     */
     struct ValueReader
     {
         template <typename T>
@@ -3358,11 +2890,6 @@ namespace args
         }
     };
 
-    /** An argument-accepting flag class
-     * 
-     * \tparam T the type to extract the argument as
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     */
     template <
         typename T,
         typename Reader = ValueReader>
@@ -3417,54 +2944,37 @@ namespace args
                 value = defaultValue;
             }
 
-            /** Get the value
-             */
             T &Get() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T &operator *() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             const T &operator *() const noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T *operator ->() noexcept
             {
                 return &value;
             }
 
-            /** Get the value
-             */
             const T *operator ->() const noexcept
             {
                 return &value;
             }
 
-            /** Get the default value
-             */
             const T &GetDefault() noexcept
             {
                 return defaultValue;
             }
     };
 
-    /** An optional argument-accepting flag class
-     *
-     * \tparam T the type to extract the argument as
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     */
     template <
         typename T,
         typename Reader = ValueReader>
@@ -3509,12 +3019,6 @@ namespace args
             }
     };
 
-    /** A variadic arguments accepting flag class
-     *
-     * \tparam T the type to extract the argument as
-     * \tparam List the list type that houses the values
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     */
     template <
         typename T,
         template <typename...> class List = detail::vector,
@@ -3581,29 +3085,21 @@ namespace args
                 return values;
             }
 
-            /** Get the value
-             */
             List<T> &operator *() noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             const List<T> &operator *() const noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             List<T> *operator ->() noexcept
             {
                 return &values;
             }
 
-            /** Get the values
-             */
             const List<T> *operator ->() const noexcept
             {
                 return &values;
@@ -3629,7 +3125,7 @@ namespace args
                 return values.end();
             }
 
-            const_iterator end() const noexcept 
+            const_iterator end() const noexcept
             {
                 return values.end();
             }
@@ -3657,12 +3153,6 @@ namespace args
             }
     };
 
-    /** An argument-accepting flag class that pushes the found values into a list
-     * 
-     * \tparam T the type to extract the argument as
-     * \tparam List the list type that houses the values
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     */
     template <
         typename T,
         template <typename...> class List = detail::vector,
@@ -3714,36 +3204,26 @@ namespace args
                 values.insert(std::end(values), v);
             }
 
-            /** Get the values
-             */
             Container &Get() noexcept
             {
                 return values;
             }
 
-            /** Get the value
-             */
             Container &operator *() noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             const Container &operator *() const noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             Container *operator ->() noexcept
             {
                 return &values;
             }
 
-            /** Get the values
-             */
             const Container *operator ->() const noexcept
             {
                 return &values;
@@ -3791,7 +3271,7 @@ namespace args
                 return values.end();
             }
 
-            const_iterator end() const noexcept 
+            const_iterator end() const noexcept
             {
                 return values.end();
             }
@@ -3802,13 +3282,6 @@ namespace args
             }
     };
 
-    /** A mapping value flag class
-     * 
-     * \tparam K the type to extract the argument as
-     * \tparam T the type to store the result as
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     * \tparam Map The Map type.  Should operate like std::map or std::unordered_map
-     */
     template <
         typename K,
         typename T,
@@ -3875,36 +3348,26 @@ namespace args
                 }
             }
 
-            /** Get the value
-             */
             T &Get() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T &operator *() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             const T &operator *() const noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T *operator ->() noexcept
             {
                 return &value;
             }
 
-            /** Get the value
-             */
             const T *operator ->() const noexcept
             {
                 return &value;
@@ -3917,14 +3380,6 @@ namespace args
             }
     };
 
-    /** A mapping value flag list class
-     * 
-     * \tparam K the type to extract the argument as
-     * \tparam T the type to store the result as
-     * \tparam List the list type that houses the values
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     * \tparam Map The Map type.  Should operate like std::map or std::unordered_map
-     */
     template <
         typename K,
         typename T,
@@ -3997,36 +3452,26 @@ namespace args
                 }
             }
 
-            /** Get the value
-             */
             Container &Get() noexcept
             {
                 return values;
             }
 
-            /** Get the value
-             */
             Container &operator *() noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             const Container &operator *() const noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             Container *operator ->() noexcept
             {
                 return &values;
             }
 
-            /** Get the values
-             */
             const Container *operator ->() const noexcept
             {
                 return &values;
@@ -4074,7 +3519,7 @@ namespace args
                 return values.end();
             }
 
-            const_iterator end() const noexcept 
+            const_iterator end() const noexcept
             {
                 return values.end();
             }
@@ -4085,11 +3530,6 @@ namespace args
             }
     };
 
-    /** A positional argument class
-     *
-     * \tparam T the type to extract the argument as
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     */
     template <
         typename T,
         typename Reader = ValueReader>
@@ -4125,36 +3565,26 @@ namespace args
                 matched = true;
             }
 
-            /** Get the value
-             */
             T &Get() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T &operator *() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             const T &operator *() const noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T *operator ->() noexcept
             {
                 return &value;
             }
 
-            /** Get the value
-             */
             const T *operator ->() const noexcept
             {
                 return &value;
@@ -4167,12 +3597,6 @@ namespace args
             }
     };
 
-    /** A positional argument class that pushes the found values into a list
-     * 
-     * \tparam T the type to extract the argument as
-     * \tparam List the list type that houses the values
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     */
     template <
         typename T,
         template <typename...> class List = detail::vector,
@@ -4230,36 +3654,26 @@ namespace args
                 return name + std::string("...");
             }
 
-            /** Get the values
-             */
             Container &Get() noexcept
             {
                 return values;
             }
 
-            /** Get the value
-             */
             Container &operator *() noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             const Container &operator *() const noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             Container *operator ->() noexcept
             {
                 return &values;
             }
 
-            /** Get the values
-             */
             const Container *operator ->() const noexcept
             {
                 return &values;
@@ -4302,7 +3716,7 @@ namespace args
                 return values.end();
             }
 
-            const_iterator end() const noexcept 
+            const_iterator end() const noexcept
             {
                 return values.end();
             }
@@ -4313,13 +3727,6 @@ namespace args
             }
     };
 
-    /** A positional argument mapping class
-     * 
-     * \tparam K the type to extract the argument as
-     * \tparam T the type to store the result as
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     * \tparam Map The Map type.  Should operate like std::map or std::unordered_map
-     */
     template <
         typename K,
         typename T,
@@ -4379,36 +3786,26 @@ namespace args
                 }
             }
 
-            /** Get the value
-             */
             T &Get() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T &operator *() noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             const T &operator *() const noexcept
             {
                 return value;
             }
 
-            /** Get the value
-             */
             T *operator ->() noexcept
             {
                 return &value;
             }
 
-            /** Get the value
-             */
             const T *operator ->() const noexcept
             {
                 return &value;
@@ -4421,14 +3818,6 @@ namespace args
             }
     };
 
-    /** A positional argument mapping list class
-     * 
-     * \tparam K the type to extract the argument as
-     * \tparam T the type to store the result as
-     * \tparam List the list type that houses the values
-     * \tparam Reader The functor type used to read the argument, taking the name, value, and destination reference with operator(), and returning a bool (if ARGS_NOEXCEPT is defined)
-     * \tparam Map The Map type.  Should operate like std::map or std::unordered_map
-     */
     template <
         typename K,
         typename T,
@@ -4502,36 +3891,26 @@ namespace args
                 }
             }
 
-            /** Get the value
-             */
             Container &Get() noexcept
             {
                 return values;
             }
 
-            /** Get the value
-             */
             Container &operator *() noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             const Container &operator *() const noexcept
             {
                 return values;
             }
 
-            /** Get the values
-             */
             Container *operator ->() noexcept
             {
                 return &values;
             }
 
-            /** Get the values
-             */
             const Container *operator ->() const noexcept
             {
                 return &values;
@@ -4579,7 +3958,7 @@ namespace args
                 return values.end();
             }
 
-            const_iterator end() const noexcept 
+            const_iterator end() const noexcept
             {
                 return values.end();
             }

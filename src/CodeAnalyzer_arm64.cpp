@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "CodeAnalyzer.h"
 #include "DartApp.h"
 #include "VarValue.h"
@@ -8,7 +7,6 @@
 
 #ifndef NO_CODE_ANALYSIS
 
-// auto revert ASM iterator to the current when pattern does not match or an exception occurs
 class InsnMarker
 {
 public:
@@ -54,11 +52,8 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 	intptr_t idx = dart::ObjectPool::IndexFromOffset(offset);
 	auto& pool = app.GetObjectPool();
 	auto objType = pool.TypeAt(idx);
-	// see how the EntryType is handled from vm/object_service.cc - ObjectPool::PrintJSONImpl()
 	if (objType == dart::ObjectPool::EntryType::kTaggedObject) {
-		//val = (uintptr_t)pool.ObjectAt(idx);
 		auto ptr = pool.ObjectAt(idx);
-		// Smi is special case. Have to handle first
 		if (!ptr.IsHeapObject()) {
 			return new VarInteger(dart::RawSmiValue(dart::Smi::RawCast(ptr)), dart::kSmiCid);
 		}
@@ -70,10 +65,7 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		if (obj.IsString())
 			return new VarString(dart::String::Cast(obj).ToCString());
 
-		// use TypedData or TypedDataBase ?
 		if (obj.IsTypedData()) {
-			//dart::kTypedDataInt32ArrayCid;
-			//auto& data = dart::TypedData::Cast(obj);
 			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 		}
 
@@ -98,25 +90,19 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 			const auto& field = dart::Field::Cast(obj);
 			auto dartCls = app.GetClass(field.Owner().untag()->id());
 			auto dartField = dartCls->FindField(field.TargetOffset());
-			//auto dartField = app.GetStaticField(field.TargetOffset());
 			ASSERT(dartField);
 			return new VarField(*dartField);
 		}
 		case dart::kArrayCid:
 		case dart::kImmutableArrayCid:
 			return new VarArray(dart::Array::Cast(obj).ptr());
-		// should function and closure be their var types?
 		case dart::kFunctionCid:
 		case dart::kClosureCid:
 		case dart::kConstMapCid:
-			// TODO: map
 		case dart::kConstSetCid:
-			// TODO: set
 			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 #ifdef HAS_RECORD_TYPE
 		case dart::kRecordCid: {
-			// temporary expression for Record object (need full object for analysis)
-			//const auto& rec = dart::Record::Cast(obj);
 			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 		}
 #endif
@@ -149,9 +135,8 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		case dart::kInt32x4Cid:
 		case dart::kFloat32x4Cid:
 		case dart::kFloat64x2Cid:
-			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId()); 
+			return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 		case dart::kLibraryPrefixCid:
-			// TODO: handle LibraryPrefix object
 		case dart::kInstanceCid:
 			return new VarInstance(app.GetClass(dart::kInstanceCid));
 		}
@@ -165,8 +150,6 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		}
 
 		throw std::runtime_error("unhandle object class in getPoolObject");
-		//auto txt = std::format("XXX: {}", obj.ToCString());
-		//return new VarExpression(txt);
 	}
 	else if (objType == dart::ObjectPool::EntryType::kImmediate) {
 		auto imm = pool.RawValueAt(idx);
@@ -175,7 +158,6 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 		return new VarInteger(imm, VarValue::NativeInt);
 	}
 	else if (objType == dart::ObjectPool::EntryType::kNativeFunction) {
-		//val = pool.RawValueAt(idx);
 		throw std::runtime_error("getting native function pool object from Dart code");
 	}
 	else {
@@ -197,10 +179,6 @@ static inline void handleExtraDecompressPointer(AsmIterator& insn, arm64_reg reg
 	++insn;
 }
 
-// Handle leave-frame restore patterns for newer Dart ARM64 codegen.
-// Accepted patterns:
-// - ldp fp, lr, [sp], #16
-// - mov tmp, fp/x29 ; ldr fp, [tmp], #8
 static bool tryConsumeLeaveFrameRestore(AsmIterator& insn)
 {
 	if (insn.id() == ARM64_INS_LDP) {
@@ -216,7 +194,6 @@ static bool tryConsumeLeaveFrameRestore(AsmIterator& insn)
 		return true;
 	}
 
-	// New compatibility path: tmp must be proven from fp immediately before ldr.
 	if (insn.id() == ARM64_INS_MOV && insn.ops(1).type == ARM64_OP_REG &&
 		(insn.ops(1).reg == CSREG_DART_FP || insn.ops(1).reg == ARM64_REG_X29))
 	{
@@ -243,7 +220,6 @@ struct ILResult {
 	cs_insn* lastIns{ nullptr };
 	std::unique_ptr<ILInstr> il;
 	uint64_t NextAddress() const { return lastIns->address + lastIns->size; }
-	// TODO: ASSERT(il->Kind())
 	template <typename T, typename = std::enable_if<std::is_base_of<ILInstr, T>::value>>
 	T* get() { return reinterpret_cast<T*>(il.get()); }
 };
@@ -260,7 +236,6 @@ public:
 
 	void asm2il();
 
-	// returns an instruction after the prologue
 	void handlePrologue(AsmIterator& insItr, uint64_t endPrologueAddr);
 	std::tuple<A64::Register, A64::Register> unboxParam(AsmIterator& insn, A64::Register expectedSrcReg = A64::Register{});
 	void handleFixedParameters(AsmIterator& insn, arm64_reg paramCntReg, int paramCnt = 0);
@@ -303,7 +278,6 @@ public:
 	std::unique_ptr<ILInstr> processLoadStore(AsmIterator& insn);
 
 	struct ObjectPoolInstr {
-		// dstReg is srcReg when isWrite is true
 		A64::Register dstReg;
 		VarItem item{};
 		bool isWrite;
@@ -313,7 +287,6 @@ public:
 private:
 	void setAsmTextDataPool(uint64_t addr, uint64_t offset) {
 		auto& asm_text = fnInfo->asmTexts.AtAddr(addr);
-		// TODO: NativeDouble and NativeInt
 		asm_text.dataType = AsmText::PoolOffset;
 		asm_text.poolOffset = offset;
 	}
@@ -373,7 +346,6 @@ FunctionAnalyzer::ObjectPoolInstr FunctionAnalyzer::getObjectPoolInstruction(Asm
 	A64::Register dstReg;
 	InsnMarker marker(insn);
 	if (insn.id() == ARM64_INS_LDR) {
-		// PP offset less than 12 bits
 		if (insn.ops(1).mem.base == CSREG_DART_PP && insn.ops(1).mem.index == ARM64_REG_INVALID) {
 			offset = insn.ops(1).mem.disp;
 			dstReg = A64::Register{ insn.ops(0).reg };
@@ -381,9 +353,7 @@ FunctionAnalyzer::ObjectPoolInstr FunctionAnalyzer::getObjectPoolInstruction(Asm
 		}
 	}
 	else if (insn.id() == ARM64_INS_ADD) {
-		// special case from ARM64 because true and false are loaded from NULL instead of Object Pool
 		if (insn.ops(1).reg == CSREG_DART_NULL) {
-			// In Assembler::LoadObjectHelper() of arm64 only. load true and false from null
 			ASSERT(insn.ops(2).type == ARM64_OP_IMM);
 			const auto offset = insn.ops(2).imm;
 			bool val;
@@ -417,8 +387,6 @@ FunctionAnalyzer::ObjectPoolInstr FunctionAnalyzer::getObjectPoolInstruction(Asm
 				offset = base + insn.ops(2).mem.disp;
 			}
 			else if (insn.id() == ARM64_INS_ADD) {
-				// use when loading pair from object pool (local 2 entries)
-				// see it for UnlinkedCall by the next entry is the jump address
 				INSN_ASSERT(insn.ops(2).type == ARM64_OP_IMM);
 				offset = base + insn.ops(2).imm;
 			}
@@ -435,10 +403,6 @@ FunctionAnalyzer::ObjectPoolInstr FunctionAnalyzer::getObjectPoolInstruction(Asm
 		}
 	}
 	else if (insn.id() == ARM64_INS_MOV) {
-		// more than 20 bits (never seen it)
-		// MOV X5, #offset_low
-		// MOVK X5, #offset_high LSL#16
-		// LDR X6, [X27,X5]
 		const auto offset_reg = insn.ops(0).reg;
 		offset = insn.ops(1).imm;
 		++insn;
@@ -461,7 +425,6 @@ FunctionAnalyzer::ObjectPoolInstr FunctionAnalyzer::getObjectPoolInstruction(Asm
 		}
 	}
 	else if (insn.id() == ARM64_INS_STR) {
-		// PP offset less than 12 bits (for store)
 		if (insn.ops(1).mem.base == CSREG_DART_PP && insn.ops(1).mem.index == ARM64_REG_INVALID) {
 			offset = insn.ops(1).mem.disp;
 			dstReg = A64::Register{ insn.ops(0).reg };
@@ -551,7 +514,6 @@ std::unique_ptr<CheckStackOverflowInstr> FunctionAnalyzer::processCheckStackOver
 		const auto ins0_addr = insn.address();
 		++insn;
 
-		// cmp SP, TMP
 INSN_ASSERT(insn.id() == ARM64_INS_CMP);
 INSN_ASSERT(insn.ops(0).reg == CSREG_DART_SP);
 INSN_ASSERT(insn.ops(1).reg == CSREG_DART_TMP);
@@ -570,13 +532,10 @@ if (cc == ARM64_CC_HI) {
 	++insn;
 }
 else {
-	// b.ls #overflow_target
 	INSN_ASSERT(cc == ARM64_CC_LS);
-	//FATAL("unexpect branch condition for CheckStackOverflow");
 }
 
 if (target != 0) {
-	// the dart compiler always put slow path at the end of function after "ret"
 	INSN_ASSERT(target < dartFn->AddressEnd() && target >= insn.address());
 	if (fnInfo->firstCheckStackOverflowAddr == 0)
 		fnInfo->firstCheckStackOverflowAddr = ins0_addr;
@@ -589,16 +548,10 @@ if (target != 0) {
 
 std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(AsmIterator& insn)
 {
-	// CCallInstr::EmitNativeCode()
-	// Note: since Dart 3.5, CCallInstr::EmitNativeCode() is removed
 	if (insn.id() == ARM64_INS_AND && insn.ops(0).reg == CSREG_DART_SP && insn.ops(1).reg == CSREG_DART_SP && insn.ops(2).imm == 0xfffffffffffffff0) {
-		// previous IL must be EnterFrame
-		//INSN_ASSERT(fnInfo->LastIL()->Kind() == ILInstr::EnterFrame);
-		// TODO: THR::call_native_through_safepoint_entry_point case and merge AllocStack IL to EnterFrame IL
 		if (fnInfo->LastIL()->Kind() == ILInstr::EnterFrame) {
 			InsnMarker marker(insn);
 			++insn;
-			// LeafRuntimeScope::Call()
 			if (insn.id() == ARM64_INS_MOV && insn.ops(0).reg == ARM64_REG_SP && insn.ops(1).reg == CSREG_DART_SP) {
 				++insn;
 
@@ -638,22 +591,18 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 				INSN_ASSERT(insn.ops(2).imm == 1 && insn.ops(2).shift.type == ARM64_SFT_LSL && insn.ops(2).shift.value == 12);
 				++insn;
 
-				// leave frame
 				auto il = processLeaveFrameInstr(insn);
 				INSN_ASSERT(il);
 
 				INSN_ASSERT(GetThreadLeafFunction(thr_offset));
 
-				// remove previous EnterFrame
 				fnInfo->RemoveLastIL();
 
 				return std::make_unique<CallLeafRuntimeInstr>(insn.Wrap(marker.Take()), thr_offset);
 			}
 		}
 	}
-	// weird case
-	// it should be easier to detect THR register if varaible tracking is fully implemented
-	else if ((insn.id() == ARM64_INS_MOV && insn.ops(1).reg == CSREG_DART_THR) || 
+	else if ((insn.id() == ARM64_INS_MOV && insn.ops(1).reg == CSREG_DART_THR) ||
 		(insn.id() == ARM64_INS_LDR && GetThreadLeafFunction(insn.ops(1).mem.disp) && insn.ops(1).mem.base != CSREG_DART_PP && insn.ops(1).mem.disp > dart::Thread::AllocateHandle_entry_point_offset()))
 	{
 		InsnMarker marker(insn);
@@ -667,7 +616,6 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 			}
 		}
 
-		// LDR instruction
 		const auto thr_offset = insn.ops(1).mem.disp;
 		const A64::Register tmp_target_reg = insn.ops(0).reg;
 		++insn;
@@ -678,9 +626,6 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 		while (true) {
 			auto il = processMoveRegInstr(insn);
 			if (!il) {
-				// Dart 3.11+ may emit an unscaled load from the caller frame
-				// (e.g., ldur x2, [x29, #-8]) to reload a parameter before the
-				// leaf runtime call. It is not a register move, so skip it.
 				if ((insn.id() == ARM64_INS_LDR || insn.id() == ARM64_INS_LDUR) && insn.ops(1).mem.base == CSREG_DART_FP) {
 					++insn;
 					continue;
@@ -695,16 +640,13 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 			}
 			else if (il->srcReg == tmp_target_reg) {
 				INSN_ASSERT(il->dstReg == A64::Register::R9);
-				//const auto call_target_reg = insn.ops(0).reg;
 			}
 			else {
-				// moving for setting up call paramaeters
 				movILs.push_back(std::move(il));
 			}
 		}
 		const auto call_target_reg = ARM64_REG_X9;
 
-		// save fp to stack
 		INSN_ASSERT(insn.id() == ARM64_INS_STR && insn.writeback());
 		INSN_ASSERT(insn.ops(0).reg == CSREG_DART_FP);
 		INSN_ASSERT(insn.ops(1).mem.base == CSREG_DART_SP && insn.ops(1).mem.disp == -8);
@@ -731,7 +673,6 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 		INSN_ASSERT(insn.ops(1).reg == CSREG_DART_SP);
 		++insn;
 
-		// since Dart 3.5, compiler save call target to THR::vm_tag (similar to LeafRuntimeScope::Call())
 		bool save_to_vm_tag = false;
 		if (insn.id() == ARM64_INS_STR) {
 			INSN_ASSERT(insn.ops(0).reg == call_target_reg);
@@ -739,7 +680,7 @@ std::unique_ptr<CallLeafRuntimeInstr> FunctionAnalyzer::processCallLeafRuntime(A
 			++insn;
 			save_to_vm_tag = true;
 		}
-		
+
 		INSN_ASSERT(insn.id() == ARM64_INS_BLR);
 		INSN_ASSERT(insn.ops(0).reg == call_target_reg);
 		++insn;
@@ -800,7 +741,6 @@ StoreLocalResult FunctionAnalyzer::handleStoreLocal(AsmIterator& insn, arm64_reg
 	if (fnInfo->stackSize > 0x100 && insn.id() == ARM64_INS_MOVN) {
 		offset = insn.ops(1).imm << insn.ops(1).shift.value;
 		offset = ~offset;
-		// Dart use movn for setting offset only if the offset is less than -0x100
 		if (offset < -0x100)
 			strWithRegOffset();
 	}
@@ -828,8 +768,6 @@ void FunctionAnalyzer::handlePrologue(AsmIterator& insn, uint64_t endPrologueAdd
 	{
 		auto ilEnter = processEnterFrameInstr(insn);
 		if (!ilEnter) {
-			// no EnterFrame at a beginning of function. likely to be leaf function.
-			// TODO:
 			return;
 		}
 		fnInfo->AddIL(std::move(ilEnter));
@@ -838,7 +776,6 @@ void FunctionAnalyzer::handlePrologue(AsmIterator& insn, uint64_t endPrologueAdd
 	{
 		auto ilAlloc = processAllocateStackInstr(insn);
 		if (!ilAlloc) {
-			// no local variable (very rare)
 			return;
 		}
 		fnInfo->AddIL(std::move(ilAlloc));
@@ -847,7 +784,6 @@ void FunctionAnalyzer::handlePrologue(AsmIterator& insn, uint64_t endPrologueAdd
 	bool hasPrologue = false;
 #ifdef HAS_INIT_ASYNC
 	if (fnInfo->stackSize) {
-		// prologue for processing function arguments
 		fnInfo->InitVars();
 		fnInfo->InitState();
 		try {
@@ -869,12 +805,9 @@ void FunctionAnalyzer::handlePrologue(AsmIterator& insn, uint64_t endPrologueAdd
 	}
 #endif
 
-	// below check is very useful for checking analyzing prologue because it is correct in most case
 	if (hasPrologue && endPrologueAddr != 0 && endPrologueAddr != insn.address()) {
-		//std::cerr << std::format("endPrologueAddr != insn.address(), {:#x} != {:#x}\n", endPrologueAddr, insn.address());
 	}
 
-	// Dart always check stack overflow if allocating stack instruction is emitted
 	auto ilStack = processCheckStackOverflowInstr(insn);
 	if (ilStack) {
 		fnInfo->AddIL(std::move(ilStack));
@@ -882,11 +815,9 @@ void FunctionAnalyzer::handlePrologue(AsmIterator& insn, uint64_t endPrologueAdd
 }
 
 enum FunctionVarTypeId : int32_t {
-	// for copying named parameters
 	VtNameBegin = -100,
 	VtNameParamCnt,
 	VtNameParamName,
-	//VtNameCurrParamPos,
 	VtNameCurrParamPosSmi,
 	VtNameCurrParamOffset,
 	vtNameArgIdx,
@@ -898,9 +829,7 @@ std::tuple<A64::Register, A64::Register> FunctionAnalyzer::unboxParam(AsmIterato
 	A64::Register srcReg;
 	A64::Register dstReg;
 
-	//dart::Double::value_offset();
 	if (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.disp == AOT_Double_value_offset - dart::kHeapObjectTag) {
-		// extract value from Double object
 		dstReg = A64::Register{ insn.ops(0).reg };
 		if (!dstReg.IsDecimal())
 			return { A64::Register{}, A64::Register{} };
@@ -914,7 +843,6 @@ std::tuple<A64::Register, A64::Register> FunctionAnalyzer::unboxParam(AsmIterato
 		auto il = processLoadInt32FromBoxOrSmiInstrFromSrcReg(insn, expectedSrcReg);
 		if (!il)
 			return { A64::Register{}, A64::Register{} };
-		// unbox from srcReg to dstReg
 		srcReg = il->srcObjReg;
 		dstReg = il->dstReg;
 	}
@@ -926,22 +854,16 @@ void FunctionAnalyzer::handleFixedParameters(AsmIterator& insn, arm64_reg paramC
 {
 	if (paramCnt == 0)
 		paramCnt = INT_MAX;
-	// to get the positional parameter, the pointer is calculated from FP by skipping all optional parameter (with previous calculation)
-	// then, load the parameter with LDR instruction with offset same as normal function parameter.
 	for (auto i = 0; i < paramCnt; i++) {
-		// don't know why some function has only one fixed positional param but the value is 2
 		if (insn.id() != ARM64_INS_ADD)
 			break;
 		INSN_ASSERT(insn.ops(1).reg == CSREG_DART_FP);
-		// shift only 2 because the number of parameter is Smi (tagged)
 		INSN_ASSERT(ToCapstoneReg(insn.ops(2).reg) == paramCntReg && insn.ops(2).ext == ARM64_EXT_SXTW && insn.ops(2).shift.value == 2);
 		const auto tmpReg = insn.ops(0).reg;
 		++insn;
 
 		INSN_ASSERT(insn.id() == ARM64_INS_LDR);
-		//INSN_ASSERT(insn.ops(0).reg == tmpReg); // ops[0] might be decimal
-		// because the number of positional param might be wrong. offset cannot be calcualted.
-		INSN_ASSERT(insn.ops(1).mem.base == tmpReg);//&& insn.ops(1).mem.disp == (posParamCnt - i - 1 + 2) * sizeof(void*)); // +2 for saved fp,lr
+		INSN_ASSERT(insn.ops(1).mem.base == tmpReg);
 		const auto valReg = insn.ops(0).reg;
 		++insn;
 
@@ -949,7 +871,6 @@ void FunctionAnalyzer::handleFixedParameters(AsmIterator& insn, arm64_reg paramC
 		auto val = fnInfo->Vars()->ValParam(fnInfo->params.NumParam());
 		fnInfo->State()->SetRegister(valReg, val);
 
-		// the parameter value might be saved to stack as if it is a local variable but with fixed negative offset from FP
 		const auto storeRes = handleStoreLocal(insn, valReg);
 		if (storeRes.fpOffset != 0) {
 			fnInfo->State()->SetLocal(storeRes.fpOffset, val);
@@ -959,26 +880,14 @@ void FunctionAnalyzer::handleFixedParameters(AsmIterator& insn, arm64_reg paramC
 	}
 
 	fnInfo->params.numFixedParam = fnInfo->params.NumParam();
-	// TODO:
-	// there is a case a function cannot matching pattern. so num fixed param is 0 even it is not
 	if (!dartFn->IsStatic() && fnInfo->params.numFixedParam > 0) {
-		// class method. first parameter is "this"
 		fnInfo->params[0].name = "this";
-		fnInfo->params[0].type = dartFn->Class().DeclarationType(); // TODO: class with type arguments (generic class)
+		fnInfo->params[0].type = dartFn->Class().DeclarationType();
 	}
 }
 
 void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm64_reg optionalParamCntReg)
 {
-	// basically, it is a loop of checking a number of parameter and loading values
-	// if num_param < 1 (cmp and b.lt)
-	//   jmp to all default values
-	// if num_param < 2
-	//   load first param and default values
-	// ...
-	//   all params are passed and load them
-	// jmp to storing to stack
-	// load all default values
 	int i = 0;
 	std::vector<int64_t> missingBranchTargets;
 	while (insn.id() == ARM64_INS_CMP) {
@@ -987,7 +896,6 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 		++insn;
 
 		if (insn.IsBranch(ARM64_CC_GE)) {
-			// special case. parameters are not used.
 			const auto defaultValueTarget = insn.ops(0).imm;
 			INSN_ASSERT(defaultValueTarget == insn.NextAddress());
 			for (const auto missingTarget : missingBranchTargets) {
@@ -1003,16 +911,12 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 		missingBranchTargets.push_back(defaultValueTarget);
 		++insn;
 
-		// parameter might not be used and no loading value
 		if (insn.id() == ARM64_INS_ADD && insn.ops(1).reg == CSREG_DART_FP) {
-			// shift only 2 because the number of parameter is Smi (tagged)
 			INSN_ASSERT(ToCapstoneReg(insn.ops(2).reg) == optionalParamCntReg && insn.ops(2).ext == ARM64_EXT_SXTW && insn.ops(2).shift.value == 2);
 			const auto tmpReg = insn.ops(0).reg;
 			++insn;
 
-			// LDUR is used when offset is negative
 			INSN_ASSERT(insn.id() == ARM64_INS_LDR || insn.id() == ARM64_INS_LDUR);
-			//INSN_ASSERT(insn.ops(0).reg == tmpReg); // ops[0] might be decimal
 			INSN_ASSERT(insn.ops(1).mem.base == tmpReg && insn.ops(1).mem.disp == 8 * (1 - i));
 			const auto valReg = insn.ops(0).reg;
 			fnInfo->State()->ClearRegister(tmpReg);
@@ -1021,7 +925,6 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 			fnInfo->params.add(FnParamInfo{ A64::Register{ valReg } });
 			++insn;
 
-			// the parameter value might be saved to stack as if it is a local variable but with fixed negative offset from FP
 			const auto storeRes = handleStoreLocal(insn, valReg);
 			if (storeRes.fpOffset != 0) {
 				fnInfo->State()->SetLocal(storeRes.fpOffset, val);
@@ -1035,9 +938,7 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 	}
 
 	if (!missingBranchTargets.empty()) {
-		// all params are passed
 		while (true) {
-			// might unbox parameters (int, double) to native value
 			const auto& [dstReg, srcReg] = unboxParam(insn);
 			if (!dstReg.IsSet())
 				break;
@@ -1049,13 +950,10 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 			param.valReg = dstReg;
 		}
 
-		// might be moved to another register
 		while (!insn.IsBranch()) {
 			INSN_ASSERT(insn.id() == ARM64_INS_MOV);
 			INSN_ASSERT(insn.ops(0).type == ARM64_OP_REG && insn.ops(1).type == ARM64_OP_REG && insn.ops(1).reg != CSREG_DART_NULL);
 			const auto srcReg = A64::Register{ insn.ops(1).reg };
-			//auto found = fnInfo->params.movValReg(A64::Register{ insn.ops(0).reg }, srcReg);
-			//INSN_ASSERT(found);
 			auto valParam = fnInfo->State()->MoveRegister(insn.ops(0).reg, srcReg);
 			INSN_ASSERT(valParam);
 			++insn;
@@ -1063,25 +961,18 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 		const auto storingBranchTarget = insn.ops(0).imm;
 		++insn;
 
-		// skip branches that only for missing some parameters to missing all parameters
 		const auto num_optional_param = missingBranchTargets.size();
 		while (insn.address() != missingBranchTargets.front()) {
 			++insn;
 		}
 
-		// default values (missing all parameters branch)
-		// it is difficult to check dstReg without optParam2 variable because
-		//   there might moving register after loading default value
-		// the proper way is another state for this branch
 		std::vector<FnParamInfo> optParams2;
 		while (insn.address() < storingBranchTarget) {
-			// might be load from PP, mov from constant, mov for moving register
 			auto ilValue = processLoadValueInstr(insn);
 			if (ilValue) {
 				optParams2.push_back(FnParamInfo{ ilValue->dstReg, ilValue->val.TakeValue() });
 			}
 			else if (insn.id() == ARM64_INS_MOV) {
-				// moving register
 				INSN_ASSERT(insn.ops(0).type == ARM64_OP_REG && insn.ops(1).type == ARM64_OP_REG);
 				const auto srcReg = A64::Register{ insn.ops(1).reg };
 				auto itr = std::find_if(optParams2.begin(), optParams2.end(), [&](auto const& param) { return param.valReg == srcReg; });
@@ -1095,7 +986,6 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 		}
 
 		INSN_ASSERT(optParams2.size() <= fnInfo->params.NumOptionalParam());
-		// Note: optParams2 MUST be ordered same as previous steps but some parameter might have no default value (required or unused)
 		for (int i = fnInfo->params.numFixedParam, j = 0; i < fnInfo->params.NumParam(); i++) {
 			if (fnInfo->params[i].valReg.IsSet()) {
 				INSN_ASSERT(fnInfo->State()->GetValue(optParams2[j].valReg)->AsParam()->idx == i);
@@ -1119,27 +1009,19 @@ void FunctionAnalyzer::handleOptionalPositionalParameters(AsmIterator& insn, arm
 
 void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_reg paramCntReg)
 {
-	// check for named parameters case
-	// load the first named parameter name from ArgumentsDescriptor (generated code uses constant for access first named parameter)
 	if (!(insn.id() == ARM64_INS_LDUR && fnInfo->State()->GetValue(insn.ops(1).reg) == fnInfo->Vars()->ValArgsDesc() && insn.ops(1).mem.disp >= AOT_ArgumentsDescriptor_first_named_entry_offset - dart::kHeapObjectTag))
 		return;
 
 	VarValue valNameParamCnt(VtNameParamCnt);
 	VarValue valNameParamName(VtNameParamName);
-	//VarValue valNameCurrParamPos(VtNameCurrParamPos);
 	VarValue valNameCurrParamPosSmi(VtNameCurrParamPosSmi);
 	VarValue valNameCurrParamOffset(VtNameCurrParamOffset);
 	VarValue valNameArgIdx(vtNameArgIdx);
 
-	// names of the optional parameters are alphabetically sorted
-	// so the order might not be same as written code
-	int nameParamCnt = 0; // count only non-required named parameter
+	int nameParamCnt = 0;
 	bool isLastName = false;
 
-	// load named parameter value (name or position) from ArgumentsDescriptor with currParamOffset variable
-	// return -1 if it is not loaded ArgumentsDescriptor
 	const auto loadNamedParamValue = [&](int expectedOffset, VarValue* val) {
-		// first instruction must be "add dstReg, offsetReg, #offset"
 		if (insn.id() == ARM64_INS_ADD && fnInfo->State()->GetValue(insn.ops(1).reg) == &valNameCurrParamOffset) {
 			const auto offset = (int)insn.ops(2).imm;
 			if (offset == expectedOffset) {
@@ -1168,8 +1050,6 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 		return -1;
 	};
 
-	// load named parameter value (name or position) from ArgumentsDescriptor with known offset
-	// return -1 if it is not loaded ArgumentsDescriptor
 	const auto loadNamedParamValueKnownOffset = [&](int expectedOffset, VarValue* val) {
 		if (insn.id() == ARM64_INS_LDUR && fnInfo->State()->GetValue(insn.ops(1).reg) == fnInfo->Vars()->ValArgsDesc() &&
 			insn.ops(1).mem.disp >= AOT_ArgumentsDescriptor_first_named_entry_offset - dart::kHeapObjectTag)
@@ -1179,8 +1059,6 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 				AOT_ArgumentsDescriptor_name_offset - dart::kHeapObjectTag;
 
 			int offset = insn.ops(1).mem.disp - name_offset;
-			// there might be "required" named parameter but not used in a function
-			// then, the Dart compiler skips the parameter loading to the next parameter
 			while (offset >= AOT_ArgumentsDescriptor_named_entry_size) {
 				fnInfo->params.add(FnParamInfo{ "required" });
 				offset -= AOT_ArgumentsDescriptor_named_entry_size;
@@ -1199,40 +1077,12 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 		return -1;
 	};
 
-	// ## loop of checking name and loading value
-	// curr_param_pos = 0
-	// if argsDesc[curr_param_pos].name == "name1"
-	//    load argument position in stack from argsDesc[curr_param_pos].pos
-	//    load param value from stack (call arguments)
-	//    increment curr_param_pos
-	// else
-	//    load default value
-	// might store value into local variable
-	// ... if argsDesc[curr_param_pos].name == "name2"
-	// ...
-	// ## for "required" argument, there is no name check. psuedo code will be
-	// load argument position in stack from argsDesc[curr_param_pos].pos
-	// load param value from stack (call arguments)
-	// increment curr_param_pos
-	// ## the first name is handled specifically because curr_param_pos is known value
-	// ## the last name is a bit different too because no need for incrementing curr_param_pos
 
 	bool isRequired = false;
 	while (!isLastName) {
-		// load current parameter name from ArgumentsDescriptor
-		// the load code uses fixed offset of ArgumentsDescriptor if offset is known (first parameter), 
-		// if the parameter is "required", no parameter name comparison and also no default value branch
 		if (nameParamCnt) {
-			// load from currParamPosReg
-			// 0x4128dc: lsl  x5, x2, #1            ; make Smi
-			// 0x4128e0: lsl  w6, w5, #1            ; named pair index
-			// 0x4128e4: add  w7, w6, #8            ; add 4 (number of values before starting of named parameters)
-			// 0x4128e8: add  x16, x0, w7, sxtw #1  ; Smi to array offset
-			// 0x4128ec: ldur  w8, [x16, #0xf]      ; offset 0x10 because of TaggedObject and 2 headers
 
-			// if previous parameter is "required", only currParamPosSmi is used and updated. currParamPos is not used.
 			if (!isRequired) {
-				// make it be Smi
 				INSN_ASSERT(insn.id() == ARM64_INS_LSL);
 				INSN_ASSERT(fnInfo->State()->GetValue(insn.ops(1).reg) == fnInfo->Vars()->ValCurrNumNameParam());
 				INSN_ASSERT(insn.ops(2).imm == 1);
@@ -1240,23 +1090,19 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 				++insn;
 			}
 
-			// weird case. add 1 to currParamPosSmiReg. maybe this named parameter is not used and skip it (might be more than once).
 			while (insn.id() == ARM64_INS_ADD) {
 				INSN_ASSERT(fnInfo->State()->GetValue(insn.ops(1).reg) == &valNameCurrParamPosSmi);
-				INSN_ASSERT(insn.ops(2).imm == 2); // tagged value of 1
+				INSN_ASSERT(insn.ops(2).imm == 2);
 				fnInfo->State()->MoveRegister(insn.ops(0).reg, insn.ops(1).reg);
 				++insn;
 			}
 
-			// calculate the array index of current named parameter (multiply by 2 because of name and index pair)
 			INSN_ASSERT(insn.id() == ARM64_INS_LSL);
 			INSN_ASSERT(fnInfo->State()->GetValue(insn.ops(1).reg) == &valNameCurrParamPosSmi);
 			INSN_ASSERT(insn.ops(2).imm == 1);
 			fnInfo->State()->SetRegister(insn.ops(0).reg, &valNameCurrParamOffset);
 			++insn;
 
-			// calculate offset in ArgumentsDescriptor and load it (0x8 is for parameter name and 0xa is for parameter value index)
-			// if a parameter is required, this instruction is for loading parameter value index
 			const auto nameOffset = loadNamedParamValue(8, &valNameParamName);
 			if (nameOffset == 8)
 				isRequired = false;
@@ -1266,10 +1112,8 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 				INSN_ASSERT(false);
 		}
 		else {
-			// "required" might be at the first parameter
 			const auto nameOffset = loadNamedParamValueKnownOffset(AOT_ArgumentsDescriptor_name_offset, &valNameParamName);
 			if (nameOffset == AOT_ArgumentsDescriptor_name_offset) {
-				// known offset. first non "required" name
 				isRequired = false;
 			}
 			else if (nameOffset == AOT_ArgumentsDescriptor_position_offset) {
@@ -1282,12 +1126,9 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 			}
 		}
 
-		// if named parameter is "required", no fetching name for comparison
-		// compare the parameter name
 		std::string paramName;
 		int64_t nameMismatchAddr;
 		if (!isRequired) {
-			// get expected parameter name from PP
 			const auto objPoolInstr = getObjectPoolInstruction(insn);
 			INSN_ASSERT(objPoolInstr.dstReg == A64::TMP_REG);
 			INSN_ASSERT(objPoolInstr.item.ValueTypeId() == dart::kStringCid);
@@ -1298,7 +1139,6 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 			++insn;
 
 			if (insn.IsBranch(ARM64_CC_EQ)) {
-				// last named parameter and not used
 				const auto branchTarget = insn.ops(0).imm;
 				++insn;
 				INSN_ASSERT(branchTarget == insn.address());
@@ -1312,37 +1152,27 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 			++insn;
 		}
 		else {
-			paramName = "required"; // TODO: should be flag for "required" attribute
+			paramName = "required";
 			nameMismatchAddr = 0;
 		}
 
-		// matched parameter name branch. load the value from stack.
-		// Note: some parameter is not loaded at all (maybe not used)
 		auto doLoadValue = false;
 		if (nameParamCnt) {
-			// 0x412904: add  w2, w6, #0xa
-			// 0x412908: add  x16, x0, w2, sxtw #1
-			// 0x41290c: ldur  w6, [x16, #0xf]
 			const auto posOffset = loadNamedParamValue(0xa, &valNameArgIdx);
 			if (posOffset == 0xa)
 				doLoadValue = true;
 			else
-				INSN_ASSERT(posOffset == -1); // must not be load instruction
+				INSN_ASSERT(posOffset == -1);
 		}
 		else {
 			const auto posOffset = loadNamedParamValueKnownOffset(AOT_ArgumentsDescriptor_position_offset, &valNameArgIdx);
 			if (posOffset == AOT_ArgumentsDescriptor_position_offset)
 				doLoadValue = true;
 			else
-				INSN_ASSERT(posOffset == -1); // must not be load instruction
+				INSN_ASSERT(posOffset == -1);
 		}
 
-		// loading a function argument from stack with argIdxReg
 		if (doLoadValue) {
-			// fetch name parameter value
-			// 0x4128bc: sub  w4, w1, w2  ; total_param - args_idx
-			// 0x4128c0: add  x2, x29, w4, sxtw #2
-			// 0x4128c4: ldr  x2, [x2, #8]
 			INSN_ASSERT(insn.id() == ARM64_INS_SUB);
 			INSN_ASSERT(ToCapstoneReg(insn.ops(1).reg) == paramCntReg);
 			INSN_ASSERT(fnInfo->State()->GetValue(insn.ops(2).reg) == &valNameArgIdx);
@@ -1375,11 +1205,8 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 			fnInfo->params.add(FnParamInfo{ std::move(paramName) });
 		}
 
-		// for the first parameter name, this will be set with MOVZ (after unboxing)
 		if (nameParamCnt) {
-			// if this is not last named parameter, increment the param position (smi)
 			if (insn.id() == ARM64_INS_ADD) {
-				// 0x412920: add  w2, w5, #2
 				INSN_ASSERT(fnInfo->State()->GetValue(insn.ops(1).reg) == &valNameCurrParamPosSmi);
 				INSN_ASSERT(insn.ops(2).imm == 2);
 				fnInfo->State()->MoveRegister(insn.ops(0).reg, insn.ops(1).reg);
@@ -1390,7 +1217,6 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 			}
 		}
 
-		// unbox param for int and double
 		if (doLoadValue) {
 			const auto& [dstReg, srcReg] = unboxParam(insn, fnInfo->params.back().valReg);
 			if (dstReg.IsSet()) {
@@ -1402,9 +1228,7 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 		}
 
 		if (!isRequired) {
-			// Smi to native. only non first and last name do it
 			if (nameParamCnt && !isLastName) {
-				// 0x412924: sbfx  x5, x2, #1, #0x1f
 				if (insn.id() == ARM64_INS_SBFX) {
 					INSN_ASSERT(fnInfo->State()->GetValue(insn.ops(1).reg) == &valNameCurrParamPosSmi);
 					INSN_ASSERT(insn.ops(2).imm == 1 && insn.ops(3).imm == 0x1f);
@@ -1414,14 +1238,12 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 			}
 		}
 
-		// doing loop here because the moving value to another register can be in any order and multiple time
 		while (insn.id() == ARM64_INS_MOV && insn.ops(1).type == ARM64_OP_REG && insn.ops(1).reg != CSREG_DART_NULL) {
 			auto val = fnInfo->State()->MoveRegister(insn.ops(0).reg, insn.ops(1).reg);
 			INSN_ASSERT(val);
 			++insn;
 		}
 
-		// first non "required" parameter, set the parameter position value
 		if (!nameParamCnt && !isRequired) {
 			if (insn.IsMovz() && insn.ops(1).imm == fnInfo->params.NumOptionalParam()) {
 				fnInfo->State()->SetRegister(insn.ops(0).reg, fnInfo->Vars()->ValCurrNumNameParam());
@@ -1433,8 +1255,6 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 		}
 
 		if (!isRequired) {
-			// branch for skipping loading default value
-			// no skipping if no loading parameter value
 			const auto nextParamAddr = [&] {
 				if (doLoadValue || nameParamCnt == 0) {
 					INSN_ASSERT(insn.IsBranch());
@@ -1447,32 +1267,25 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 
 			if (nextParamAddr) {
 				if (nameMismatchAddr == nextParamAddr) {
-					// assume dead code
 					while (insn.address() < nextParamAddr)
 						++insn;
 					break;
 				}
 			}
 
-			// TODO: split state for match and mismatch branch, so all param can be tracked correctly
 			if (insn.id() == ARM64_INS_SBFX && insn.ops(2).imm == 1 && insn.ops(3).imm == 0x1f) {
-				// assume curr param pos Smi to native in default branch
 				++insn;
 			}
 
 			while (insn.id() == ARM64_INS_MOV && insn.ops(1).type == ARM64_OP_REG && insn.ops(1).reg != CSREG_DART_NULL) {
-				// don't move register on another branch
 				if (nextParamAddr == 0) {
 					auto val = fnInfo->State()->MoveRegister(insn.ops(0).reg, insn.ops(1).reg);
 					INSN_ASSERT(val);
 				}
-				// TODO: verify final register for valNameCurrParamPos (set when "nameParamCnt && !isLastName") in this branch 
-				//         is same as another branch
 
 				++insn;
 			}
 
-			// assign param position in case of first non "required" name in default branch (no passing this parameter)
 			const auto processAssignParamPos0 = [&] {
 				if (insn.IsMovz() && fnInfo->State()->GetValue(insn.ops(0).reg) == fnInfo->Vars()->ValCurrNumNameParam() && insn.ops(1).imm == fnInfo->params.NumOptionalParam() - 1) {
 					++insn;
@@ -1486,16 +1299,13 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 				foundAssignParamPos0 = processAssignParamPos0();
 			}
 
-			// load default value and setting paramPos can be any order
 			if (doLoadValue) {
-				// load default value
 				auto il = processLoadValueInstr(insn);
 				if (!il)
 					break;
 				INSN_ASSERT(fnInfo->State()->GetValue(il->dstReg)->AsParam()->idx == fnInfo->params.NumParam() - 1);
 				fnInfo->params.back().val = il->val.TakeValue();
 
-				// very weird case in Dart 3.2.3. duplicate loading value
 				if (nextParamAddr != 0 && insn.address() < nextParamAddr) {
 					auto min_diff = (!nameParamCnt && !isLastName && !foundAssignParamPos0) ? 4 : 0;
 					if (nextParamAddr - insn.address() > min_diff)
@@ -1511,7 +1321,6 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 		}
 
 		if (doLoadValue) {
-			// this value might be stored into a local variable
 			const auto storeRes = handleStoreLocal(insn);
 			if (storeRes.fpOffset != 0) {
 				auto val = fnInfo->State()->GetValue(storeRes.srcReg);
@@ -1519,12 +1328,9 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 				fnInfo->State()->SetLocal(storeRes.fpOffset, val);
 			}
 		}
-		// end of a named parameter
-		// count only non-required named parameter
 		if (!isRequired)
 			++nameParamCnt;
 
-		// extra check for end of named parameters
 		if (nameParamCnt) {
 			if (insn.id() != ARM64_INS_LSL) {
 				break;
@@ -1533,7 +1339,6 @@ void FunctionAnalyzer::handleOptionalNamedParameters(AsmIterator& insn, arm64_re
 	}
 
 	fnInfo->params.isNamedParam = true;
-	// remove all reference to temporary variables for loading named parameters
 	for (auto& reg : fnInfo->State()->regs) {
 		if (reg && reg->RawTypeId() > VtNameBegin && reg->RawTypeId() < VtNameEnd)
 			reg = nullptr;
@@ -1552,12 +1357,9 @@ void FunctionAnalyzer::handleArgumentsDescriptorTypeArguments(AsmIterator& insn)
 
 	const auto storeTypeArgLenRes = handleStoreLocal(insn, typeArgLenReg);
 	if (storeTypeArgLenRes.fpOffset != 0) {
-		// TODO: save type argument length to local variable
-		//storeTypeArgLenRes.fpOffset;
 	}
 
 	if (insn.id() == ARM64_INS_CBZ) {
-		// same as nop (why compiler does not remove it)
 		INSN_ASSERT(ToCapstoneReg(insn.ops(0).reg) == typeArgLenReg);
 		const auto contAddr = insn.ops(1).imm;
 		++insn;
@@ -1566,13 +1368,11 @@ void FunctionAnalyzer::handleArgumentsDescriptorTypeArguments(AsmIterator& insn)
 		return;
 	}
 
-	// if (typeArgLen == 0)
 	INSN_ASSERT(insn.id() == ARM64_INS_CBNZ);
 	INSN_ASSERT(ToCapstoneReg(insn.ops(0).reg) == typeArgLenReg);
 	const auto loadTypeArgAddr = insn.ops(1).imm;
 	++insn;
 
-	//   typeArg = null
 	INSN_ASSERT(insn.id() == ARM64_INS_MOV);
 	INSN_ASSERT(insn.ops(1).reg == CSREG_DART_NULL);
 	const auto typeArgReg = insn.ops(0).reg;
@@ -1582,8 +1382,6 @@ void FunctionAnalyzer::handleArgumentsDescriptorTypeArguments(AsmIterator& insn)
 	const auto contAddr = insn.ops(0).reg;
 	++insn;
 
-	// else
-	//   typeArgPos = ArgsDesc->typeArg
 	INSN_ASSERT(insn.address() == loadTypeArgAddr);
 	INSN_ASSERT(insn.id() == ARM64_INS_LDUR);
 	INSN_ASSERT(fnInfo->State()->GetValue(insn.ops(1).reg) == fnInfo->Vars()->ValArgsDesc() && insn.ops(1).mem.disp == AOT_ArgumentsDescriptor_size_offset - dart::kHeapObjectTag);
@@ -1612,21 +1410,15 @@ void FunctionAnalyzer::handleArgumentsDescriptorTypeArguments(AsmIterator& insn)
 		++insn;
 	}
 	fnInfo->typeArgumentReg = typeArgReg;
-	// as of now, track only function parameters, so clear the type argument register as if it is freed
 	fnInfo->State()->ClearRegister(fnInfo->typeArgumentReg);
 
 	INSN_ASSERT(insn.address() == contAddr);
 	if (insn.id() == ARM64_INS_CBNZ && ToCapstoneReg(insn.ops(0).reg) == typeArgLenReg) {
-		// function also contains type parameters with "extends"
-		//   if (typeArgLen == 0) typeArg_final = from_PP
-		//   else typeArg_final = typeArg
 		const auto elseAddr = insn.ops(1).imm;
 		++insn;
 
 		const auto objPoolInstr = getObjectPoolInstruction(insn);
 		INSN_ASSERT(objPoolInstr.item.ValueTypeId() == dart::kTypeArgumentsCid);
-		// TODO: make this function type parameter to extends from this value
-		//objPoolInstr.item.Get<VarTypeArgument>();
 		fnInfo->State()->ClearRegister(objPoolInstr.dstReg);
 
 		INSN_ASSERT(insn.IsBranch());
@@ -1644,11 +1436,9 @@ void FunctionAnalyzer::handleArgumentsDescriptorTypeArguments(AsmIterator& insn)
 		fnInfo->typeArgumentReg = finalTypeArgReg;
 	}
 
-	// as of now, track only function parameters, so clear the type argument register as if it is freed
 	fnInfo->State()->ClearRegister(fnInfo->typeArgumentReg);
 }
 
-// parameter registers are same as arm64 call convention exception R0 and R4 are reserved
 static const A64::Register allowedParameterRegisters[] = {
 	A64::Register::R1, A64::Register::R2, A64::Register::R3,
 	A64::Register::R5, A64::Register::R6, A64::Register::R7,
@@ -1669,12 +1459,7 @@ static bool isTmpForwardingRegister(A64::Register reg)
 
 void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 {
-	// since Dart 3.4, some function call might use register for passing parameters
-	// these parameter registers are always stored into stack before using
 
-	// assume there is only 2 cases
-	// - mov to dstReg
-	// - mov to TMP then mov to dstReg
 	struct TmpParamReg {
 		A64::Register reg;
 		int localOffset;
@@ -1682,12 +1467,10 @@ void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 	};
 	std::vector<TmpParamReg> paramRegs;
 	const auto getParamReg = [&](A64::Register reg) -> TmpParamReg& {
-		// check from dstReg first because it is the current owner
 		for (auto& param : paramRegs) {
 			if (param.dstReg == reg)
 				return param;
 		}
-		// next from srcReg in case of previous used
 		for (auto& param : paramRegs) {
 			if (param.reg == reg)
 				return param;
@@ -1696,8 +1479,6 @@ void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 		return paramRegs.back();
 	};
 
-	// Short-lived alias map for newer Dart ARM64 tmp register forwarding.
-	// The map is valid only in this local parameter shuffling window.
 	std::unordered_map<int32_t, A64::Register> aliases;
 	const auto clearAliases = [&] {
 		aliases.clear();
@@ -1720,9 +1501,7 @@ void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 	};
 
 	while (true) {
-		// Note: no need to check register is not defined before used because this function is called before any register is set
 		if (insn.id() == ARM64_INS_MOV && insn.ops(1).type == ARM64_OP_REG && insn.ops(1).reg != CSREG_DART_NULL) {
-			// src must be undefined
 			const A64::Register srcReg = insn.ops(1).reg;
 			const A64::Register dstReg = insn.ops(0).reg;
 			const auto resolvedSrcReg = resolveAlias(srcReg);
@@ -1731,21 +1510,17 @@ void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 			if (!isResolvedParamReg && !isResolvedTmpReg)
 				break;
 
-			// kill-on-overwrite for alias tracking
 			killAlias(dstReg);
 
 			if (isResolvedParamReg) {
 				auto& param = getParamReg(resolvedSrcReg);
 				if (param.dstReg.IsSet()) {
-					// dstReg is already set. if using same source, ignore them
-					// TODO: multiple dstReg
 					if (param.reg == resolvedSrcReg && (srcReg == resolvedSrcReg || param.dstReg == srcReg)) {
 						setAlias(dstReg, resolvedSrcReg);
 						++insn;
 						continue;
 					}
 					if (param.dstReg != srcReg && param.dstReg != resolvedSrcReg) {
-						// avoid propagating unconstrained aliases through unrelated shuffles
 						clearAliases();
 						break;
 					}
@@ -1754,14 +1529,12 @@ void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 				setAlias(dstReg, resolvedSrcReg);
 			}
 			else {
-				// keep forwarding alias only; no parameter binding until source is resolved.
 				setAlias(dstReg, resolvedSrcReg);
 			}
 
 			++insn;
 		}
 		else if (insn.id() == ARM64_INS_STUR && insn.ops(1).mem.base == CSREG_DART_FP && insn.ops(1).mem.disp < 0) {
-			// src must be undefined, but might be used with mov instruction
 			const A64::Register srcReg = insn.ops(0).reg;
 			const auto resolvedSrcReg = resolveAlias(srcReg);
 			if (fnInfo->State()->GetValue(srcReg) != nullptr || !isAllowedParameterRegister(resolvedSrcReg))
@@ -1774,7 +1547,6 @@ void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 			++insn;
 		}
 		else {
-			// Do not let alias map leak across calls/control-flow or unrelated instruction windows.
 			if (insn.id() == ARM64_INS_BL || insn.id() == ARM64_INS_BLR || insn.id() == ARM64_INS_RET || insn.IsBranch())
 				clearAliases();
 			else if (insn.op_count() > 0 && insn.ops(0).type == ARM64_OP_REG)
@@ -1785,43 +1557,26 @@ void FunctionAnalyzer::handleParameterRegisters(AsmIterator& insn)
 	clearAliases();
 
 	if (!paramRegs.empty()) {
-		// sort paramRegs first
 		std::ranges::sort(paramRegs, {}, &TmpParamReg::reg);
 
 		for (auto& tmpParam : paramRegs) {
-			// TODO: parameter argument MUST be used in order
 			const auto argIdx = fnInfo->params.numFixedParam;
 			auto val = fnInfo->Vars()->ValParam(argIdx);
-			// if src register is moved, just set value to dst register
 			if (tmpParam.localOffset != 0)
 				fnInfo->State()->SetLocal(tmpParam.localOffset, val);
 			fnInfo->State()->SetRegister(tmpParam.dstReg.IsSet() ? tmpParam.dstReg : tmpParam.reg, val);
-			// TODO: useless to set localOffset here
 			fnInfo->params.addFixedParam(FnParamInfo{ tmpParam.reg, tmpParam.dstReg, tmpParam.localOffset });
 		}
 
 		if (!dartFn->IsStatic() && paramRegs[0].reg == A64::Register::R1) {
-			// class method. first parameter is "this"
 			fnInfo->params[0].name = "this";
-			fnInfo->params[0].type = dartFn->Class().DeclarationType(); // TODO: class with type arguments (generic class)
+			fnInfo->params[0].type = dartFn->Class().DeclarationType();
 		}
 	}
 }
 
 std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParametersInstr(AsmIterator& insn, uint64_t endPrologueAddr)
 {
-	// reversing of PrologueBuilder::BuildPrologue() which compose of 3 functions
-	// - PrologueBuilder::BuildParameterHandling()
-	//   - fixed parameters
-	//   - optional parameters (positional or named)
-	// - PrologueBuilder::BuildClosureContextHandling()
-	// - PrologueBuilder::BuildTypeArgumentsHandling()
-	// this function is only called at prologue state
-	// some variable initialization might be inserted into between prologue instructions.
-	//   these ILs will be appended after Prologue IL even the assembly is before the prologue ends
-	// Note: with method extractors optmization (since Dart 3.4), arguments might pass via registers (R1, R2, R3).
-	//   now, only see in closure and async method.
-	// since Dart 3.5, compiler does not generate decompress pointer instruction for small int (such as parameter count)
 	auto optionalParamCntReg = ARM64_REG_INVALID;
 	auto firstParamReg = ARM64_REG_INVALID;
 	InsnMarker marker(insn);
@@ -1836,9 +1591,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 		}
 	};
 
-	// initialize synthetic :suspend_state
-	// it might be async or sync* function e.g. https://github.com/flutter/flutter/blob/3.16.5/packages/flutter/lib/src/widgets/overlay.dart#L305
-	// ref: compiler/backend/flow_graph_compiler_arm64.cc - FlowGraphCompiler::EmitPrologue()
 	const bool needSuspendState = [&] {
 		if (insn.id() == ARM64_INS_STUR && insn.ops(0).reg == CSREG_DART_NULL && insn.ops(1).mem.base == CSREG_DART_FP && insn.ops(1).mem.disp == -8) {
 			++insn;
@@ -1863,30 +1615,18 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 		if (dartFn->IsAsync())
 			INSN_ASSERT(needSuspendState);
 		else
-			; // TODO: it is sync* function
+			;
 
-		// very rare case, initialization here
 		if (insn.id() == ARM64_INS_MOV && insn.ops(1).reg == CSREG_DART_NULL) {
 			auto item = VarItem{ VarStorage::Immediate, new VarNull() };
 			fnInfo->Vars()->pending_ils.push_back(std::make_unique<LoadValueInstr>(AddrRange(insn.address(), insn.NextAddress()), A64::Register{insn.ops(0).reg}, std::move(item)));
 			++insn;
 		}
 
-		// saving function parameters is needed only for async function or optional parameters
-		// When there is an optional parameter, ArgumentDescriptor (r4) is always used for determining the number of optional parameters by
-		//   number_of_optional_params = ArgumentsDescriptor.count - number_of_fixed_params
-		// In case of async without optional parameters, the number of optional parameters is set by mov instruction
-		//   number_of_optional_params (r0) = 0
-		// but async function prologue might use ArgumentsDescriptor when a TypeArgument is needed
 		if (insn.IsMovz() && insn.ops(1).imm == 0) {
-			// async function without optional parameters
 			optionalParamCntReg = insn.ops(0).reg;
 			++insn;
 		}
-		// async function returns Future<R> template
-		//   there is also a case when setting fixed param count to 0 and using ArgumentsDescriptor (mov x1, x4)
-		//   e.g. package:flutter/src/foundation/_isolates_io.dart (compute function)
-		//   e.g. package:flutter/src/services/platform_channel.dart (compute MethodChannel::_invokeMethod)
 
 		handleParameterRegisters(insn);
 	}
@@ -1896,50 +1636,31 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 		if (dartFn->IsClosure()) {
 			handleInitialization();
 
-			// if no saving function arguments (no optional parameter), a first argument MUST be loaded first.
 			if (insn.id() == ARM64_INS_LDR && insn.ops(1).mem.base == CSREG_DART_FP && insn.ops(1).mem.disp > 0) {
 				const auto firstParamOffset = insn.ops(1).mem.disp;
-				// function might have multiple parameter but the function uses only last parameter
-				// so, below detection might be wrong
 				if (!mightBeFirstParamOffset(firstParamOffset))
 					return nullptr;
 				firstParamReg = insn.ops(0).reg;
-				// Note: this might not be first function argument
 				fnInfo->State()->SetRegister(A64::Register{ insn.ops(0).reg }, fnInfo->Vars()->ValParam(0));
-				//const int numParam = ((firstParamOffset - 0x10) / sizeof(void*)) + 1;
 				++insn;
 			}
 		}
 	}
 
-	// ArgumentsDescriptor is Dart array. Memory Layout
-	// - TaggedObject (8 bytes)
-	// - Array Type Arguments (Compress pointer 4 bytes), Array Length (Smi 4 bytes)
-	// - ArgumentsDescriptor
-	//   - type arguments length (Smi 4 bytes)
-	//   - count (Smi 4 bytes)
-	//   - size (Smi 4 bytes)
-	//   - positional count (Smi 4 bytes)
-	//   - first named param (String and argument index)
-	// load a number of parameters from ArgumentDescriptor (X0) to first free register (X1)
 	const auto argsDescReg = [&] {
 		auto argsDescReg = ARM64_REG_INVALID;
 		if (fnInfo->State()->GetValue(CSREG_ARGS_DESC) == nullptr) {
 			const auto storeArgsDescRes = handleStoreLocal(insn, CSREG_ARGS_DESC);
 			if (storeArgsDescRes.fpOffset != 0) {
-				// save ArgumentsDescriptor to stack
 				fnInfo->State()->SetLocal(storeArgsDescRes.fpOffset, fnInfo->Vars()->ValArgsDesc());
 				argsDescReg = CSREG_ARGS_DESC;
 			}
 
 			if (insn.id() == ARM64_INS_MOV && insn.ops(1).reg == CSREG_ARGS_DESC) {
-				// some function might use ARM64_REG_X1 even ARM64_REG_X0 is free
 				argsDescReg = insn.ops(0).reg;
-				//INSN_ASSERT(argsDescReg == ARM64_REG_X0 || argsDescReg == ARM64_REG_X1);
 				++insn;
 			}
 			else if (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.base == CSREG_ARGS_DESC) {
-				//std::cout << std::format("  !!! use ArgsDesc directory without moving !!! at {:#x}\n", insn.address());
 				argsDescReg = CSREG_ARGS_DESC;
 			}
 			if (argsDescReg != ARM64_REG_INVALID)
@@ -1953,22 +1674,16 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 
 	int fixedParamCnt = 0;
 	auto paramCntReg = ARM64_REG_INVALID;
-	// PrologueBuilder::BuildParameterHandling()
-	// it is used only when there is/are optional parameter(s) in a function arguments
 	if (optionalParamCntReg == ARM64_REG_INVALID && argsDescReg != ARM64_REG_INVALID) {
 		if (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.base == argsDescReg && insn.ops(1).mem.disp == AOT_ArgumentsDescriptor_count_offset - dart::kHeapObjectTag)
 		{
 			paramCntReg = ToCapstoneReg(insn.ops(0).reg);
 			++insn;
 
-			// the value is Smi object. so decompress pointer instruction is generated automatically even it is not needed.
 			handleExtraDecompressPointer(insn, paramCntReg);
 
 			ASSERT(fnInfo->useFramePointer);
 
-			// == positional (fixed) parameters
-			// if there is a positional parameter, the number of optional parameters is calculated first.
-			// else paramCnt is also the number of optional parameters
 			if (insn.id() == ARM64_INS_SUB && insn.ops(1).reg == paramCntReg) {
 				fixedParamCnt = (int)insn.ops(2).imm >> dart::kSmiTagShift;
 				optionalParamCntReg = insn.ops(0).reg;
@@ -1982,10 +1697,7 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 	}
 
 	if (argsDescReg != ARM64_REG_INVALID) {
-		// both optional positional parameter and named parameter cannot be used in a function declaration
-		// optional positional parameter always start with CMP instruction
 		if (insn.id() == ARM64_INS_CMP) {
-			// if no fixed parameter, paramCnt is optionalParamCnt
 			handleOptionalPositionalParameters(insn, fixedParamCnt > 0 ? optionalParamCntReg : paramCntReg);
 		}
 		else {
@@ -1993,21 +1705,17 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 		}
 	}
 
-	// saved parameter in stack might be loaded back to the register
 	while (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.base == CSREG_DART_FP && insn.ops(1).mem.disp < 0) {
 		fnInfo->State()->SetRegister(insn.ops(0).reg, fnInfo->State()->GetLocal(insn.ops(1).mem.disp));
 		++insn;
 	}
 
-	// PrologueBuilder::BuildClosureContextHandling()
-	// closure context handling
 	if (dartFn->IsClosure() && insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.disp == AOT_Closure_context_offset - dart::kHeapObjectTag) {
 		const auto arg1Reg = [&] {
 			if (fnInfo->params.numFixedParam > 0) {
 				return fnInfo->params[0].valReg;
 			}
 			else {
-				// closure without saving function arguments
 				INSN_ASSERT(fnInfo->params.empty());
 				return A64::Register{ firstParamReg };
 			}
@@ -2020,46 +1728,38 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 
 				handleDecompressPointer(insn, contextReg);
 				fnInfo->closureContextReg = contextReg;
-				// as of now, track only function parameters, so clear the context register as if it is freed
 				fnInfo->State()->ClearRegister(fnInfo->closureContextReg);
 
 				const auto storeContextRes = handleStoreLocal(insn, contextReg);
 				if (storeContextRes.fpOffset != 0) {
-					// save ArgumentsDescriptor to stack
 					fnInfo->closureContextLocalOffset = storeContextRes.fpOffset;
 				}
 			}
 	}
 
-	// TypeArgument from Arguments Descriptor might be used
 	if (argsDescReg != ARM64_REG_INVALID)
 		handleArgumentsDescriptorTypeArguments(insn);
 
 	if (endPrologueAddr != 0 && insn.address() < endPrologueAddr)
 		handleInitialization();
 
-	// closure delayed type arguments
 	if (dartFn->IsClosure()) {
 		const auto save_ins = insn.Current();
 
 		const auto arg1Reg = [&] {
-			//int32_t stack_offset = 0;
 			arm64_reg a1reg = ARM64_REG_INVALID;
 			if (insn.id() == ARM64_INS_LDR && insn.ops(1).mem.base == CSREG_DART_FP && mightBeFirstParamOffset(insn.ops(1).mem.disp)) {
-				//stack_offset = insn.ops(1).mem.disp;
 				a1reg = insn.ops(0).reg;
 				++insn;
 			}
 			if (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.disp == AOT_Closure_delayed_type_arguments_offset - dart::kHeapObjectTag) {
 				if (a1reg != ARM64_REG_INVALID) {
-					// TODO: calculate a number of function parameter
 					return A64::Register{ a1reg };
 				}
 				else if (fnInfo->params.numFixedParam > 0) {
 					return fnInfo->params[0].valReg;
 				}
 				else {
-					// closure without saving function arguments
 					INSN_ASSERT(fnInfo->params.empty());
 					return A64::Register{ firstParamReg };
 				}
@@ -2075,7 +1775,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 			handleDecompressPointer(insn, delayedTypeArgReg);
 
 #ifdef NO_METHOD_EXTRACTOR_STUB
-			// in this commit, THR::empty_type_arguments is introduced and used here
 			INSN_ASSERT(insn.id() == ARM64_INS_LDR);
 			INSN_ASSERT(insn.ops(1).mem.base == CSREG_DART_THR && insn.ops(1).mem.disp == dart::Thread::empty_type_arguments_offset());
 			A64::Register emptyTypeArgReg = insn.ops(0).reg;
@@ -2094,12 +1793,9 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 			++insn;
 
 			if (fnInfo->typeArgumentReg.IsSet() && insn.IsBranch(ARM64_CC_NE)) {
-				// handle type argument from ArgumentsDescriptor and Closure
 				const auto neAddr = insn.ops(0).imm;
 				++insn;
 
-				// if (delayedTypeArg == nullTypeArg)
-				//   tmp = typeArg_from_ArgsDesc
 				INSN_ASSERT(insn.id() == ARM64_INS_MOV);
 				INSN_ASSERT(A64::Register{ insn.ops(1).reg } == fnInfo->typeArgumentReg);
 				const auto tmpReg = insn.ops(0).reg;
@@ -2123,7 +1819,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 					delayedTypeArgReg = insn.ops(0).reg;
 					++insn;
 
-					// no check because delayedTypeArgReg is a result of selection between type argument from ArgumentsDescript and Closure
 					fnInfo->typeArgumentReg = delayedTypeArgReg;
 
 					INSN_ASSERT(insn.address() == contAddr);
@@ -2145,7 +1840,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 				INSN_ASSERT(insn.address() == contAddr);
 			}
 
-			// as of now, track only function parameters, so clear the type argument register as if it is freed
 			fnInfo->State()->ClearRegister(fnInfo->typeArgumentReg);
 		}
 		else {
@@ -2154,7 +1848,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 	}
 
 	if (insn.address() < endPrologueAddr) {
-		// short-lived aliases for prologue parameter register shuffle
 		std::unordered_map<int32_t, A64::Register> aliases;
 		std::unordered_map<int32_t, int> incomingParamIdxByReg;
 		std::unordered_set<int> usedParamIdx;
@@ -2228,15 +1921,11 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 			return ensureIncomingParamValue(rootReg);
 		};
 
-		// before CheckStackOverflow, there might be loading paramters into registers and storing some register to local stack
-		// the parameter might be loaded to a register
 		while (insn.id() == ARM64_INS_LDR && insn.ops(1).mem.base == CSREG_DART_FP && insn.ops(1).mem.disp > 0) {
 			const auto dst_reg = insn.ops(0).reg;
 			const auto offset = insn.ops(1).mem.disp;
 			++insn;
 			if (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.base == dst_reg && insn.ops(1).mem.disp > 0) {
-				// load parameter to load a object field
-				// TODO: it might be load this object field to a register
 				--insn;
 				break;
 			}
@@ -2248,7 +1937,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 		while (true) {
 			bool progressed = false;
 
-			// moving registers (support short-lived tmp shuffle chains in prologue)
 			while (insn.id() == ARM64_INS_MOV && insn.ops(1).type == ARM64_OP_REG && insn.ops(1).reg != CSREG_DART_NULL) {
 				const A64::Register srcReg = insn.ops(1).reg;
 				const A64::Register dstReg = insn.ops(0).reg;
@@ -2260,7 +1948,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 						clearAliases();
 						break;
 					}
-					// unresolved tmp forwarding yet, keep alias and continue.
 					setAlias(dstReg, rootReg);
 					fnInfo->State()->ClearRegister(dstReg);
 				}
@@ -2275,7 +1962,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 				progressed = true;
 			}
 
-			// the value might be saved to stack as if it is a local variable but with fixed negative offset from FP
 			while (true) {
 				const auto storeRes = handleStoreLocal(insn);
 				if (storeRes.fpOffset == 0)
@@ -2294,7 +1980,6 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 					if (val != nullptr) {
 						fnInfo->State()->SetLocal(storeRes.fpOffset, val);
 					}
-					// unknown spill source: gracefully degrade and continue.
 				}
 			}
 
@@ -2308,13 +1993,11 @@ std::unique_ptr<SetupParametersInstr> FunctionAnalyzer::processPrologueParameter
 		clearAliases();
 	}
 
-	// set all parameter register value and local variable
 	const auto ensureParamInfoSize = [&](int idx) {
 		while (fnInfo->params.NumParam() <= idx) {
 			fnInfo->params.add(FnParamInfo{});
 		}
 	};
-	// clear all valRegs in param first
 	for (auto& param : fnInfo->params.params) {
 		param.valReg = A64::Register{};
 		param.localOffset = 0;
@@ -2351,7 +2034,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processObjectPoolInstr(AsmIterator& i
 		if (objPoolInstr.isWrite) {
 			return std::make_unique<StoreObjectPoolInstr>(insn.Wrap(ins0_addr), objPoolInstr.dstReg, objPoolInstr.item.storage.offset);
 		}
-		// TODO: load object might be start of Dart instruction, check next instruction
 		return std::make_unique<LoadValueInstr>(insn.Wrap(ins0_addr), objPoolInstr.dstReg, std::move(objPoolInstr.item));
 	}
 
@@ -2364,7 +2046,6 @@ std::unique_ptr<LoadValueInstr> FunctionAnalyzer::processLoadValueNoObjectPoolIn
 
 	int64_t imm = 0;
 	A64::Register dstReg;
-	// libcapstone5 use MOV instead of MOVZ
 	if (insn.IsMovz()) {
 		imm = insn.ops(1).imm;
 		const auto tmpReg = insn.ops(0).reg;
@@ -2418,7 +2099,6 @@ std::unique_ptr<LoadValueInstr> FunctionAnalyzer::processLoadValueNoObjectPoolIn
 
 std::unique_ptr<LoadValueInstr> FunctionAnalyzer::processLoadValueInstr(AsmIterator& insn)
 {
-	// load from object pool is also LoadValue
 	auto il = processObjectPoolInstr(insn);
 	if (il != nullptr) {
 		if (il->Kind() != ILInstr::LoadValue)
@@ -2431,9 +2111,7 @@ std::unique_ptr<LoadValueInstr> FunctionAnalyzer::processLoadValueInstr(AsmItera
 
 std::unique_ptr<ClosureCallInstr> FunctionAnalyzer::processClosureCallInstr(AsmIterator& insn)
 {
-	// ClosureCallInstr::EmitNativeCode
 	if (insn.id() == ARM64_INS_LDUR && insn.ops(0).reg == ARM64_REG_X2 && insn.ops(1).mem.base == ARM64_REG_X0 && insn.ops(1).mem.disp == AOT_Closure_entry_point_offset - dart::kHeapObjectTag) {
-		// previous IL must be Load from PP and it is list for ArgumentDescriptor and dstReg is R4
 		auto il = fnInfo->LastIL();
 		if (il->Kind() == ILInstr::LoadValue) {
 			auto loadIL = reinterpret_cast<LoadValueInstr*>(il);
@@ -2457,10 +2135,6 @@ std::unique_ptr<ClosureCallInstr> FunctionAnalyzer::processClosureCallInstr(AsmI
 				INSN_ASSERT(!arrPtr->IsHeapObject());
 				const auto positionalArgCnt = dart::RawSmiValue(dart::Smi::RawCast(arrPtr->DecompressSmi()));
 				INSN_ASSERT(argCnt == positionalArgCnt + namedParamCmt);
-				// TODO: extract parameter name
-				//arrPtr++;
-				//INSN_ASSERT(arrPtr->IsHeapObject());
-				//INSN_ASSERT(arrPtr->Decompress(app.heap_base()).IsRawNull());
 
 				++insn;
 
@@ -2471,7 +2145,6 @@ std::unique_ptr<ClosureCallInstr> FunctionAnalyzer::processClosureCallInstr(AsmI
 				const auto ins0_addr = il->Start();
 				fnInfo->RemoveLastIL();
 
-				// TODO: still don't know what information is needed for full analysis
 				return std::make_unique<ClosureCallInstr>(insn.Wrap(ins0_addr), (int32_t)argCnt, (int32_t)typeArgLen);
 			}
 		}
@@ -2531,7 +2204,6 @@ std::unique_ptr<RestoreRegisterInstr> FunctionAnalyzer::processLoadSavedRegister
 std::unique_ptr<InitAsyncInstr> FunctionAnalyzer::processInitAsyncInstr(AsmIterator& insn)
 {
 #ifdef HAS_INIT_ASYNC
-	// InitAsync cannot be tail jump
 	if (insn.id() == ARM64_INS_BL && insn.ops(0).type == ARM64_OP_IMM) {
 		const auto fn = app.GetFunction(insn.ops(0).imm);
 		if (fn && fn->IsStub()) {
@@ -2543,7 +2215,6 @@ std::unique_ptr<InitAsyncInstr> FunctionAnalyzer::processInitAsyncInstr(AsmItera
 				auto& item = ilLoad->GetValue();
 				DartType* returnType;
 				if (item.ValueTypeId() == dart::kNullCid) {
-					// Future<Null>
 					returnType = app.TypeDb()->FindOrAdd(app.DartFutureCid(), &DartTypeArguments::Null);
 				}
 				else {
@@ -2575,10 +2246,8 @@ std::unique_ptr<CallInstr> FunctionAnalyzer::processCallInstr(AsmIterator& insn)
 			++insn;
 			return std::make_unique<CallInstr>(insn.Wrap(ins0_addr), app.GetFunction(target), target);
 		}
-		// should indirect call handle here
 	}
 	else if (insn.id() == ARM64_INS_B && insn.ops(0).type == ARM64_OP_IMM) {
-		// this might tail branch (function call at the end of function)
 		const auto target = (uint64_t)insn.ops(0).imm;
 		if (target < dartFn->Address() || target >= dartFn->AddressEnd()) {
 			const auto ins0_addr = insn.address();
@@ -2593,28 +2262,13 @@ std::unique_ptr<CallInstr> FunctionAnalyzer::processCallInstr(AsmIterator& insn)
 
 std::unique_ptr<GdtCallInstr> FunctionAnalyzer::processGdtCallInstr(AsmIterator& insn)
 {
-	// https://mrale.ph/dartvm/#global-dispatch-table-gdt
-	// FlowGraphCompiler::EmitDispatchTableCall()
-	//     const intptr_t offset = selector_offset - DispatchTable::kOriginElement;
-	//     __ AddImmediate(LR, cid_reg, offset);
-	//   so it might be addition depended on selector offset (but most of them is subtraction)
-	// 0x26de04: sub  x30, x0, #0xfda
-	// 0x26de08: ldr  x30, [x21, x30, lsl #3]
-	// 0x26de0c: blr  x30
-	//   or
-	// 0x220284: movz  x17, #0x1545  ; an extra instruction when offset is larger than 0x1000
-	// 0x220288: add  x30, x0, x17
-	// 0x22028c: ldr  x30, [x21, x30, lsl #3]
-	// 0x220290: blr  x30
 	if (insn.ops(0).reg == CSREG_DART_LR && (insn.id() == ARM64_INS_ADD || insn.id() == ARM64_INS_SUB) &&
 		insn.ops(1).reg == ToCapstoneReg(dart::DispatchTableNullErrorABI::kClassIdReg))
 	{
-		// this is GDT call
 		auto insn0_addr = insn.address();
 		int64_t offset = 0;
 
 		if (insn.ops(2).type == ARM64_OP_IMM) {
-			//cidReg = insn.ops(1).reg;
 			offset = insn.ops(2).imm;
 			if (insn.ops(2).shift.type != ARM64_SFT_INVALID) {
 				ASSERT(insn.ops(2).shift.type == ARM64_SFT_LSL);
@@ -2625,7 +2279,6 @@ std::unique_ptr<GdtCallInstr> FunctionAnalyzer::processGdtCallInstr(AsmIterator&
 			++insn;
 		}
 		else {
-			// from reg
 			INSN_ASSERT(insn.id() == ARM64_INS_ADD);
 			INSN_ASSERT(insn.ops(2).type == ARM64_OP_REG && insn.ops(2).reg == CSREG_DART_TMP2);
 
@@ -2637,7 +2290,6 @@ std::unique_ptr<GdtCallInstr> FunctionAnalyzer::processGdtCallInstr(AsmIterator&
 			fnInfo->RemoveLastIL();
 			++insn;
 		}
-		//const auto selector_offset = dart::DispatchTable::kOriginElement + offset;
 
 		INSN_ASSERT(insn.id() == ARM64_INS_LDR);
 		INSN_ASSERT(insn.ops(0).reg == CSREG_DART_LR);
@@ -2666,10 +2318,6 @@ std::unique_ptr<ReturnInstr> FunctionAnalyzer::processReturnInstr(AsmIterator& i
 
 std::unique_ptr<TestTypeInstr> FunctionAnalyzer::processInstanceofNoTypeArgumentInstr(AsmIterator& insn)
 {
-	// cannot find where the compiler generate setting kInstanceReg, kInstantiatorTypeArgumentsReg and kFunctionTypeArgumentsReg code
-	// FlowGraphCompiler::GenerateInstanceOf()
-	// - FlowGraphCompiler::GenerateInlineInstanceof()
-	//   - FlowGraphCompiler::GenerateInstantiatedTypeNoArgumentsTest()
 	InsnMarker marker(insn);
 	const auto srcReg = [&] {
 		if (insn.id() == ARM64_INS_MOV && insn.ops(0).reg == ToCapstoneReg(dart::TypeTestABI::kInstanceReg)) {
@@ -2687,26 +2335,12 @@ std::unique_ptr<TestTypeInstr> FunctionAnalyzer::processInstanceofNoTypeArgument
 	}();
 
 	if (srcReg != ARM64_REG_INVALID) {
-		// ; branchIfSmi()
-		// 0x295a2c: tbz  w0, #0, #0x295a54
-		// ; LoadClassId()
-		// 0x295a30: ldur  x4, [x0, #-1]
-		// 0x295a34: ubfx  x4, x4, #0xc, #0x14
-		// 0x295a38: sub  x4, x4, #0x3c
-		// 0x295a3c: cmp  x4, #1
-		// 0x295a40: b.ls  #0x295a54
-		// 0x295a44: ldr  x8, [x27, #0x718]  (PP+0x718 - Type: int)
-		// 0x295a48: add  x3, x27, #9, lsl #12  (PP+0x9db0 - Null)
-		// 0x295a4c: ldr  x3, [x3, #0xdb0]
-		// 0x295a50: bl  #0x3022fc  # IsType_int_Stub
 		const auto ilBranch = processBranchIfSmiInstr(insn);
-		// TODO: there might be check for NULL here
 		if (!ilBranch)
 			return nullptr;
 		INSN_ASSERT(ilBranch->objReg == A64::Register{ dart::TypeTestABI::kInstanceReg });
 		const auto done_addr = ilBranch->branchAddr;
 
-		// int and num type are extracted for quick check. other object just use stub for checking.
 		intptr_t typeCheckCid = 0;
 		const auto ilLoadCid = processLoadClassIdInstr(insn);
 		if (ilLoadCid) {
@@ -2716,12 +2350,12 @@ std::unique_ptr<TestTypeInstr> FunctionAnalyzer::processInstanceofNoTypeArgument
 			INSN_ASSERT(insn.id() == ARM64_INS_SUB);
 			INSN_ASSERT(insn.ops(0).reg == ToCapstoneReg(dart::TypeTestABI::kScratchReg));
 			INSN_ASSERT(insn.ops(1).reg == ToCapstoneReg(dart::TypeTestABI::kScratchReg));
-			INSN_ASSERT(insn.ops(2).imm == dart::kSmiCid); // kMintCid is always be kSmiCid+1
+			INSN_ASSERT(insn.ops(2).imm == dart::kSmiCid);
 			++insn;
 
 			INSN_ASSERT(insn.id() == ARM64_INS_CMP);
 			INSN_ASSERT(insn.ops(0).reg == ToCapstoneReg(dart::TypeTestABI::kScratchReg));
-			INSN_ASSERT(insn.ops(1).imm == 1 || insn.ops(1).imm == 2); // must be kSmiCid or kMintCid or kDoubleCid
+			INSN_ASSERT(insn.ops(1).imm == 1 || insn.ops(1).imm == 2);
 			typeCheckCid = insn.ops(1).imm == 1 ? app.DartIntCid() : dart::kNumberCid;
 			++insn;
 
@@ -2730,7 +2364,6 @@ std::unique_ptr<TestTypeInstr> FunctionAnalyzer::processInstanceofNoTypeArgument
 			++insn;
 		}
 
-		// kDstTypeReg from PP
 		const auto objPoolInstr = getObjectPoolInstruction(insn);
 		INSN_ASSERT(objPoolInstr.dstReg == A64::Register{ dart::TypeTestABI::kDstTypeReg });
 		INSN_ASSERT(objPoolInstr.item.ValueTypeId() == dart::kTypeCid);
@@ -2745,7 +2378,6 @@ std::unique_ptr<TestTypeInstr> FunctionAnalyzer::processInstanceofNoTypeArgument
 			++insn;
 		}
 
-		// kSubtypeTestCacheReg from PP
 		const auto objPoolInstr2 = getObjectPoolInstruction(insn);
 		INSN_ASSERT(objPoolInstr2.dstReg == A64::Register{ dart::TypeTestABI::kSubtypeTestCacheReg });
 		INSN_ASSERT(objPoolInstr2.item.Value()->RawTypeId() == dart::kNullCid);
@@ -2759,7 +2391,7 @@ std::unique_ptr<TestTypeInstr> FunctionAnalyzer::processInstanceofNoTypeArgument
 				INSN_ASSERT(dartStub->kind == DartStub::TypeCheckStub);
 				INSN_ASSERT(typeName == "int" || typeName == "int?");
 			}
-			else { // typeCheckCid == dart::kNumberCid || typeCheckCid == 0 (object)
+			else {
 				INSN_ASSERT(typeName == vtype->ToString() || dartStub->kind == DartStub::DefaultTypeTestStub || dartStub->kind == DartStub::DefaultNullableTypeTestStub);
 			}
 			setAsmTextDataCall(insn.address(), (uint64_t)insn.ops(0).imm);
@@ -2794,14 +2426,11 @@ std::unique_ptr<BranchIfSmiInstr> FunctionAnalyzer::processBranchIfSmiInstr(AsmI
 std::unique_ptr<LoadClassIdInstr> FunctionAnalyzer::processLoadClassIdInstr(AsmIterator& insn)
 {
 	if (insn.id() == ARM64_INS_LDUR && insn.ops(1).mem.disp == -1 && kUntaggedObjectClassIdTagPos == 12) {
-		// 0x21cb10: ldur  x1, [x0, #-1]  ; load object tag
 		const auto objReg = A64::Register{ insn.ops(1).mem.base };
 		const auto cidReg = insn.ops(0).reg;
 		const auto ins0_addr = insn.address();
 		++insn;
 
-		// Assembler::ExtractClassIdFromTags()
-		// 0x21cb14: ubfx  x1, x1, #0xc, #0x14  ; extract object class id
 		INSN_ASSERT(insn.id() == ARM64_INS_UBFX);
 		INSN_ASSERT(insn.ops(0).reg == cidReg);
 		INSN_ASSERT(insn.ops(1).reg == cidReg);
@@ -2812,8 +2441,6 @@ std::unique_ptr<LoadClassIdInstr> FunctionAnalyzer::processLoadClassIdInstr(AsmI
 		return std::make_unique<LoadClassIdInstr>(insn.Wrap(ins0_addr), objReg, A64::Register{cidReg});
 	}
 	else if (insn.id() == ARM64_INS_LDURH && insn.ops(1).mem.disp == 1 && kUntaggedObjectClassIdTagPos == 16) {
-		// https://github.com/dart-lang/sdk/commit/9182d5e5359988703a2b8a88c238f47a5295e18c
-		// 0x5f3900: ldurh  w3, [x0, #1]
 		const auto objReg = A64::Register{ insn.ops(1).mem.base };
 		const auto cidReg = insn.ops(0).reg;
 		const auto ins0_addr = insn.address();
@@ -2826,11 +2453,6 @@ std::unique_ptr<LoadClassIdInstr> FunctionAnalyzer::processLoadClassIdInstr(AsmI
 
 std::unique_ptr<LoadTaggedClassIdMayBeSmiInstr> FunctionAnalyzer::processLoadTaggedClassIdMayBeSmiInstr(AsmIterator& insn)
 {
-	//   cidReg = SmiTaggedClassId
-	//   branchIfSmi(objReg, branchAddr)
-	//   cidReg = LoadClassIdInstr(objReg)
-	//   lsl  cidReg, cidReg, #1
-	// branchAddr:
 	auto& il = fnInfo->il_insns.back();
 	if (insn.id() == ARM64_INS_LSL && insn.ops(0).reg == insn.ops(1).reg && insn.ops(2).imm == dart::kSmiTagSize && il->Kind() == ILInstr::LoadClassId && fnInfo->il_insns.size() >= 3) {
 		auto il_loadClassId = reinterpret_cast<LoadClassIdInstr*>(il.get());
@@ -2847,7 +2469,6 @@ std::unique_ptr<LoadTaggedClassIdMayBeSmiInstr> FunctionAnalyzer::processLoadTag
 				INSN_ASSERT(il_loadImm->val.ValueTypeId() == dart::kIntegerCid);
 				INSN_ASSERT(il_loadImm->val.Get<VarInteger>()->Value() == dart::Smi::RawValue(dart::kSmiCid));
 
-				// everything is OK, release all IL to cast to specific IL. Then, put them into a new IL
 				il.release();
 				il2.release();
 				il3.release();
@@ -2865,14 +2486,6 @@ std::unique_ptr<LoadTaggedClassIdMayBeSmiInstr> FunctionAnalyzer::processLoadTag
 
 std::unique_ptr<BoxInt64Instr> FunctionAnalyzer::processBoxInt64Instr(AsmIterator& insn)
 {
-	// From BoxInt64Instr::EmitNativeCode()
-	// Note: without compressed pointer, start instruction is "adds"
-	// 0x21c5e8: sbfiz  x0, x2, #1, #0x1f
-	// 0x21c5ec: cmp  x2, x0, asr #1
-	// 0x21c5f0: b.eq  #0x21c5fc
-	// 0x21c5f4: bl  #0x2e5500  # AllocateMintSharedWithoutFPURegsStub
-	// 0x21c5f8: stur  x2, [x0, #7]
-	//   x0 is result object (can be Smi or Mint). x2 is source integer.
 	if (insn.id() == ARM64_INS_SBFIZ && insn.ops(2).imm == dart::kSmiTagSize && insn.ops(3).imm == 31) {
 		const auto out_reg = insn.ops(0).reg;
 		const auto in_reg = insn.ops(1).reg;
@@ -2880,7 +2493,6 @@ std::unique_ptr<BoxInt64Instr> FunctionAnalyzer::processBoxInt64Instr(AsmIterato
 		++insn;
 
 		if (insn.id() == ARM64_INS_CMP && insn.ops(0).reg == in_reg && insn.ops(1).reg == out_reg && insn.ops(1).shift.type == ARM64_SFT_ASR && insn.ops(1).shift.value == dart::kSmiTagSize) {
-			// branch if integer value is fit in 31 bits
 			++insn;
 
 			INSN_ASSERT(insn.id() == ARM64_INS_B && insn.cc() == ARM64_CC_EQ);
@@ -2893,7 +2505,6 @@ std::unique_ptr<BoxInt64Instr> FunctionAnalyzer::processBoxInt64Instr(AsmIterato
 				INSN_ASSERT(stubKind == DartStub::AllocateMintSharedWithoutFPURegsStub || stubKind == DartStub::AllocateMintSharedWithFPURegsStub);
 			};
 
-			// since Dart 3.5, some function might omit EnterFrame at early of function but do it before calling (BL) here
 			bool doEnterFrame = false;
 			if (!fnInfo->useFramePointer) {
 				if (insn.id() == ARM64_INS_STP && insn.ops(0).reg == CSREG_DART_FP && insn.ops(1).reg == ARM64_REG_LR && insn.ops(2).mem.base == CSREG_DART_SP) {
@@ -2931,7 +2542,6 @@ std::unique_ptr<BoxInt64Instr> FunctionAnalyzer::processBoxInt64Instr(AsmIterato
 			}
 
 			if (doEnterFrame) {
-				// MUST have LeaveFrame here
 				if (!(insn.id() == ARM64_INS_MOV && insn.ops(0).reg == CSREG_DART_SP && insn.ops(1).reg == CSREG_DART_FP))
 					return nullptr;
 				++insn;
@@ -2956,8 +2566,6 @@ std::unique_ptr<BoxInt64Instr> FunctionAnalyzer::processBoxInt64Instr(AsmIterato
 
 std::unique_ptr<LoadInt32Instr> FunctionAnalyzer::processLoadInt32FromBoxOrSmiInstrFromSrcReg(AsmIterator& insn, A64::Register expectedSrcReg)
 {
-	// From UnboxInstr::EmitLoadInt32FromBoxOrSmi(), includes branch if Smi
-	//   output is raw integer, input is Dart object
 	if (insn.id() == ARM64_INS_SBFX && insn.ops(2).imm == dart::kSmiTagSize && insn.ops(3).imm == 31) {
 		const auto in_reg = insn.ops(1).reg;
 		const auto srcReg = A64::Register{ in_reg };
@@ -2966,11 +2574,8 @@ std::unique_ptr<LoadInt32Instr> FunctionAnalyzer::processLoadInt32FromBoxOrSmiIn
 			const auto dstReg = A64::Register{ out_reg };
 			const auto ins0_addr = insn.address();
 			++insn;
-			// TODO: make srcReg type in current function register to be Smi
 
 			if (insn.id() == ARM64_INS_TBZ && A64::Register{ insn.ops(0).reg } == srcReg && insn.ops(1).imm == dart::kSmiTag) {
-				// if not smi, get raw integer from Mint object
-				// these instructions might not be here because compiler know the value is always be Smi
 				const auto cont_addr = insn.ops(2).imm;
 				++insn;
 
@@ -2979,11 +2584,9 @@ std::unique_ptr<LoadInt32Instr> FunctionAnalyzer::processLoadInt32FromBoxOrSmiIn
 				INSN_ASSERT(insn.ops(1).mem.base == in_reg && insn.ops(1).mem.disp == dart::Mint::value_offset() - dart::kHeapObjectTag);
 				++insn;
 
-				// srcReg item type MUST be Mint
 				INSN_ASSERT(insn.address() == cont_addr);
 			}
 			else {
-				// srcReg object is always Smi
 			}
 
 			return std::make_unique<LoadInt32Instr>(insn.Wrap(ins0_addr), dstReg, srcReg);
@@ -3000,19 +2603,6 @@ std::unique_ptr<LoadInt32Instr> FunctionAnalyzer::processLoadInt32FromBoxOrSmiIn
 std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterator& insn)
 {
 	if (insn.id() == ARM64_INS_LDR && insn.ops(1).mem.base == CSREG_DART_THR && insn.ops(1).mem.disp == AOT_Thread_field_table_values_offset) {
-		// LoadStaticFieldInstr::EmitNativeCode()
-		// 0x21cb80: ldr  x0, [x26, #0x68]  (Thread::field_table_values)
-		//    ; might have an extra add if field_offset is larger than 0x8000 => add x17, x0, #8, lsl #12
-		// 0x21cb84: ldr  x0, [x0, #0x1730]  ; Smi(field_offset) = 0x1730
-		// 0x21cb88: ldr  x16, [x27, #0x28]  (PP+0x28 - XXX: sentinel (30))
-		// 0x21cb8c: cmp  w0, w16
-		// 0x21cb90: b.ne  #0x21cba0
-		// 0x21cb94: add  x2, x27, #9, lsl #12  (PP+0x9a18 - Field <_MyHomePageState@782102494.factor>: static late (offset: 0xb98))
-		// 0x21cb98: ldr  x2, [x2, #0xa18]
-		// 0x21cb9c: bl  #0x2e36cc  # InitLateStaticFieldStub
-		//   --
-		// 0x4503c0: ldr  x1, [x26, #0x68](Thread::field_table_values)
-		// 0x4503c4: str  x0, [x1, #0x1250]  ; Set static field
 		const auto result_reg = insn.ops(0).reg;
 		const auto dstReg = A64::Register{ result_reg };
 		auto tmp_reg = insn.ops(0).reg;
@@ -3021,7 +2611,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 		++insn;
 
 		if (insn.id() == ARM64_INS_ADD && insn.ops(1).reg == tmp_reg && insn.ops(2).type == ARM64_OP_IMM && insn.ops(2).shift.type == ARM64_SFT_LSL) {
-			// large static field offset
 			tmp_reg = insn.ops(0).reg;
 			load_offset = insn.ops(2).imm << insn.ops(2).shift.value;
 			++insn;
@@ -3044,17 +2633,13 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 			INSN_ASSERT(insn.ops(0).reg == result_reg);
 			++insn;
 
-			// load Sentinel from PP to check if this field is initialized?
 			const auto objPoolInstr = getObjectPoolInstruction(insn);
 			if (!objPoolInstr.IsSet() || objPoolInstr.dstReg != A64::TMP_REG || objPoolInstr.item.ValueTypeId() != dart::kSentinelCid) {
-				// this is just load static field (same as global variable). cannot find the owner
 				return std::make_unique<LoadStaticFieldInstr>(insn.Wrap(marker.Take()), dstReg, field_offset);
 			}
 
-			// save current instruction to move forward and check if there are extra instructions for checking
 			const auto loadStaicInstr_endIns = insn.Current();
 
-			// if any condition is not met, fallback to just load static field
 			INSN_ASSERT(insn.id() == ARM64_INS_CMP);
 			INSN_ASSERT(A64::Register{ insn.ops(0).reg } == dstReg);
 			INSN_ASSERT(A64::Register{ insn.ops(1).reg } == A64::TMP_REG);
@@ -3065,7 +2650,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 				const auto cont_addr = insn.ops(0).imm;
 				++insn;
 
-				// get pool object
 				const auto objPoolInstr = getObjectPoolInstruction(insn);
 				if (objPoolInstr.IsSet()) {
 					INSN_ASSERT(objPoolInstr.dstReg == A64::Register{ dart::InitStaticFieldABI::kFieldReg });
@@ -3073,8 +2657,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 					auto& dartField = objPoolInstr.item.Get<VarField>()->field;
 					INSN_ASSERT(dartField.Offset() == field_offset);
 
-					// GenerateStubCall()
-					// - EmitCallToStub() might be GenerateUnRelocatedPcRelativeCall() or BranchLink()
 					if (insn.id() == ARM64_INS_BL) {
 						auto dartFn = app.GetFunction(insn.ops(0).imm);
 						ASSERT(dartFn->IsStub());
@@ -3084,10 +2666,8 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 						++insn;
 					}
 					else {
-						// BranchLink()
 						const auto objPoolInstr = getObjectPoolInstruction(insn);
 						INSN_ASSERT(objPoolInstr.IsSet() && objPoolInstr.dstReg == A64::Register{ dart::CODE_REG });
-						// TODO: what kind of object is loaded?
 
 						INSN_ASSERT(insn.id() == ARM64_INS_LDUR);
 						INSN_ASSERT(insn.ops(0).reg == CSREG_DART_LR);
@@ -3105,7 +2685,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 				}
 			}
 			else {
-				// late intialize error
 				INSN_ASSERT(insn.cc() == ARM64_CC_EQ);
 				const auto error_addr = insn.ops(0).imm;
 				INSN_ASSERT(error_addr > insn.NextAddress() && error_addr < dartFn->AddressEnd());
@@ -3124,12 +2703,10 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 					INSN_ASSERT(stub->kind == DartStub::LateInitializationErrorSharedWithoutFPURegsStub || stub->kind == DartStub::LateInitializationErrorSharedWithFPURegsStub);
 					setAsmTextDataCall(insn2.address(), (uint64_t)insn.ops(0).imm);
 					insn2.Next();
-					// load static field but throw an exception if it is not initialized
 					return std::make_unique<LoadStaticFieldInstr>(insn.Wrap(marker.Take()), dstReg, field_offset);
 				}
 			}
 
-			// this one might be for if/else when Static field is not initialized
 			insn.SetCurrent(loadStaicInstr_endIns);
 			return std::make_unique<LoadStaticFieldInstr>(insn.Wrap(marker.Take()), dstReg, field_offset);
 		}
@@ -3140,25 +2717,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadFieldTableInstr(AsmIterato
 
 std::unique_ptr<AllocateObjectInstr> FunctionAnalyzer::processTryAllocateObject(AsmIterator& insn)
 {
-	// Assembler::TryAllocateObject() with inline_alloc
-	//   example of allocate double (0x10 is size)
-	// ; make sure Thread stack has enough space
-	// 0x21c66c: ldp  x0, x1, [x26, #0x50]  (Thread::top)
-	// 0x21c670: add  x0, x0, #0x10
-	// 0x21c674: cmp  x1, x0
-	// 0x21c678: b.ls  #0x21c894  ; jump to slow path. AllocateDouble() will be called
-	// 0x21c67c: str  x0, [x26, #0x50]  (Thread::top)
-	// 0x21c680: sub  x0, x0, #0xf
-	// 0x21c684: movz  x1, #0xe148
-	// 0x21c688: movk  x1, #0x3, lsl #16
-	// 0x21c68c: stur  x1, [x0, #-1]
-	// ...
-	// 0x21c894: str  q0, [x15, #-0x10]!  ; save q0
-	// 0x21c898: stp  x2, x3, [x15, #-0x10]!  ; save x2, x3
-	// 0x21c89c: bl  #0x2e511c  # AllocateDoubleStub
-	// 0x21c8a0: ldp  x2, x3, [x15], #0x10  ; restore x2, x3
-	// 0x21c8a4: ldr  q0, [x15], #0x10  ; restore q0
-	// 0x21c8a8: b  #0x21c690
 	if (insn.id() == ARM64_INS_LDP && insn.ops(2).mem.base == CSREG_DART_THR && insn.ops(2).mem.disp == dart::Thread::top_offset()) {
 		const auto inst_reg = insn.ops(0).reg;
 		const auto temp_reg = insn.ops(1).reg;
@@ -3169,7 +2727,6 @@ std::unique_ptr<AllocateObjectInstr> FunctionAnalyzer::processTryAllocateObject(
 		INSN_ASSERT(insn.ops(0).reg == inst_reg);
 		INSN_ASSERT(insn.ops(1).reg == inst_reg);
 		const auto inst_size = insn.ops(2).imm;
-		// 0x20 for typed_data object
 		INSN_ASSERT(inst_size == 0x10 || inst_size == 0x20);
 		++insn;
 
@@ -3180,7 +2737,6 @@ std::unique_ptr<AllocateObjectInstr> FunctionAnalyzer::processTryAllocateObject(
 
 		INSN_ASSERT(insn.id() == ARM64_INS_B && insn.cc() == ARM64_CC_LS);
 		const uint64_t slow_path = (uint64_t)insn.ops(0).imm;
-		// slow path is always at the end of function
 		INSN_ASSERT(insn.address() < slow_path && slow_path < dartFn->AddressEnd());
 		++insn;
 
@@ -3192,16 +2748,14 @@ std::unique_ptr<AllocateObjectInstr> FunctionAnalyzer::processTryAllocateObject(
 		INSN_ASSERT(insn.id() == ARM64_INS_SUB);
 		INSN_ASSERT(insn.ops(0).reg == inst_reg);
 		INSN_ASSERT(insn.ops(1).reg == inst_reg);
-		INSN_ASSERT(insn.ops(2).imm == inst_size - 1); // -1 because of kHeapObjectTag
+		INSN_ASSERT(insn.ops(2).imm == inst_size - 1);
 		++insn;
 
-		// also can reuse loadImm
 		INSN_ASSERT(insn.IsMovz());
 		INSN_ASSERT(insn.ops(0).reg == temp_reg);
 		auto tag = insn.ops(1).imm;
 		++insn;
 
-		// movk instruction is needed with bits 16-32 is not zero (class id > 16)
 		if (insn.id() == ARM64_INS_MOVK) {
 			INSN_ASSERT(insn.ops(0).reg == temp_reg);
 			INSN_ASSERT(insn.ops(1).shift.value == 16);
@@ -3211,16 +2765,14 @@ std::unique_ptr<AllocateObjectInstr> FunctionAnalyzer::processTryAllocateObject(
 
 		INSN_ASSERT(insn.id() == ARM64_INS_STUR);
 		INSN_ASSERT(insn.ops(0).reg == temp_reg);
-		INSN_ASSERT(insn.ops(1).mem.base == inst_reg && insn.ops(1).mem.disp == -1); // because of kHeapObjectTag
+		INSN_ASSERT(insn.ops(1).mem.base == inst_reg && insn.ops(1).mem.disp == -1);
 		++insn;
 
 		const uint32_t cid = (tag >> kUntaggedObjectClassIdTagPos) & ((1 << dart::UntaggedObject::kClassIdTagSize) - 1);
 		auto dartCls = app.GetClass(cid);
-		//INSN_ASSERT(dartCls->Size() < 0 || dartCls->Size() == inst_size);
 
 		const auto dstReg = A64::Register{ inst_reg };
 
-		// TODO: extra check by walk through slow path
 
 		return std::make_unique<AllocateObjectInstr>(insn.Wrap(marker.Take()), dstReg, *dartCls);
 	}
@@ -3230,20 +2782,6 @@ std::unique_ptr<AllocateObjectInstr> FunctionAnalyzer::processTryAllocateObject(
 
 std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(AsmIterator& insn)
 {
-	// In Assembler::StoreBarrier() and Assembler::StoreIntoArrayBarrier()
-	// if (can_be_smi == kValueCanBeSmi) {
-	//     BranchIfSmi(value, &done);
-	// }
-	// 
-	// 0x2a766c: tbz  w0, #0, #0x2a7688  ; BranchIfSmi()
-	// 0x2a7670: ldurb  w16, [x1, #-1]
-	// 0x2a7674: ldurb  w17, [x0, #-1]
-	// 0x2a7678: and  x16, x17, x16, lsr #2
-	// 0x2a767c: tst  x16, x28, lsr #32
-	// 0x2a7680: b.eq  #0x2a7688
-	// 0x2a7684: bl  #0x44bdf0  # ArrayWriteBarrierStub
-	//const auto objReg = A64::FromDartReg(dart::kWriteBarrierObjectReg);
-	//const auto valReg = A64::FromDartReg(dart::kWriteBarrierValueReg);
 	A64::Register objReg;
 	A64::Register valReg;
 
@@ -3259,7 +2797,7 @@ std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(As
 	}
 
 	if (insn.id() != ARM64_INS_LDURB || A64::Register{ insn.ops(0).reg } != A64::TMP_REG || insn.ops(1).mem.disp != -1)
-		return nullptr; // it is not WriteBarrier
+		return nullptr;
 	objReg = A64::Register{ insn.ops(1).mem.base };
 	++insn;
 
@@ -3293,8 +2831,6 @@ std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(As
 
 	bool spill_lr = false;
 	if (insn.id() == ARM64_INS_STR) {
-		// spill_lr => Push(LR)
-		// 0x1d5f58: str  x30, [x15, #-8]!
 		INSN_ASSERT(insn.writeback());
 		INSN_ASSERT(insn.ops(0).reg == CSREG_DART_LR);
 		INSN_ASSERT(insn.ops(1).mem.base == CSREG_DART_SP && insn.ops(1).mem.disp == -8);
@@ -3302,7 +2838,6 @@ std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(As
 		++insn;
 	}
 
-	// TODO: call instruction is not processed. AsmText cannot show the stub name.
 	bool isArray;
 	if (insn.id() == ARM64_INS_BL) {
 		auto stub = app.GetFunction(insn.ops(0).imm);
@@ -3314,9 +2849,6 @@ std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(As
 		++insn;
 	}
 	else {
-		// from generate_invoke_write_barrier_wrapper_ lambda function
-		// - write_barrier_wrappers_thread_offset(reg) in thread.h calculates thread offset from a register
-		// Call(Address target) always use LR register
 		INSN_ASSERT(insn.id() == ARM64_INS_LDR);
 		INSN_ASSERT(insn.ops(0).reg == CSREG_DART_LR);
 		INSN_ASSERT(insn.ops(1).mem.base == CSREG_DART_THR);
@@ -3338,7 +2870,6 @@ std::unique_ptr<WriteBarrierInstr> FunctionAnalyzer::processWriteBarrierInstr(As
 	}
 
 	if (spill_lr) {
-		// 0x1d5f60: ldr  x30, [x15], #8
 		INSN_ASSERT(insn.id() == ARM64_INS_LDR && insn.writeback());
 		INSN_ASSERT(insn.ops(0).reg == CSREG_DART_LR);
 		INSN_ASSERT(insn.ops(1).mem.base == CSREG_DART_SP);
@@ -3358,11 +2889,8 @@ static ArrayOp getArrayOp(AsmIterator& insn, int32_t arr_data_offset)
 		return ArrayOp();
 	switch (insn.id()) {
 	case ARM64_INS_LDUR: {
-		// for 64 bit integer, LDUR is used too
 		const auto regSize = GetCsRegSize(insn.ops(0).reg);
-		//if (regSize == dart::kCompressedWordSize)
 		return ArrayOp(regSize, true, arr_data_offset == 0x17 ? ArrayOp::List : ArrayOp::Unknown);
-		//return ArrayOp(regSize, true, ArrayOp::TypedUnknown);
 	}
 	case ARM64_INS_LDURSW:
 		return ArrayOp(4, true, ArrayOp::TypedSigned);
@@ -3376,14 +2904,11 @@ static ArrayOp getArrayOp(AsmIterator& insn, int32_t arr_data_offset)
 		return ArrayOp(2, true, ArrayOp::TypedSigned);
 	case ARM64_INS_STUR: {
 		const auto regSize = GetCsRegSize(insn.ops(0).reg);
-		//if (regSize == dart::kCompressedWordSize)
 		return ArrayOp(regSize, false, arr_data_offset == 0x17 ? ArrayOp::List : ArrayOp::Unknown);
-		//return ArrayOp(regSize, false, ArrayOp::TypedUnknown);
 	}
 	case ARM64_INS_STRB:
 		return ArrayOp(1, false, ArrayOp::TypedUnknown);
 	case ARM64_INS_STURH:
-		// no signed/unsigned info
 		return ArrayOp(2, false, ArrayOp::TypedUnknown);
 	}
 	return ArrayOp();
@@ -3393,47 +2918,25 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 {
 	InsnMarker marker(insn);
 
-	// handles load/store array element by calculating offset first (index as register)
-	// Dart use only ADD instruction for calculating memory offset
 	if (insn.id() == ARM64_INS_ADD) {
-		// tmp register for storing memory offset is TMP or R25 as kWriteBarrierSlotReg (in case of StoreBerrier is needed)
 		if (insn.ops(0).reg == CSREG_DART_WB_SLOT) {
-			// StoreIndexedInstr::EmitNativeCode()
-			//   class_id() == kArrayCid && ShouldEmitStoreBarrier()
-			// - immediate as index
-			// 0x2a7664: add  x25, x1, #0x13
-			// 0x2a7668: str  w0, [x25]
-			// 0x2a766c: tbz  w0, #0, #0x2a7688
-			// 0x2a7670: ldurb  w16, [x1, #-1]
-			// 0x2a7674: ldurb  w17, [x0, #-1]
-			// 0x2a7678: and  x16, x17, x16, lsr #2
-			// 0x2a767c: tst  x16, x28, lsr #32
-			// 0x2a7680: b.eq  #0x2a7688
-			// 0x2a7684: bl  #0x44bdf0  # ArrayWriteBarrierStub
-			// - register as index
-			// 0x16ce18: add  x25, x1, x3, lsl #2
-			// 0x16ce1c: add  x25, x25, #0xf
-			// 0x16ce20: str  w0, [x25]
 			if (insn.ops(1).reg != CSREG_DART_WB_OBJECT)
-				return nullptr; // not array load/store
+				return nullptr;
 
 			const auto objReg = A64::Register{ dart::kWriteBarrierObjectReg };
 			const auto valReg = A64::Register{ dart::kWriteBarrierValueReg };
 			const int64_t arrayDataOffset = dart::Array::data_offset() - dart::kHeapObjectTag;
-			// TODO: objReg type MUST be Dart array
 			auto idx = VarStorage::NewSmallImm(0);
 			bool hasExplicitArrayDataOffset = false;
 			if (insn.ops(2).type == ARM64_OP_IMM) {
-				// const int64_t offset = index * index_scale + HeapDataOffset(is_external, cid);
 				const auto arr_idx = (insn.ops(2).imm + dart::kHeapObjectTag - dart::Array::data_offset()) / dart::kCompressedWordSize;
 				if (arr_idx < 0)
 					return nullptr;
 				idx = VarStorage::NewSmallImm(arr_idx);
-				hasExplicitArrayDataOffset = true; // offset is folded into immediate in first ADD
+				hasExplicitArrayDataOffset = true;
 				++insn;
 			}
 			else {
-				// register as index
 				const auto shift = insn.ops(2).shift;
 				const auto ext = insn.ops(2).ext;
 				const bool shiftCompatible =
@@ -3446,7 +2949,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 				idx = VarStorage(A64::Register{ insn.ops(2).reg });
 				++insn;
 
-				// newer Dart ARM64 may fold data offset into STR mem.disp
 				if (insn.id() == ARM64_INS_ADD && insn.ops(0).reg == CSREG_DART_WB_SLOT &&
 					insn.ops(1).reg == CSREG_DART_WB_SLOT && insn.ops(2).type == ARM64_OP_IMM)
 				{
@@ -3464,14 +2966,11 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 			if (insn.ops(1).mem.base != CSREG_DART_WB_SLOT)
 				return nullptr;
 			const auto storeDisp = insn.ops(1).mem.disp;
-			// Positive invariant: emit array-element store only when data offset is explicitly consumed
-			// or provably folded into STR displacement.
 			if (hasExplicitArrayDataOffset) {
 				if (storeDisp != 0)
 					return nullptr;
 			}
 			else if (storeDisp == arrayDataOffset) {
-				// data offset folded in STR addressing
 			}
 			else {
 				return nullptr;
@@ -3487,19 +2986,8 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 			return std::make_unique<StoreArrayElementInstr>(insn.Wrap(marker.Take()), valReg, objReg, idx, arrayOp);
 		}
 
-		// calculating memory offset (array index) should be from register only
-		// tmp register size is always 8 (for 64 bits)
 		if (insn.ops(2).type == ARM64_OP_REG && insn.ops(1).reg != CSREG_DART_FP && GetCsRegSize(insn.ops(0).reg) == 8) {
 			const auto tmpReg = insn.ops(0).reg;
-			// LoadIndexedInstr::EmitNativeCode() or StoreIndexedInstr::EmitNativeCode() non barrier path
-			// 0x220460: add  x16, x3, x5, lsl #2
-			// 0x220464: ldur  w1, [x16, #0xf]
-			//  ===
-			// 0x2c3958: add  x16, x2, x5
-			// 0x2c395c: ldrb  w7, [x16, #0x17]  ; Uint8List
-			//  ===
-			// 0x40b868: add     x16, x1, w0, sxtw #1 ; w0 is Smi, so shift only 1 instead of 2
-			// 0x40b86c: ldursw  x1, [x16, #0x17]  ; Int32List
 			const auto arrReg = A64::Register{ insn.ops(1).reg };
 			const auto idx = VarStorage(A64::Register{ insn.ops(2).reg });
 			const auto shift = insn.ops(2).shift;
@@ -3508,7 +2996,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 			const auto ext = insn.ops(2).ext;
 			++insn;
 
-			// array offset for index as register always be start of payload
 			const auto arr_data_offset = insn.ops(1).mem.disp;
 			if (insn.ops(1).mem.base != tmpReg || arr_data_offset < 8)
 				return nullptr;
@@ -3517,22 +3004,14 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 				return nullptr;
 			const auto idxShiftVal = arrayOp.SizeLog2();
 			if (arrayOp.arrType == ArrayOp::List) {
-				// Uint8List or Int32x4
-				// do nothing for now
 			}
 			else if (shift.value == idxShiftVal) {
-				// nothing to do
 				if (idxShiftVal == 0) {
-					// TODO: Uint8List
 				}
 			}
 			else if (shift.value + 1 == idxShiftVal) {
-				//if (idxShiftVal)
-				//	INSN_ASSERT(ext == ARM64_EXT_SXTW);
-				// TODO: this index is Smi
 			}
 			else {
-				//FATAL("invalid shift for array operation");
 				INSN_ASSERT(shift.value == idxShiftVal);
 			}
 			bool isTypedData = dart::UntaggedTypedData::payload_offset() - dart::kHeapObjectTag == arr_data_offset;
@@ -3540,19 +3019,16 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 			const auto op0Reg = A64::Register{ insn.ops(0).reg };
 			++insn;
 			if (arrayOp.isLoad) {
-				// load always uses TMP register
 				INSN_ASSERT(tmpReg == CSREG_DART_TMP);
 				return std::make_unique<LoadArrayElementInstr>(insn.Wrap(marker.Take()), op0Reg, arrReg, idx, arrayOp);
 			}
 			else {
-				// store operation
 				return std::make_unique<StoreArrayElementInstr>(insn.Wrap(marker.Take()), op0Reg, arrReg, idx, arrayOp);
 			}
 		}
 	}
 
 	if (insn.ops(1).mem.base != CSREG_DART_FP && insn.ops(1).mem.disp != 0) {
-		// load/store with fixed offset
 		const auto arrayOp = getArrayOp(insn, insn.ops(1).mem.disp);
 		if (arrayOp.IsArrayOp()) {
 			const auto valReg = A64::Register{ insn.ops(0).reg };
@@ -3561,15 +3037,12 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 			++insn;
 
 			if (arrayOp.arrType == ArrayOp::Unknown) {
-				// might be array or object. set it as object first.
 				if (arrayOp.isLoad) {
 					return std::make_unique<LoadFieldInstr>(insn.Wrap(marker.Take()), valReg, objReg, offset);
 				}
 				else {
 					const auto il_wb = processWriteBarrierInstr(insn);
 					if (il_wb) {
-						// with WriteBearrier, we can determine if the object is array or not
-						// but it is still difficult if it is list or typed data
 						INSN_ASSERT(il_wb->objReg == objReg && il_wb->valReg == valReg);
 						if (il_wb->isArray)
 							return std::make_unique<StoreArrayElementInstr>(insn.Wrap(marker.Take()), valReg, objReg, VarStorage::NewSmallImm(offset), arrayOp);
@@ -3582,7 +3055,6 @@ std::unique_ptr<ILInstr> FunctionAnalyzer::processLoadStore(AsmIterator& insn)
 				}
 			}
 			else {
-				// array
 				const auto idx = VarStorage::NewSmallImm((offset + dart::kHeapObjectTag - dart::UntaggedTypedData::payload_offset()) / arrayOp.size);
 				if (arrayOp.isLoad) {
 					return std::make_unique<LoadArrayElementInstr>(insn.Wrap(marker.Take()), valReg, objReg, idx, arrayOp);
@@ -3626,7 +3098,6 @@ void FunctionAnalyzer::asm2il()
 		}
 
 		if (!ok) {
-			// unhandle case
 			auto ins = insn.Current();
 			fnInfo->AddIL(std::make_unique<UnknownInstr>(ins, fnInfo->asmTexts.AtAddr(ins->address)));
 			++insn;
@@ -3639,10 +3110,9 @@ void CodeAnalyzer::asm2il(DartFunction* dartFn, AsmInstructions& asm_insns)
 	FunctionAnalyzer analyzer{ dartFn->GetAnalyzedData(), dartFn, asm_insns, app };
 	analyzer.asm2il();
 }
-	
+
 AsmTexts CodeAnalyzer::convertAsm(AsmInstructions& asm_insns)
 {
-	// convert register name in op_str
 	std::vector<AsmText> asm_texts(asm_insns.Count());
 	uint64_t first_stack_limit_addr = 0;
 	int max_param_stack_offset = 0;
@@ -3653,14 +3123,14 @@ AsmTexts CodeAnalyzer::convertAsm(AsmInstructions& asm_insns)
 
 		text_asm.addr = insn->address;
 		text_asm.dataType = AsmText::None;
-		
+
 		memset(text_asm.text, ' ', 16);
 		memcpy(text_asm.text, insn->mnemonic, strlen(insn->mnemonic));
 		auto ptr = text_asm.text + 16;
 		auto op_ptr = insn->op_str;
 		bool token_start = true;
 		while (*op_ptr != '\0') {
-			if (token_start) { 
+			if (token_start) {
 				if (op_ptr[0] == 'x' || op_ptr[0] == 'w') {
 					bool do_replacement = true;
 					if (op_ptr[1] == '1' && op_ptr[2] == '5') {
@@ -3677,15 +3147,11 @@ AsmTexts CodeAnalyzer::convertAsm(AsmInstructions& asm_insns)
 						*ptr++ = 'T';
 						*ptr++ = 'H';
 						*ptr++ = 'R';
-						// Normally thread access is part of instructions. we don't need this case for translating to IL.
-						// but the thread offset information is nice to have in assembly
-						// thread access always be the last operand
 						auto& op = insn->detail->arm64.operands[insn->detail->arm64.op_count - 1];
 						if (op.type == ARM64_OP_MEM && op.mem.base == CSREG_DART_THR) {
 							text_asm.threadOffset = op.mem.disp;
 							text_asm.dataType = AsmText::ThreadOffset;
 							if (first_stack_limit_addr == 0 && op.mem.disp == AOT_Thread_stack_limit_offset) {
-								// mark it as end of prologue
 								first_stack_limit_addr = insn->address;
 							}
 						}
@@ -3703,7 +3169,6 @@ AsmTexts CodeAnalyzer::convertAsm(AsmInstructions& asm_insns)
 					else if (op_ptr[1] == '2' && op_ptr[2] == '9') {
 						*ptr++ = 'f';
 						*ptr++ = 'p';
-						// save maximum stack offset for accessing parameter
 						if (insn->id == ARM64_INS_LDR) {
 							auto& op = insn->detail->arm64.operands[1];
 							if (op.mem.base == CSREG_DART_FP && op.mem.disp > max_param_stack_offset) {
@@ -3742,4 +3207,5 @@ AsmTexts CodeAnalyzer::convertAsm(AsmInstructions& asm_insns)
 	return AsmTexts{ asm_texts, first_stack_limit_addr, max_param_stack_offset };
 }
 
-#endif // NO_CODE_ANALYSIS
+#endif
+

@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "DartApp.h"
 #include "ElfHelper.h"
 #include "DartLoader.h"
@@ -7,7 +6,7 @@ PRAGMA_WARNING(push, 0)
 #include <vm/heap/safepoint.h>
 PRAGMA_WARNING(pop)
 #include <format>
-#include <iostream> // for debugging purpose
+#include <iostream>
 
 DartApp::DartApp(const char* path) : ppool(NULL), nativeLib(0xdeadead), throwStubAddr(0)
 {
@@ -45,7 +44,6 @@ DartApp::~DartApp()
 	for (auto lib : libs) {
 		delete lib;
 	}
-	// classes are just reference. owners are in libraries. DO NOT delete here
 
 	for (auto& stub : stubs) {
 		delete stub.second;
@@ -57,10 +55,8 @@ void DartApp::EnterScope()
 	if (!inScope) {
 		inScope = true;
 		Dart_EnterScope();
-		// exit safepoint so new symbols can be created
-		//dart::Thread::Current()->SetAtSafepoint(false);
 		isolate->safepoint_handler()->ExitSafepointUsingLock(dart::Thread::Current());
-		
+
 		ppool = reinterpret_cast<dart::ObjectPool*>(dart::VMHandles::AllocateHandle(dart::Thread::Current()->zone()));
 		*ppool = isolate->group()->object_store()->global_object_pool();
 	}
@@ -78,7 +74,6 @@ void DartApp::ExitScope()
 DartClass* DartApp::GetClass(intptr_t cid)
 {
 	if ((size_t)cid > classes.size()) {
-		// assume top level class
 		return topClasses.at(dart::ClassTable::IndexFromTopLevelCid(cid));
 	}
 	return classes.at(cid);
@@ -95,7 +90,6 @@ DartFnBase* DartApp::GetFunction(uint64_t addr)
 	if (stub != stubs.end()) {
 		return stub->second;
 	}
-	// another possible is duplicated stubs in one big stub
 	for (auto& [ep_addr, stub] : stubs) {
 		if (stub->Address() < addr && addr < stub->AddressEnd()) {
 			auto newStub = stub->Split(addr);
@@ -119,8 +113,6 @@ DartLibrary* DartApp::addLibraryClass(const dart::Library& library, const dart::
 		dartLib = const_cast<DartLibrary*>(&dartCls->lib);
 	}
 
-	// Note: this function is called only when the cls is missing
-	// library always contains top level class and it is automatically add when adding Library
 	if (!cls.IsTopLevel()) {
 		auto dartCls = dartLib->AddClass(cls);
 
@@ -137,7 +129,6 @@ DartLibrary* DartApp::addLibrary(const dart::Library& library)
 	auto lib = new DartLibrary(library);
 	libs.push_back(lib);
 
-	// add classes and functions for mapping from address
 	for (const auto dartCls : lib->classes) {
 		if (dartCls == lib->topClass)
 			topClasses[dart::ClassTable::IndexFromTopLevelCid(dartCls->id)] = dartCls;
@@ -159,21 +150,15 @@ void DartApp::LoadInfo()
 
 	auto store = ig->object_store();
 
-	// load pre-defined stub
 	loadStubs(store);
 
-	// getting hidden functions from InstructionsTable are not compatible against old Dart version
-	// find all Code object in heap is a work around for getting all functions
 	findFunctionInHeap();
 
 	loadFromObjectPool();
 
 	finalizeFunctionsInfo();
 
-	//auto fieldTable = isolate->field_table(); //contains only sentinel, null, false, 0
 
-	// there are instruction tables in vm isolate but their code are not called from Dart code (can be skipped)
-	//dart::Dart::vm_isolate_group();
 }
 
 void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
@@ -188,12 +173,7 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 	auto& library = dart::Library::Handle();
 	auto& cls = dart::Class::Handle();
 
-	// https://github.com/dart-lang/sdk/issues/52310
-	// New version of Dart, information for classes in libraries and methods in classes are missing.
-	//   But there are information about the methods owner and classes owner.
-	//   So, we can work backward to fill the libraries and classes information
 
-	// iterate from toplevel class table to genreate libraries
 	for (intptr_t i = 0; i < num_top_cids; i++) {
 		const auto topCid = dart::ClassTable::CidFromTopLevelIndex(i);
 		auto clsPtr = table->At(topCid);
@@ -205,7 +185,6 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 		addLibrary(library);
 	}
 
-	// load from class table
 	for (intptr_t i = 0; i < num_cids; i++) {
 		auto clsPtr = table->At(i);
 		if (clsPtr == nullptr) {
@@ -232,8 +211,6 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 #endif
 	}
 
-	// post process of classes
-	// map super class and native type class ids
 	for (auto dartCls : classes) {
 		if (dartCls == NULL)
 			continue;
@@ -241,7 +218,6 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 		if (dartCls->superCls)
 			dartCls->superCls = classes[(intptr_t)dartCls->superCls];
 
-		// Dart create a new class for int, double, ... (do not know why built-in is not used)
 		if (dartCls->name == "int") dartIntCid = dartCls->id;
 		else if (dartCls->name == "double") dartDoubleCid = dartCls->id;
 		else if (dartCls->name == "String") dartStringCid = dartCls->id;
@@ -256,7 +232,6 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 
 	typeDb = std::unique_ptr<DartTypeDb>(new DartTypeDb(classes));
 
-	// complete the class info after super class is set
 	auto zone = dart::Thread::Current()->zone();
 	auto& interfaces = dart::Array::Handle(zone);
 	auto& type = dart::Type::Handle(zone);
@@ -268,7 +243,6 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 		auto dartType = typeDb->FindOrAdd(cls.DeclarationType());
 		dartCls->declarationType = dartType;
 		ASSERT(dartType->AsType()->Class().Id() == dartCls->Id());
-		// Note: below subvector type might be wrong for complicated generic type
 		if (dartCls->num_type_parameters > 0) {
 			dartCls->typeVectorName = dartType->Arguments().SubvectorName(0, dartCls->num_type_parameters);
 		}
@@ -276,8 +250,6 @@ void DartApp::loadFromClassTable(dart::IsolateGroup* ig)
 			dartCls->parentTypeVectorName = dartType->Arguments().SubvectorName(0, dartCls->superCls->num_type_parameters);
 		}
 
-		// if there is a mixin, the last one is mixin
-		// TODO: correct multiple interfaces or mixins because compiler generate dummy classes for "extends" and "with" 1 class
 		interfaces = cls.interfaces();
 		auto interfaces_len = interfaces.Length();
 		if (dartCls->is_transformed_mixin) {
@@ -299,8 +271,6 @@ void DartApp::loadStubs(dart::ObjectStore* store)
 	uint64_t ep_addr;
 	DartStub* stub;
 
-	// Note: some stub might contain multiple of duplicated stubs
-	// these stubs are called "_iso_stub_" in runtime/vm/stub_code.cc
 #define DO(member, name) \
 	ptr = store->member(); \
 	code = ptr; \
@@ -314,12 +284,10 @@ void DartApp::loadStubs(dart::ObjectStore* store)
 	DO(build_generic_method_extractor_code, BuildGenericMethodExtractor);
 #endif
 #undef DO
-	
+
 	code = store->throw_stub();
 	throwStubAddr = code.EntryPoint();
 
-	// load VM stub code
-	// the dart entry point "static void main()" is a LazyCompileVMStub which call "main" stub (a real main)
 	ASSERT(dart::StubCode::HasBeenInitialized());
 #define DO(name) {\
 		const auto& code = dart::StubCode::name(); \
@@ -344,7 +312,6 @@ void DartApp::loadStubs(dart::ObjectStore* store)
 
 DartFunction* DartApp::addFunctionNoCheck(const dart::Function& func)
 {
-	// find its class or library, then add it
 	const auto cls_ptr = func.Owner();
 	const auto cid = cls_ptr.untag()->id();
 	DartClass* cls;
@@ -352,7 +319,6 @@ DartFunction* DartApp::addFunctionNoCheck(const dart::Function& func)
 		const auto idx = dart::ClassTable::IndexFromTopLevelCid(cid);
 		cls = topClasses[idx];
 		if (cls == NULL) {
-			// new library
 			const auto& clsHandle = dart::Class::Handle(cls_ptr);
 			const auto& library = dart::Library::Handle(clsHandle.library());
 			cls = addLibrary(library)->topClass;
@@ -381,7 +347,6 @@ public:
 	explicit HeapCodeVisitor(std::vector<dart::CodePtr>& codePtrs) : codePtrs(codePtrs) {}
 	virtual ~HeapCodeVisitor() {}
 
-	// Invoked for each object.
 	virtual void VisitObject(dart::ObjectPtr obj) {
 		if (obj->IsCode())
 			codePtrs.push_back(dart::Code::RawCast(obj));
@@ -411,14 +376,12 @@ void DartApp::findFunctionInHeap()
 		if ((intptr_t)owner == (intptr_t)dart::Object::null()) {
 			ASSERT(code.IsStubCode());
 			if (!stubs.contains(ep_offset)) {
-				//std::cout << std::format("unknown stub at: {:#x}, {}, size: {}\n", ep_offset, code.ToCString(), code.Size());
 				auto stub_size = code.Size();
 				DartStub* candidateStub = nullptr;
 				std::vector<DartStub*> candidateStubs;
 				for (auto const& [stubEp, stub] : stubs) {
 					if (stub->kind < DartStub::SharedStub && stub->Size() == (int64_t)stub_size) {
 						if (memcmp((void*)stub->MemAddress(), (void*)entry_point, stub_size) == 0) {
-							// exact match
 							candidateStub = stub;
 							break;
 						}
@@ -446,7 +409,6 @@ void DartApp::findFunctionInHeap()
 						}
 					}
 				}
-				//std::cout << std::format("unknown stub at: {:#x}, map to {}\n", ep_offset, candidateStub->Name());
 				ASSERT(candidateStub);
 				stubs[ep_offset] = new DartStub(code_ptr, candidateStub->kind, ep_offset, stub_size, candidateStub->Name());
 			}
@@ -455,7 +417,6 @@ void DartApp::findFunctionInHeap()
 
 		obj = owner;
 		if (obj.IsClass()) {
-			// stub of user class
 			if (stubs.contains(ep_offset)) {
 				throw std::runtime_error("not allocate stub for user class");
 			}
@@ -464,8 +425,6 @@ void DartApp::findFunctionInHeap()
 			stubs[ep_offset] = astub;
 		}
 		else if (obj.IsAbstractType()) {
-			// Type test stub (seen use case: cast with "as" - xx as String)
-			// this MUST be kTypeCid or kRecordTypeCid (Dart >= 3.0)
 			if (!obj.IsType()) {
 #ifdef HAS_RECORD_TYPE
 				if (!obj.IsRecordType()) {
@@ -483,16 +442,12 @@ void DartApp::findFunctionInHeap()
 		}
 		else if (obj.IsFunction()) {
 			ASSERT(code.is_optimized());
-			// functions might not be in from Libraries
-			// they might be closure, indirect call, ... (know only closure usage)
 			addFunction(ep_offset, dart::Function::Cast(obj));
 		}
 		else if (obj.IsSmi()) {
-			// this case is only seen in obfuscated app
 			auto ownerClassId = code.OwnerClassId();
 			ASSERT(ownerClassId == dart::kFunctionCid);
 			if (!functions.contains(ep_offset)) {
-				// no function, can only make it into top class of native library
 				if (!nativeLib.topClass) {
 					nativeLib.topClass = new DartClass(nativeLib);
 				}
@@ -504,7 +459,6 @@ void DartApp::findFunctionInHeap()
 			auto msg = std::format("[!] unknown code at: {:#x}, {}\n", ep_offset, obj.ToCString());
 			std::cout << msg;
 			std::cout << "  !!! Unhandle case. Please report with your APK\n";
-			//throw std::runtime_error(msg);
 		}
 	}
 }
@@ -514,7 +468,6 @@ void DartApp::finalizeFunctionsInfo()
 	auto& parentFn = dart::Function::Handle();
 	std::unordered_map<uint64_t, DartFunction*> pending_functions;
 	for (auto& [_, dartFn] : functions) {
-		// update parent pointer
 		if (dartFn->parent) {
 			parentFn = dart::FunctionPtr((intptr_t)dartFn->parent);
 			const auto ep_addr = parentFn.entry_point() - base();
@@ -534,7 +487,6 @@ void DartApp::finalizeFunctionsInfo()
 			}
 		}
 
-		// TODO: handle function result type and paramters type
 	}
 
 	std::unordered_map<uint64_t, DartFunction*> new_functions;
@@ -568,16 +520,12 @@ void DartApp::finalizeFunctionsInfo()
 		new_functions.clear();
 	}
 
-	// null self parent
 	for (auto& [_, dartFn] : functions) {
-		// update parent pointer
 		if (dartFn->parent == dartFn) {
 			dartFn->parent = nullptr;
 		}
 	}
 
-	// extract function parameters
-	// Note: Signature is dropped in most function
 	auto& func = dart::Function::Handle();
 	for (auto& [_, dartFn] : functions) {
 		func = dartFn->ptr;
@@ -588,11 +536,8 @@ void DartApp::finalizeFunctionsInfo()
 		if (!sig.IsNull()) {
 			dartFn->Signature().returnType = TypeDb()->FindOrAdd(sig.result_type());
 
-			// function type paramaters
 			const auto& type_params = dart::TypeParameters::Handle(sig.type_parameters());
 			if (!type_params.IsNull()) {
-				// TODO: function type parameters
-				//type_params.Print(dart::Thread::Current(), zone, false, 0, dart::Object::kScrubbedName, &buffer);
 			}
 
 			const intptr_t num_params = sig.NumParameters();
@@ -624,7 +569,6 @@ void DartApp::walkObject(dart::Object& obj)
 {
 	auto cid = obj.GetClassId();
 	if (cid < dart::kNumPredefinedCids) {
-		// objects in array, map, set
 		if (obj.IsArray()) {
 			const auto& arr = dart::Array::Cast(obj);
 			const auto arr_len = arr.Length();
@@ -694,31 +638,23 @@ void DartApp::walkObject(dart::Object& obj)
 	const auto bitmap = dartCls->unboxed_fields_bitmap;
 	auto offset = dart::Instance::NextFieldOffset();
 	const auto ptr = dart::UntaggedObject::ToAddr(obj.ptr());
-	// from InstanceDeserializationCluster::ReadFill() in app_snapshot.cc
 	while (offset < dartCls->size) {
 		if (bitmap.Get(offset / dart::kCompressedWordSize)) {
-			// AOT uses native integer if it is less than 31 bits (compressed pointer)
-			// integer (4/8 bytes) or double (8 bytes)
 			if (dart::kCompressedWordSize == 4) {
 				RELEASE_ASSERT(bitmap.Get((offset + dart::kCompressedWordSize) / dart::kCompressedWordSize));
 			}
 			auto p = reinterpret_cast<uint64_t*>(ptr + offset);
-			// it is rare to find integer that larger than 0x1000_0000_0000_0000
-			//   while double is very common because of exponent value
-			// to know exact type (int or double), we have to check from register type in assembly
 			if (*p <= 0x1000000000000000 || *p >= 0xffffffffffff0000) {
 				dartCls->AddField(offset, typeDb->Get(dart::kMintCid));
 			}
 			else {
 				dartCls->AddField(offset, typeDb->Get(dart::kDoubleCid));
 			}
-			//std::cout << std::format("    offset_{:x} : int({:#x})\n", offset, *p);
 			offset += dart::kCompressedWordSize * 2;
 		}
 		else {
 			auto p = reinterpret_cast<dart::CompressedObjectPtr*>(ptr + offset);
 			if (!p->IsHeapObject()) {
-				// SMI. assume Mint but the value is small
 				dartCls->AddField(offset, typeDb->Get(dart::kMintCid));
 			}
 			else {
@@ -729,17 +665,14 @@ void DartApp::walkObject(dart::Object& obj)
 						typeDb->FindOrAdd(dart::TypeArguments::RawCast(objPtr2));
 					}
 					else {
-						// compressed object ptr
 						const auto fieldCid = objPtr2.GetClassId();
 						const auto fieldCls = classes[fieldCid];
 						if (fieldCls) {
 							obj = objPtr2;
 							dartCls->AddField(offset, typeDb->FindOrAdd(*fieldCls, dart::Instance::Cast(obj)));
-							// walk this object recursively
 							walkObject(obj);
 						}
 						else {
-							//dart::kCallSiteDataCid;
 						}
 					}
 				}
@@ -773,13 +706,12 @@ void DartApp::loadFromObjectPool()
 			walkObject(obj);
 		}
 		else if (objType == dart::ObjectPool::EntryType::kImmediate) {
-			// just immediate. no info
 		}
 		else if (objType == dart::ObjectPool::EntryType::kNativeFunction) {
-			// normally, it is only used in internal library (can be ignored)
 		}
 		else {
 			throw std::runtime_error("Unknown Object Pool entry type");
 		}
 	}
 }
+

@@ -29,7 +29,7 @@ function tryLoadLibapp() {
         }
     }
     if (libapp === null)
-        setTimeout(tryLoadLibapp, 500);    
+        setTimeout(tryLoadLibapp, 500);
     else
         onLibappLoaded();
 }
@@ -45,10 +45,8 @@ if (!PointerCompressedEnabled)
     console.error("now support only compressed pointer");
 
 let HeapAddress = 0;
-// this function must be called at least on first interception of Dart function
 function init(context) {
     if (HeapAddress === 0) {
-        // heap bit register value is not shifted
         HeapAddress = context[HeapAddressReg].shl(32);
     }
 }
@@ -66,18 +64,16 @@ function getDartDouble(ptr, cls) {
 }
 
 function getDartString(ptr, cls) {
-    const len = ptr.add(cls.lenOffset).readU32() >> 1; // Dart store string length as Smi
+    const len = ptr.add(cls.lenOffset).readU32() >> 1;
     return ptr.add(cls.dataOffset).readUtf8String(len);
 }
 
 function getDartTwoByteString(ptr, cls) {
-    const len = ptr.add(cls.lenOffset).readU32() >> 1; // Dart store string length as Smi
+    const len = ptr.add(cls.lenOffset).readU32() >> 1;
     return ptr.add(cls.dataOffset).readUtf16String(len);
 }
 
 function getDartArray(ptr, cls, depthLeft, glen = null) {
-    // TODO: type arguments
-    // Dart store array length as Smi
     const len = glen === null ? ptr.add(cls.lenOffset).readU32() >> 1 : glen;
     let vals = [];
     let dataPtr = ptr.add(cls.dataOffset);
@@ -96,8 +92,7 @@ function getDartArray(ptr, cls, depthLeft, glen = null) {
 }
 
 function getDartGrowableArray(ptr, cls, depthLeft) {
-    // TODO: type arguments
-    const len = ptr.add(cls.lenOffset).readU32() >> 1; // Dart store array length as Smi
+    const len = ptr.add(cls.lenOffset).readU32() >> 1;
     let arrPtr = ptr.add(cls.dataOffset);
     return getDartArray(arrPtr, Classes[CidArray], depthLeft, len);
 }
@@ -169,8 +164,6 @@ function isFieldNative(fieldBitmap, offset) {
     return (fieldBitmap & (1 << idx)) !== 0;
 }
 
-// tptr (tagged pointer) is only for tagged object (HeapBit in address except Smi)
-// return format: value
 function getObjectValue(ptr, cls, depthLeft = MaxDepth) {
     switch (cls.id) {
     case CidObject:
@@ -221,19 +214,17 @@ function getObjectValue(ptr, cls, depthLeft = MaxDepth) {
         console.log(msg);
         return msg;
     }
-    
+
     if (depthLeft <= 0) {
         return 'no more recursive';
     }
 
-    // find parent tree
     let parents = [];
     let scls = Classes[cls.sid];
     while (scls.id != CidObject) {
         parents.push(scls);
         scls = Classes[scls.sid];
     }
-    // get value from top parent to bottom parent
     let values = {};
     while (parents.length > 0) {
         const sscls = scls;
@@ -251,20 +242,14 @@ function getInstanceValue(ptr, cls, scls, depthLeft = MaxDepth) {
     let offset = scls.size;
     while (offset < cls.size) {
         if (offset == cls.argOffset) {
-            // TODO: type arguments
             offset += CompressedWordSize;
         }
         else if (isFieldNative(cls.fbitmap, offset)) {
             if (PointerCompressedEnabled && !isFieldNative(cls.fbitmap, offset + CompressedWordSize))
                 console.error("Native type but use only 4 bytes");
-            
+
             let val = ptr.add(offset).readU64();
-            // TODO: this might not work on javascript because all number are floating pointer (except BigInt)
-            // it is rare to find integer that larger than 0x1000_0000_0000_0000
-            //   while double is very common because of exponent value
-            // to know exact type (int or double), we have to check from register type in assembly
             if (val <= 0x1000000000000000n || val >= 0xffffffffffff0000n) {
-                // it should be integer
                 values[`off_${offset.toString(16)}`] = val;
             }
             else {
@@ -274,7 +259,6 @@ function getInstanceValue(ptr, cls, scls, depthLeft = MaxDepth) {
             offset += CompressedWordSize * 2;
         }
         else {
-            // object
             let dptr = ptr.add(offset).readPointer();
             const [tptr, ocls, fieldValue] = getTaggedObjectValue(dptr, depthLeft - 1);
             if (ocls.id === CidSmi) {
@@ -293,12 +277,8 @@ function getInstanceValue(ptr, cls, scls, depthLeft = MaxDepth) {
     return values;
 }
 
-// tptr (tagged pointer) is only for tagged object (HeapBit in address except Smi)
-// return format: [tptr, cls, values]
 function getTaggedObjectValue(tptr, depthLeft = MaxDepth) {
     if (!isHeapObject(tptr)) {
-        // smi
-        // TODO: below support only compressed pointer (4 bytes)
         return [tptr, Classes[CidSmi], tptr.toInt32() >> 1];
     }
 
@@ -310,7 +290,6 @@ function getTaggedObjectValue(tptr, depthLeft = MaxDepth) {
 }
 
 function getArg(context, idx) {
-    // Note: argument pointer is never compressed
     let stack = context[StackReg];
     return stack.add(8 * idx).readPointer();
 }
@@ -323,7 +302,6 @@ function getObjectTag(ptr) {
     const tag = ptr.readU64();
     const objSize = ((tag >> 8) & 0xf) * 8;
     const cid = (tag >> ClassIdTagPos) & ClassIdTagMask;
-    //const hashId = (tag >> 32) & 0xffffffff;
     return [cid, objSize];
 }
 

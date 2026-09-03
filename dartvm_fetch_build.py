@@ -1,5 +1,4 @@
 
-import mmap
 import os
 import shutil
 import stat
@@ -54,7 +53,6 @@ dart_versions = {
     "3.18": ["3.18.0"],
 }
 
-
 class DartLibInfo:
     def __init__(self, version: str, os_name: str, arch: str, has_compressed_ptrs=None, snapshot_hash=None):
         self.os_name = os_name
@@ -88,11 +86,9 @@ class DartLibInfo:
         self.version = version
         self.lib_name = f'dartvm{version}_{os_name}_{arch}'
 
-
 def checkout_dart(info: DartLibInfo):
     clonedir = os.path.join(SDK_DIR, 'v' + info.version)
 
-    # if no version file, assume previous clone failed. delete and retry.
     version_file = os.path.join(clonedir, 'runtime', 'vm', 'version.cc')
     if os.path.exists(clonedir) and not os.path.exists(version_file):
         print('Delete incomplete clone directory ' + clonedir)
@@ -112,7 +108,7 @@ def checkout_dart(info: DartLibInfo):
                     os.remove(entry.path)
 
         if info.snapshot_hash is None:
-            # python 3.12 removed the imp module used by old tools/utils.py
+
             if sys.version_info[:2] >= (3, 12):
                 utils_path = os.path.join(clonedir, "tools", "utils.py")
                 if os.path.exists(utils_path):
@@ -128,11 +124,10 @@ def checkout_dart(info: DartLibInfo):
             subprocess.run([sys.executable, 'tools/make_version.py', '--output', 'runtime/vm/version.cc',
                             '--input', 'runtime/vm/version_in.cc'], cwd=clonedir, check=True)
         else:
-            # snapshot hash of the analyzed app; mandatory to parse its snapshot
+
             subprocess.run([sys.executable, MAKE_VERSION_FILE, clonedir, info.snapshot_hash], check=True)
 
     return clonedir
-
 
 def cmake_dart(info: DartLibInfo, target_dir: str):
 
@@ -150,7 +145,6 @@ def cmake_dart(info: DartLibInfo, target_dir: str):
     with open(os.path.join(target_dir, 'CMakeLists.txt'), 'w') as f:
         f.write(code.replace('VERSION_PLACE_HOLDER', info.version).replace('CXX_STD_PLACE_HOLDER', cpp_std))
 
-    # copy ICU compatibility header (needed for ICU < 73 with Dart 3.12+)
     icu_compat_src = os.path.join(SCRIPT_DIR, 'scripts', 'icu_compat.h')
     if os.path.isfile(icu_compat_src):
         shutil.copy2(icu_compat_src, os.path.join(target_dir, 'icu_compat.h'))
@@ -170,7 +164,6 @@ def cmake_dart(info: DartLibInfo, target_dir: str):
 
     subprocess.run([NINJA_CMD], cwd=builddir, check=True)
     subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=True)
-
 
 def fetch_and_build(info: DartLibInfo):
     outdir = checkout_dart(info)

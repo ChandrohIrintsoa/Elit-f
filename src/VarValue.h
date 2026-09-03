@@ -9,15 +9,15 @@ struct VarStorage {
 		Expression = 0,
 		Register,
 		Local,
-		Argument, // caller argument
-		Static, // static variable
-		Pool, // object in pool
+		Argument,
+		Static,
+		Pool,
 		Thread,
-		InInstruction, // temporary storage when one assembly instruction is splitted to multiple intermediate instruction
+		InInstruction,
 		Immediate,
-		SmallImm, // array/object offset
-		Call, // return value
-		Field, // access field
+		SmallImm,
+		Call,
+		Field,
 		Uninit,
 	};
 	VarStorage(A64::Register reg) : kind{ Register }, reg{ reg } {}
@@ -45,8 +45,8 @@ struct VarStorage {
 	Kind kind;
 	union {
 		A64::Register reg;
-		int offset; // offset of Local, Pool, Thread, Offset
-		int idx; // index of Argument
+		int offset;
+		int idx;
 	};
 };
 
@@ -55,24 +55,18 @@ using ValueType = int32_t;
 struct VarInteger;
 struct VarParam;
 struct VarValue {
-	// use Dart class id to determine what the variable type is
-	// custom type use negative value
 	enum CustomTypeId : int32_t {
 		Expression = -1000,
 		TaggedCid,
 		NativeInt,
 		NativeDouble,
-		Parameter, // call parameter (argument)
+		Parameter,
 		ArgsDesc,
-		// it will a number of passing named parameter. no use after loading all named parameters but some function stores it into stack without use.
-		// so, we need it to suppress an error about use without define.
 		CurrNumNameParam,
 	};
 
 	VarValue(ValueType typeId, bool hasValue = false) : typeId(typeId), hasValue(hasValue) {}
-	//VarValue() : kind(Unknown), hasValue(false) {}
 	virtual ~VarValue() {}
-	//virtual std::string ToString() = 0;
 	virtual std::string ToString() { return "unknown"; }
 	bool HasValue() const { return hasValue; }
 	virtual ValueType TypeId() { return typeId; }
@@ -107,8 +101,6 @@ struct VarBoolean : public VarValue {
 };
 
 struct VarInteger : public VarValue {
-	// int type is same as type in VarValue
-	// Note: VarInteger = unknown integer type (maybe native, smi, mint)
 	explicit VarInteger(int64_t val, ValueType intTypeId = dart::kIntegerCid) : VarValue(dart::kIntegerCid, true), intTypeId(intTypeId), val(val) {}
 	explicit VarInteger(ValueType intTypeId = dart::kIntegerCid) : VarValue(dart::kIntegerCid, false), intTypeId(intTypeId), val(0) {}
 	virtual std::string ToString() { return std::to_string(Value()); }
@@ -167,37 +159,29 @@ struct VarArray : public VarValue {
 	explicit VarArray() : VarValue(dart::kArrayCid, false), ptr(dart::Object::null()), eleType(nullptr), length(-1) {}
 	virtual std::string ToString();
 	int64_t DataOffset() {
-		// TODO: typedArray has no type argument. so, offset is not the same
 		return dart::Array::data_offset();
 	}
 	int ElementSize() {
-		// TODO: typedArray has fixed size
 		return dart::kCompressedWordSize;
 	}
 	bool IsElementTypeInt() {
-		//return eleType && eleType->Class().Name() == "int";
 		return eleType && eleType->AsType()->Class().Name() == "int";
 	}
 
 	dart::ArrayPtr ptr;
 	DartAbstractType* eleType;
-	int length; // -1 for unknown or growable array
+	int length;
 };
 
-// should growable array be treated as instance?
-// growable array is not Array
-// its data is a Fixed size Array (length of fixed size array is capacity)
 struct VarGrowableArray : public VarValue {
 	explicit VarGrowableArray(DartAbstractType* eleType) : VarValue(dart::kGrowableObjectArrayCid, false), eleType(eleType) {}
 	explicit VarGrowableArray() : VarValue(dart::kGrowableObjectArrayCid, false), eleType(nullptr) {}
 	virtual std::string ToString() { return "GrowableArray"; }
 
 	int ElementSize() {
-		// TODO: typedArray has fixed size
 		return dart::kCompressedWordSize;
 	}
 	bool IsElementTypeInt() {
-		//return eleType && eleType->Class().Name() == "int";
 		return eleType && eleType->AsType()->Class().Name() == "int";
 	}
 
@@ -219,7 +203,6 @@ struct VarUnlinkedCall : public VarValue {
 	DartStub& stub;
 };
 
-// object instance
 struct VarInstance : public VarValue {
 	explicit VarInstance(DartClass* cls) : VarValue(dart::kInstanceCid, true), cls(cls) {}
 	explicit VarInstance() : VarValue(dart::kInstanceCid, false), cls(nullptr) {}
@@ -227,7 +210,6 @@ struct VarInstance : public VarValue {
 	virtual std::string ToString() { return std::format("Instance_{}", cls->Name()); }
 
 	DartClass* cls;
-	//TODO: TypeArguments;
 };
 
 struct VarType : public VarValue {
@@ -267,7 +249,6 @@ struct VarTypeArgument : public VarValue {
 	const DartTypeArguments& typeArgs;
 };
 
-// uninitialized object in dart
 struct VarSentinel : public VarValue {
 	explicit VarSentinel() : VarValue(dart::kSentinelCid, false) {}
 	virtual std::string ToString() { return "Sentinel"; }
@@ -278,8 +259,6 @@ struct VarSubtypeTestCache : public VarValue {
 	virtual std::string ToString() { return "SubtypeTestCache"; }
 };
 
-// A special integer type to represent class id
-// cid might be used tagged cid (SMI)
 struct VarCid : public VarValue {
 	explicit VarCid(int cid, bool isSmi) : VarValue(dart::kClassCid, cid != 0), isSmi(isSmi), cid(cid) {}
 	explicit VarCid() : VarValue(dart::kClassCid, false), isSmi(false), cid(0) {}
@@ -299,7 +278,6 @@ struct VarItem {
 	explicit VarItem(VarStorage storage) : storage(storage) {}
 	explicit VarItem(VarStorage storage, std::unique_ptr<VarValue> val) : storage(storage), val(std::move(val)) {}
 	explicit VarItem(VarStorage storage, VarValue* val) : storage(storage), val(std::unique_ptr<VarValue>(val)) {}
-	// register storage is common and also special type
 	explicit VarItem(A64::Register reg, std::unique_ptr<VarValue> val) : storage(VarStorage(reg)), val(std::move(val)) {}
 	explicit VarItem(A64::Register reg, VarValue* val) : storage(VarStorage(reg)), val(std::unique_ptr<VarValue>(val)) {}
 
@@ -315,11 +293,9 @@ struct VarItem {
 	VarItem* MoveTo(VarStorage storage) { return new VarItem(storage, std::move(val)); }
 	VarItem* MoveTo(A64::Register reg) { return new VarItem(VarStorage::NewRegister(reg), std::move(val)); }
 
-	// TODO: more clever name or value when it is known type
 	std::string Name();
 	std::string CallArgName();
 
 	VarStorage storage;
-	//VarType type;
 	std::unique_ptr<VarValue> val;
 };

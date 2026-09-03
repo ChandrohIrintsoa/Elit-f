@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "Disassembler.h"
 
 namespace A64 {
@@ -14,7 +13,6 @@ const char* Register::RegisterNames[] = {
 };
 }
 
-// singleton of capstone handle. use for global resolve register name  of aarch64
 static csh g_cshandle;
 const char* GetCsRegisterName(arm64_reg reg)
 {
@@ -31,3 +29,4 @@ Disassembler::Disassembler(bool hasDetail)
 	if (hasDetail)
 		cs_option(cshandle, CS_OPT_DETAIL, CS_OPT_ON);
 }
+
