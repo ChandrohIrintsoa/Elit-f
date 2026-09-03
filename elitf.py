@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import argparse
+import glob
 import mmap
 import os
+import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -83,6 +86,13 @@ def validate_two_libs(indir: str):
 
     missing = [f for f in EXPECTED_LIBS if f not in found]
     if missing:
+        alt = {}
+        for std_name, raw_name in (('libapp.so', 'App'), ('libflutter.so', 'Flutter')):
+            raw_path = os.path.join(indir, raw_name)
+            if os.path.isfile(raw_path):
+                alt[std_name] = os.path.abspath(raw_path)
+        if all(s in alt for s in EXPECTED_LIBS):
+            return (alt[EXPECTED_LIBS[0]], alt[EXPECTED_LIBS[1]])
         raise ValueError(
             f"Missing libraries: {missing}. The Flutter libs must be exactly two: "
             f"{EXPECTED_LIBS[0]} and {EXPECTED_LIBS[1]}")
@@ -171,8 +181,9 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
 class ElitfInput:
     def __init__(self, libapp_path: str, dart_info: DartLibInfo, outdir: str,
                  rebuild: bool, no_analysis: bool, ida_fcn: bool = False,
-                 log_mgr: LogManager = None):
+                 log_mgr: LogManager = None, create_vs_sln: bool = False):
         self.libapp_path = libapp_path
+        self.create_vs_sln = create_vs_sln
         self.dart_info = dart_info
         self.outdir = outdir
         self.rebuild = rebuild
@@ -205,6 +216,14 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
                                elitf_input.no_analysis, elitf_input.ida_fcn)
     if log_mgr:
         log_mgr.add(f"Compat macros: {' '.join(macros)}", "info")
+    my_env = None
+    if platform.system() == 'Darwin':
+        mac_ver = int(platform.mac_ver()[0].split('.', 1)[0])
+        if mac_ver < 15:
+            llvm_prefix = subprocess.run(['brew', '--prefix', 'llvm@16'], capture_output=True,
+                                         check=True).stdout.decode().strip()
+            clang_file = os.path.join(llvm_prefix, 'bin', 'clang')
+            my_env = {**os.environ, 'CC': clang_file, 'CXX': clang_file + '++'}
     cmd = [CMAKE_CMD, '-GNinja', '-B', builddir,
            f'-DDARTLIB={elitf_input.dart_info.lib_name}',
            f'-DNAME_SUFFIX={elitf_input.name_suffix}',
@@ -212,7 +231,7 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
     if log_mgr:
         log_mgr.add("Running cmake configure...", "info")
     try:
-        subprocess.run(cmd, cwd=SCRIPT_DIR, check=True, stdin=subprocess.DEVNULL)
+        subprocess.run(cmd, cwd=SCRIPT_DIR, check=True, stdin=subprocess.DEVNULL, env=my_env)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"cmake configure failed (exit {e.returncode})") from e
     except FileNotFoundError:
@@ -238,6 +257,32 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
         raise RuntimeError(f"cmake install failed (exit {e.returncode})") from e
     if log_mgr:
         log_mgr.step()
+
+def cmake_vs_sln(elitf_input: ElitfInput, log_mgr: LogManager = None):
+    macros = find_compat_macro(elitf_input.dart_info.version,
+                               elitf_input.no_analysis, elitf_input.ida_fcn)
+    if log_mgr:
+        log_mgr.add("Generating Visual Studio solution...", "info")
+    dbg_output_path = os.path.abspath(os.path.join(elitf_input.outdir, 'out'))
+    dbg_cmd_args = f'-i {elitf_input.libapp_path} -o {dbg_output_path}'
+    vscmd_ver = os.getenv('VSCMD_VER')
+    if vscmd_ver is None:
+        raise RuntimeError('Need to run Elit-f in a Visual Studio Developer console')
+    if vscmd_ver.startswith('18.'):
+        generator = 'Visual Studio 18 2026'
+    elif vscmd_ver.startswith('17.'):
+        generator = 'Visual Studio 17 2022'
+    else:
+        raise RuntimeError(f'Unknown Visual Studio version: {vscmd_ver}')
+    subprocess.run([CMAKE_CMD, '-G', generator, '-A', 'x64', '-B', elitf_input.outdir,
+                    f'-DDARTLIB={elitf_input.dart_info.lib_name}',
+                    f'-DNAME_SUFFIX={elitf_input.name_suffix}',
+                    f'-DDBG_CMD:STRING={dbg_cmd_args}']
+                   + macros + [SCRIPT_DIR], check=True, stdin=subprocess.DEVNULL)
+    dbg_exe_dir = os.path.join(elitf_input.outdir, 'Debug')
+    os.makedirs(dbg_exe_dir, exist_ok=True)
+    for filename in glob.glob(os.path.join(BIN_DIR, '*.dll')):
+        shutil.copy(filename, dbg_exe_dir)
 
 def get_dart_lib_info(libapp_path: str, libflutter_path: str, log_mgr: LogManager = None):
     from extract_dart_info import extract_dart_info
@@ -271,6 +316,9 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                 log_mgr.add(f"Dart VM {elitf_input.dart_info.version} built successfully", "success")
                 log_mgr.step()
         elitf_input.rebuild = True
+    if elitf_input.create_vs_sln:
+        cmake_vs_sln(elitf_input, log_mgr)
+        return
     if elitf_input.rebuild:
         if log_mgr:
             log_mgr.add(f"Building Elit-f binary ({elitf_input.bin_name})...", "info")
@@ -309,7 +357,7 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                         '-o', elitf_input.outdir], check=True)
 
 def _analyze_libs(libapp_file, libflutter_file, outdir, rebuild, no_analysis, ida_fcn,
-                  ui, log_mgr):
+                  ui, log_mgr, vs_sln=False):
     dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs = \
         get_dart_lib_info(libapp_file, libflutter_file, log_mgr)
     if ui is not None:
@@ -324,10 +372,11 @@ def _analyze_libs(libapp_file, libflutter_file, outdir, rebuild, no_analysis, id
         }
     dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
     input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis,
-                           ida_fcn, log_mgr)
+                           ida_fcn, log_mgr, create_vs_sln=vs_sln)
     build_and_run(input_obj, log_mgr)
 
-def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_mgr):
+def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_mgr,
+                         vs_sln=False):
     if indir.endswith(".apk"):
         if log_mgr:
             log_mgr.add(f"Extracting APK: {indir}", "info")
@@ -338,11 +387,11 @@ def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_m
                 log_mgr.add("APK extracted successfully", "success")
                 log_mgr.step()
             _analyze_libs(libapp_file, libflutter_file, outdir, rebuild,
-                          no_analysis, ida_fcn, ui, log_mgr)
+                          no_analysis, ida_fcn, ui, log_mgr, vs_sln)
     else:
         libapp_file, libflutter_file = validate_two_libs(indir)
         _analyze_libs(libapp_file, libflutter_file, outdir, rebuild,
-                      no_analysis, ida_fcn, ui, log_mgr)
+                      no_analysis, ida_fcn, ui, log_mgr, vs_sln)
     if log_mgr:
         log_mgr.add("Flutter/Dart AOT analysis complete", "success")
         log_mgr.step()
@@ -361,7 +410,30 @@ def check_dependencies():
         missing.append(('rich', 'pip install rich'))
     return missing
 
-def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=False):
+def run_command(command):
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               shell=True)
+    output, error = process.communicate()
+    if error:
+        return error.decode('utf-8')
+    return output.decode('utf-8')
+
+def check_for_updates():
+    if not os.path.isdir(os.path.join(SCRIPT_DIR, '.git')):
+        return
+    run_command('git fetch')
+    behind = run_command('git rev-list --count HEAD..@{u}')
+    if not behind.strip().isdigit() or int(behind) == 0:
+        return
+    dirty = run_command('git status --porcelain')
+    if dirty.strip():
+        print('Elit-f update skipped: local changes present')
+        return
+    run_command('git pull --ff-only')
+    print('Elit-f updated. Run again with --rebuild to rebuild the executable')
+
+def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=False,
+             vs_sln=False):
     ui = ElitfUI(force_plain=force_plain)
     missing = check_dependencies()
     if missing and ui.console:
@@ -383,7 +455,8 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
 
         print(f"\n  Auteur : {AUTHOR}")
         print("  Pour l'interface complète, installez: pip install rich\n")
-        run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, None)
+        run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, None,
+                             vs_sln)
         return
 
     ui.indir = indir
@@ -402,7 +475,8 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
         os.makedirs(outdir, exist_ok=True)
         ui.log_mgr.clear()
         def work(lm):
-            run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm)
+            run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm,
+                                 vs_sln)
         try:
             ui.run_with_live_display("Flutter/Dart AOT Analysis", 20, work)
         except Exception as e:
@@ -449,7 +523,8 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
         return 1
     return 0
 
-def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
+def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
+                     vs_sln=False):
     from rich.rule import Rule as _Rule
     from rich.style import Style as _Style
     from rich.panel import Panel as _Panel
@@ -535,7 +610,8 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
             def work(lm):
-                run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm)
+                run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm,
+                                     vs_sln)
             try:
                 ui.run_with_live_display("Flutter/Dart AOT Analysis", 20, work)
                 if ui.console:
@@ -607,14 +683,16 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False):
                 break
 
 def main_no_flutter(libapp_path: str, dart_version: str, outdir: str,
-                    rebuild: bool, no_analysis: bool, ida_fcn: bool = False):
+                    rebuild: bool, no_analysis: bool, ida_fcn: bool = False,
+                    vs_sln: bool = False):
     parts = dart_version.split('_')
     if len(parts) != 3:
         sys.exit(f'Invalid dart-version format: "{dart_version}". '
                  'Expected "<version>_<os>_<arch>" (e.g. "3.4.2_android_arm64")')
     version, os_name, arch = parts
     dart_info = DartLibInfo(version, os_name, arch)
-    input_obj = ElitfInput(libapp_path, dart_info, outdir, rebuild, no_analysis, ida_fcn)
+    input_obj = ElitfInput(libapp_path, dart_info, outdir, rebuild, no_analysis, ida_fcn,
+                           create_vs_sln=vs_sln)
     build_and_run(input_obj)
 
 def main():
@@ -640,21 +718,30 @@ def main():
     parser.add_argument('--plain', action='store_true', default=False,
                         help='Disable Rich Live animations and use plain streaming '
                              '(recommended on Termux or limited terminals)')
+    parser.add_argument('--vs-sln', action='store_true', default=False,
+                        help='Generate Visual Studio solution at <outdir> '
+                             '(run from a Visual Studio Developer console)')
+    parser.add_argument('--nu', action='store_false', default=True,
+                        help='Do not check for updates')
     args = parser.parse_args()
+
+    if args.nu:
+        check_for_updates()
 
     if args.dart_version is not None:
         if not args.indir:
             sys.exit('--dart-version requires indir (libapp.so path)')
         outdir = args.outdir or './out'
         main_no_flutter(args.indir, args.dart_version, outdir,
-                        args.rebuild, args.no_analysis, args.ida_fcn)
+                        args.rebuild, args.no_analysis, args.ida_fcn,
+                        vs_sln=args.vs_sln)
         return 0
 
     if args.indir and args.outdir:
         if args.cli or not HAS_RICH:
             return main_cli(args.indir, args.outdir, args.rebuild,
                             args.no_analysis, args.ida_fcn,
-                            force_plain=args.plain) or 0
+                            force_plain=args.plain, vs_sln=args.vs_sln) or 0
 
         ui = ElitfUI(force_plain=args.plain)
         ui.indir = args.indir
@@ -681,7 +768,7 @@ def main():
         try:
             run_flutter_analysis(args.indir, args.outdir, args.rebuild,
                                  args.no_analysis, args.ida_fcn,
-                                 ElitfUI(force_plain=args.plain), None)
+                                 ElitfUI(force_plain=args.plain), None, args.vs_sln)
         except Exception as e:
             print(f"\nERREUR: {type(e).__name__}: {e}")
             return 2
@@ -692,7 +779,8 @@ def main():
         ui.indir = args.indir
     if args.outdir:
         ui.outdir = args.outdir
-    main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn)
+    main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn,
+                     vs_sln=args.vs_sln)
     return 0
 
 if __name__ == "__main__":
