@@ -1,3 +1,4 @@
+#include "DartSdk.h"
 #include "DartDumper.h"
 #include <fstream>
 #include <format>
@@ -28,6 +29,17 @@ static std::string getFunctionName4Ida(const DartFunction& dartFn, const std::st
 	auto fnName = dartFn.Name();
 	if (dartFn.IsClosure() && fnName == "<anonymous closure>") {
 		return "_anon_closure";
+	}
+
+	if (fnName.starts_with("#")) {
+		fnName.replace(0, 1, "@");
+	}
+
+	for (size_t pos = 0; ; pos += 1) {
+		pos = fnName.find("|_", pos);
+		if (pos == std::string::npos)
+			break;
+		fnName.replace(pos, 2, "_");
 	}
 
 	auto periodPos = fnName.find('.');
@@ -478,11 +490,15 @@ std::string DartDumper::ObjectToString(dart::Object& obj, bool simpleForm, bool 
 	case dart::kSubtypeTestCacheCid:
 		return "SubtypeTestCache";
 	case dart::kFunctionCid: {
-		auto fnBase = app.GetFunction(dart::Function::Cast(obj).entry_point() - app.base());
-		if (fnBase == nullptr || fnBase->IsStub()) {
-			return std::format("Function: [unknown] ({:#x})", dart::Function::Cast(obj).entry_point() - app.base());
+		auto& fn = dart::Function::Cast(obj);
+		auto offset = fn.entry_point() - app.base();
+		auto info = app.GetFunction(offset);
+		if (!info || info->IsStub()) {
+			std::string name = fn.UserVisibleNameCString();
+			const char* type = info ? "StubFunction" : "UnresolvedFunction";
+			return std::format("{}: {} ({:#x})", type, name.empty() ? "[unknown]" : name, offset);
 		}
-		auto dartFn = fnBase->AsFunction();
+		auto dartFn = info->AsFunction();
 		if (dartFn->IsClosure()) {
 			auto parentFn = dartFn->GetOutermostFunction();
 			if (parentFn) {

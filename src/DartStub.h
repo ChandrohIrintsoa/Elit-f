@@ -9,6 +9,11 @@ class DartStub : public DartFnBase
 {
 public:
 	enum Kind : int32_t {
+#ifdef BLUTTER_DART_SINGLE_SNAPSHOT
+#define DO(name) name ## Stub,
+		VM_STUB_CODE_LIST(DO)
+#undef DO
+#else
 #define DO(member, name) name ## Stub,
 		OBJECT_STORE_STUB_CODE_LIST(DO)
 #undef DO
@@ -17,6 +22,7 @@ public:
 #define DO(name) name ## VMStub,
 		VM_STUB_CODE_LIST(DO)
 #undef DO
+#endif
 		SharedStub,
 		AllocateUserObjectStub,
 		TypeCheckStub,

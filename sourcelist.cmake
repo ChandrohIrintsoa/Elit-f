@@ -17,6 +17,7 @@ set(SRCS
     DartLibrary.h
     DartLoader.cpp
     DartLoader.h
+    DartSdk.h
     DartStub.cpp
     DartStub.h
     DartThreadInfo.cpp

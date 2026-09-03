@@ -1,3 +1,4 @@
+#include "DartSdk.h"
 #include "Disassembler.h"
 
 AsmInstructions Disassembler::Disasm(const uint8_t* code, size_t code_size, uint64_t address, size_t max_count)

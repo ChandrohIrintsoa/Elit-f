@@ -1,3 +1,4 @@
+#include "DartSdk.h"
 #include "DartTypes.h"
 #include "DartClass.h"
 #include <numeric>
@@ -292,6 +293,10 @@ DartFunctionType* DartTypeDb::FindOrAdd(dart::FunctionTypePtr fnTypePtr)
 
 DartAbstractType* DartTypeDb::FindOrAdd(dart::AbstractTypePtr abTypePtr)
 {
+	if ((intptr_t)abTypePtr == (intptr_t)dart::Object::null()) {
+		return FindOrAdd(dart::Type::DynamicType());
+	}
+
 	switch (abTypePtr.GetClassId()) {
 	case dart::kTypeCid:
 		return FindOrAdd(dart::Type::RawCast(abTypePtr));
@@ -311,7 +316,9 @@ DartAbstractType* DartTypeDb::FindOrAdd(dart::AbstractTypePtr abTypePtr)
 	case dart::kFunctionTypeCid:
 		return FindOrAdd(dart::FunctionType::RawCast(abTypePtr));
 	}
-	FATAL("Invalid abstract type");
+	const auto cid = abTypePtr.GetClassId();
+	const auto& cls = dart::Class::Handle(dart::IsolateGroup::Current()->class_table()->At(cid));
+	FATAL("Invalid abstract type (cid %d, class %s)", (int)cid, cls.ScrubbedNameCString());
 }
 
 const DartTypeArguments* DartTypeDb::FindOrAdd(dart::TypeArgumentsPtr typeArgsPtr)

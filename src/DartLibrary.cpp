@@ -1,3 +1,4 @@
+#include "DartSdk.h"
 #include "DartLibrary.h"
 #include "DartClass.h"
 #include <filesystem>

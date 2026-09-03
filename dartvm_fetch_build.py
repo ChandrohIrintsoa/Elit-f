@@ -1,4 +1,4 @@
-
+import mmap
 import os
 import shutil
 import stat
@@ -126,6 +126,20 @@ def checkout_dart(info: DartLibInfo):
         else:
 
             subprocess.run([sys.executable, MAKE_VERSION_FILE, clonedir, info.snapshot_hash], check=True)
+
+    if sys.platform == 'win32':
+        vers = info.version.split('.', 2)
+        if int(vers[0]) >= 3 and int(vers[1]) >= 8:
+            with open(os.path.join(clonedir, 'runtime', 'platform', 'unwinding_records.h'), 'r+b') as f:
+                mm = mmap.mmap(f.fileno(), 0)
+                pos = mm.find(b'\n#if !defined(DART_HOST_OS_WINDOWS) || !defined(HOST_ARCH_ARM64)')
+                if pos != -1:
+                    mm[pos+36:pos+38] = b'//'
+                else:
+                    pos = mm.find(b'\nstatic_assert(sizeof(')
+                    if pos != -1:
+                        mm[pos+1:pos+3] = b'//'
+                mm.close()
 
     return clonedir
 

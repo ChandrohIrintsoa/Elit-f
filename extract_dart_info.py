@@ -22,12 +22,13 @@ def extract_snapshot_hash_flags(libapp_file):
         dynsym = elf.get_section_by_name('.dynsym')
         if dynsym is None:
             raise ValueError('No .dynsym section found in ' + libapp_file)
-        syms = dynsym.get_symbol_by_name('_kDartVmSnapshotData')
+        syms = (dynsym.get_symbol_by_name('_kDartVmSnapshotData') or
+                dynsym.get_symbol_by_name('_kDartSnapshotData'))
         if not syms:
-            raise ValueError('Symbol _kDartVmSnapshotData not found in ' + libapp_file)
+            raise ValueError('Symbol _kDartVmSnapshotData/_kDartSnapshotData not found in ' + libapp_file)
         sym = syms[0]
         if sym['st_size'] <= 128:
-            raise ValueError(f"Symbol _kDartVmSnapshotData too small: {sym['st_size']}")
+            raise ValueError(f"Snapshot data symbol too small: {sym['st_size']}")
 
         offset = _va_to_file_offset(elf, sym['st_value'])
         if offset is None:

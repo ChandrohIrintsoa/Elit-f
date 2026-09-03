@@ -1,3 +1,4 @@
+#include "DartSdk.h"
 #include "CodeAnalyzer.h"
 #include "DartApp.h"
 

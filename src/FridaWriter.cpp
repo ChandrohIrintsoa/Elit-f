@@ -1,3 +1,4 @@
+#include "DartSdk.h"
 #include "FridaWriter.h"
 #include <fstream>
 #include <filesystem>
@@ -109,7 +110,9 @@ void FridaWriter::Create(const char* filename)
 				of << "{id:" << dartCls->Id() << ",";
 				of << "name:\"Closure\",";
 				of << "fnOffset:" << AOT_Closure_function_offset << ",";
+#ifndef BLUTTER_DART_SINGLE_SNAPSHOT
 				of << "contextOffset:" << AOT_Closure_context_offset << ",";
+#endif
 				of << "epOffset:" << AOT_Closure_entry_point_offset << "},\n";
 				break;
 			case dart::kTypedDataUint8ArrayCid:

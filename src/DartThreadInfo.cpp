@@ -1,3 +1,4 @@
+#include "DartSdk.h"
 #include "DartThreadInfo.h"
 
 static std::unordered_map<intptr_t, std::string> threadOffsetNames;
@@ -46,6 +47,12 @@ static void initThreadOffsetNames()
         threadOffsetNames[dart::Thread::field_table_values_offset()] = "field_table_values";
         threadOffsetNames[dart::Thread::dart_stream_offset()] = "dart_stream";
         threadOffsetNames[dart::Thread::store_buffer_block_offset()] = "store_buffer_block";
+#ifdef OLD_MARKING_STACK_BLOCK
+        threadOffsetNames[dart::Thread::old_marking_stack_block_offset()] = "old_marking_stack_block_offset";
+        threadOffsetNames[dart::Thread::new_marking_stack_block_offset()] = "new_marking_stack_block_offset";
+#else
+        threadOffsetNames[dart::Thread::marking_stack_block_offset()] = "marking_stack_block";
+#endif
         threadOffsetNames[dart::Thread::top_exit_frame_info_offset()] = "top_exit_frame_info";
         threadOffsetNames[dart::Thread::top_offset()] = "top";
         threadOffsetNames[dart::Thread::end_offset()] = "end";

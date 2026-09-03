@@ -152,6 +152,17 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
     if not _search_in_file(os.path.join(vm_path, 'object.h'), b'AsTruncatedInt64Value()'):
         macros.append('-DUNIFORM_INTEGER_ACCESS=1')
 
+    dart_api_path = os.path.join(include_path, 'include', 'dart_api.h')
+    if os.path.isfile(dart_api_path) and _search_in_file(dart_api_path, b'kSnapshotDataAsmSymbol'):
+        macros.append('-DBLUTTER_DART_SINGLE_SNAPSHOT=1')
+
+    major, minor = _parse_major_minor(dart_version)
+    if major > 3 or (major == 3 and minor >= 5):
+        macros.append('-DOLD_MARKING_STACK_BLOCK=1')
+
+    if ida_fcn:
+        macros.append('-DIDA_FCN=1')
+
     if no_analysis:
         macros.append('-DNO_CODE_ANALYSIS=1')
 
