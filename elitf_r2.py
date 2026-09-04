@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import concurrent.futures
 import os
 import shutil
 import subprocess
@@ -100,7 +101,7 @@ e log.dest=stderr
 axt sym.imp.* > __OUTDIR__/__NAME__xrefs_to_imports.txt
 axt * > __OUTDIR__/__NAME__xrefs_all.txt
 axf * > __OUTDIR__/__NAME__xrefs_from.txt
-axt @ `aflq~?` > __OUTDIR__/__NAME__xrefs_count.txt
+axt *~? > __OUTDIR__/__NAME__xrefs_count.txt
 e log.dest=stderr
 """,
     },
@@ -111,9 +112,9 @@ e log.dest=stderr
 iS > __OUTDIR__/__NAME__sections.txt
 iI > __OUTDIR__/__NAME__binary_info.txt
 ie > __OUTDIR__/__NAME__entrypoints.txt
-Ih > __OUTDIR__/__NAME__headers.txt
+iH > __OUTDIR__/__NAME__headers.txt
 im > __OUTDIR__/__NAME__memory_map.txt
-iA > __OUTDIR__/__NAME__arch_info.txt
+ia > __OUTDIR__/__NAME__arch_info.txt
 il > __OUTDIR__/__NAME__libraries.txt
 f > __OUTDIR__/__NAME__flags.txt
 e log.dest=stderr
@@ -256,6 +257,8 @@ R2_PRESETS = {
     },
 }
 
+_R2_BATCH_JOBS_ENV = os.getenv("R2_BATCH_JOBS", "")
+
 R2_SCRIPT_TEMPLATE = r"""e scr.color=0
 e scr.utf8=0
 e anal.strings=true
@@ -309,9 +312,9 @@ ir > __OUTDIR__/__NAME__relocations.txt
 ic > __OUTDIR__/__NAME__classes.txt
 iI > __OUTDIR__/__NAME__binary_info.txt
 ie > __OUTDIR__/__NAME__entrypoints.txt
-Ih > __OUTDIR__/__NAME__headers.txt
+iH > __OUTDIR__/__NAME__headers.txt
 im > __OUTDIR__/__NAME__memory_map.txt
-iA > __OUTDIR__/__NAME__arch_info.txt
+ia > __OUTDIR__/__NAME__arch_info.txt
 il > __OUTDIR__/__NAME__libraries.txt
 iz > __OUTDIR__/__NAME__data_strings.txt
 izq > __OUTDIR__/__NAME__data_strings_raw.txt
@@ -328,7 +331,7 @@ isq~FUNC > __OUTDIR__/__NAME__func_symbols.txt
 axt sym.imp.* > __OUTDIR__/__NAME__xrefs_to_imports.txt
 axt * > __OUTDIR__/__NAME__xrefs_all.txt
 axf * > __OUTDIR__/__NAME__xrefs_from.txt
-axt @ `aflq~?` > __OUTDIR__/__NAME__xrefs_count.txt
+axt *~? > __OUTDIR__/__NAME__xrefs_count.txt
 afl* > __OUTDIR__/__NAME__functions_json.txt
 afij > __OUTDIR__/__NAME__functions_info.json
 icq > __OUTDIR__/__NAME__classes_raw.txt
@@ -401,16 +404,41 @@ e log.dest=stderr
 q
 """
 
-R2_BATCH_TEMPLATE = r"""#!/data/data/com.termux/files/usr/bin/bash
-set -e
+R2_BATCH_TEMPLATE = r"""#!/usr/bin/env bash
 
 OUTDIR="__OUTDIR__"
 mkdir -p "$OUTDIR"
 
+MAXJOBS="${R2_BATCH_JOBS:-$(nproc 2>/dev/null || echo 2)}"
+case "$MAXJOBS" in ''|*[!0-9]*) MAXJOBS=2 ;; esac
+[ "$MAXJOBS" -lt 1 ] && MAXJOBS=1
+
+run_one() {
+    "$@" || echo "FAILED: $*" >> "$OUTDIR/.r2_failures"
+}
+
+JOBCOUNT=0
 __SCRIPTS_BLOCK__
 
+wait
+if [ -f "$OUTDIR/.r2_failures" ]; then
+    echo "[ERR] Radare2 analysis had failures (see $OUTDIR/.r2_failures): $OUTDIR/"
+    exit 1
+fi
 echo "[OK] Radare2 analysis complete: $OUTDIR/"
 """
+
+def _batch_line(cmd, target):
+    return f'run_one {cmd} "{target}" &\nJOBCOUNT=$((JOBCOUNT+1))\n[ $((JOBCOUNT % MAXJOBS)) -eq 0 ] && wait\n'
+
+def _r2_max_workers(count):
+    try:
+        workers = int(_R2_BATCH_JOBS_ENV)
+    except ValueError:
+        workers = 0
+    if workers <= 0:
+        workers = min(4, os.cpu_count() or 1)
+    return max(1, min(count, workers))
 
 _R2_TIMEOUT_ENV = os.getenv("R2_TIMEOUT", "600")
 
@@ -515,10 +543,14 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
         log_mgr.add(f"Generated batch script: r2_analyze_all.sh ({len(generated)} .so)", "success")
     return generated
 
-def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name):
+def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name, use_write=False):
     try:
+        cmd = [r2_bin]
+        if use_write:
+            cmd.append("-w")
+        cmd += ["-q", "-i", script_path, so_path]
         result = subprocess.run(
-            [r2_bin, "-q", "-i", script_path, so_path],
+            cmd,
             capture_output=True, text=True, timeout=timeout,
             stdin=subprocess.DEVNULL,
         )
@@ -558,21 +590,25 @@ def run_r2_scripts(so_list, outdir, log_mgr=None):
     except ValueError:
         timeout = 600
 
-    for so in so_list:
-        name = so["name"].removesuffix(".so") + "_"
-        script_content = (R2_SCRIPT_TEMPLATE
-                          .replace("__OUTDIR__", r2_out)
-                          .replace("__NAME__", name))
-        script_path = os.path.join(r2_out, f"r2_{so['name']}.r2")
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script_content)
-        generated.append(script_path)
-        if log_mgr:
-            log_mgr.add(f"Analyzing {so['name']} with r2...", "info")
-        if _run_single_r2(r2_bin, script_path, so["path"], timeout, log_mgr, so["name"]):
-            succeeded += 1
-        if log_mgr:
-            log_mgr.step()
+    jobs = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=_r2_max_workers(len(so_list))) as pool:
+        for so in so_list:
+            name = so["name"].removesuffix(".so") + "_"
+            script_content = (R2_SCRIPT_TEMPLATE
+                              .replace("__OUTDIR__", r2_out)
+                              .replace("__NAME__", name))
+            script_path = os.path.join(r2_out, f"r2_{so['name']}.r2")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(script_content)
+            generated.append(script_path)
+            if log_mgr:
+                log_mgr.add(f"Analyzing {so['name']} with r2...", "info")
+                log_mgr.step()
+            jobs.append(pool.submit(_run_single_r2, r2_bin, script_path, so["path"],
+                                    timeout, log_mgr, so["name"]))
+        for fut in concurrent.futures.as_completed(jobs):
+            if fut.result():
+                succeeded += 1
     if log_mgr:
         log_mgr.add(f"r2 analysis finished: {succeeded}/{len(generated)} succeeded", "success")
     return generated
@@ -606,60 +642,40 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
     generated = []
     succeeded = 0
     batch_lines = []
+    jobs = []
 
-    for so in so_list:
-        name = so["name"].removesuffix(".so") + "_"
-        script_content = _build_r2_script(
-            analysis_key, extraction_keys, use_write=use_write
-        )
-        script_content = script_content.replace("__OUTDIR__", r2_out).replace("__NAME__", name)
-        script_path = os.path.join(r2_out, f"r2_{so['name']}_{mode_tag}.r2")
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script_content)
-        generated.append(script_path)
-        if log_mgr:
-            log_mgr.add(f"Generated: r2_{so['name']}_{mode_tag}.r2", "success")
-
-        if execute:
-            r2_args = ["-q", "-i", script_path, so["path"]]
-            if use_write:
-                r2_args.insert(0, "-w")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=_r2_max_workers(len(so_list))) as pool:
+        for so in so_list:
+            name = so["name"].removesuffix(".so") + "_"
+            script_content = _build_r2_script(
+                analysis_key, extraction_keys, use_write=use_write
+            )
+            script_content = script_content.replace("__OUTDIR__", r2_out).replace("__NAME__", name)
+            script_path = os.path.join(r2_out, f"r2_{so['name']}_{mode_tag}.r2")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(script_content)
+            generated.append(script_path)
             if log_mgr:
-                log_mgr.add(f"Analyzing {so['name']} ({mode_tag})...", "info")
-            try:
-                result = subprocess.run(
-                    [r2_bin] + r2_args,
-                    capture_output=True, text=True, timeout=timeout,
-                    stdin=subprocess.DEVNULL,
-                )
-                if result.returncode == 0:
-                    succeeded += 1
-                    if log_mgr:
-                        log_mgr.add(f"r2 ok: {so['name']}", "success")
-                else:
-                    if log_mgr:
-                        err_text = result.stderr.strip()
-                        if len(err_text) > 200:
-                            err_text = err_text[:200] + '...'
-                        log_mgr.add(f"r2 error on {so['name']}: {err_text}", "error")
-            except subprocess.TimeoutExpired:
+                log_mgr.add(f"Generated: r2_{so['name']}_{mode_tag}.r2", "success")
+
+            if execute:
                 if log_mgr:
-                    log_mgr.add(f"r2 timeout on {so['name']} (>{timeout}s)", "warn")
-            except (OSError, subprocess.SubprocessError) as e:
-                if log_mgr:
-                    log_mgr.add(f"r2 failed on {so['name']}: {e}", "error")
-        if log_mgr:
-            log_mgr.step()
+                    log_mgr.add(f"Analyzing {so['name']} ({mode_tag})...", "info")
+                jobs.append(pool.submit(_run_single_r2, r2_bin, script_path, so["path"],
+                                        timeout, log_mgr, so["name"], use_write))
+
+            cmd = f'r2 -q -i "{script_path}"'
+            if use_write:
+                cmd = f'r2 -w -q -i "{script_path}"'
+            batch_lines.append(_batch_line(cmd, so["path"]))
+            if log_mgr:
+                log_mgr.step()
+
+        for fut in concurrent.futures.as_completed(jobs):
+            if fut.result():
+                succeeded += 1
 
     if generated:
-        for i, so in enumerate(so_list):
-            mode_tag_i = mode_tag
-            sp = generated[i]
-            abs_so = so["path"]
-            cmd = f'r2 -q -i "{sp}" "{abs_so}"'
-            if use_write:
-                cmd = cmd.replace('r2 -q', 'r2 -w -q', 1)
-            batch_lines.append(cmd)
         batch_content = (R2_BATCH_TEMPLATE
                          .replace("__OUTDIR__", r2_out)
                          .replace("__SCRIPTS_BLOCK__", "\n".join(batch_lines)))
@@ -787,6 +803,7 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
         log_mgr.add(f"Mode écriture: {cmd_labels.get(write_cmd, write_cmd)}", "info")
 
     results = []
+    patch_specs = []
     for so in targets:
         if ui is not None:
             ui._print(f"\n  [bold bright_cyan]Patching: {so['name']}[/]" if ui.console
@@ -817,24 +834,26 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
             if not data:
                 continue
 
-            r2_cmd = f'{write_cmd} {data} @ {addr}'
-            r2_script = f"e scr.color=0\ne scr.utf8=0\n{s}\nq\n"
+            patch_specs.append((so, f'{write_cmd} {data} @ {addr}', addr))
 
-            r2_out = os.path.join(outdir, "r2_output")
-            os.makedirs(r2_out, exist_ok=True)
-            name = so["name"].removesuffix(".so") + "_"
+    if patch_specs:
+        try:
+            timeout = int(_R2_TIMEOUT_ENV)
+        except ValueError:
+            timeout = 600
+
+        r2_out = os.path.join(outdir, "r2_output")
+        os.makedirs(r2_out, exist_ok=True)
+
+        def _apply_patch(spec):
+            so, r2_cmd, addr = spec
+            r2_script = f"e scr.color=0\ne scr.utf8=0\n{r2_cmd}\nq\n"
             script_path = os.path.join(r2_out, f"r2_{so['name']}_patch_{write_cmd}.r2")
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(r2_script)
-            results.append(script_path)
 
             if log_mgr:
                 log_mgr.add(f"Patch script: {so['name']} ({write_cmd} @ {addr})", "info")
-
-            try:
-                timeout = int(_R2_TIMEOUT_ENV)
-            except ValueError:
-                timeout = 600
 
             try:
                 result = subprocess.run(
@@ -856,6 +875,10 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
                     log_mgr.add(f"Patch échoué sur {so['name']}: {e}", "error")
             if log_mgr:
                 log_mgr.step()
+            return script_path
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=_r2_max_workers(len(patch_specs))) as pool:
+            results = list(pool.map(_apply_patch, patch_specs))
 
     if log_mgr:
         log_mgr.add(f"Mode écriture terminé: {len(results)} script(s)", "success")
@@ -897,39 +920,43 @@ def display_binary_info(so_list, outdir, log_mgr=None):
                         "Cannot read binary info.", "warn")
         return
 
-    info_path = os.path.join(outdir, "binary_info.txt")
     os.makedirs(outdir, exist_ok=True)
-    with open(info_path, "w", encoding="utf-8") as out_f:
-        for so in so_list:
+
+    def _read_one(so):
+        if log_mgr:
+            log_mgr.add(f"Reading info: {so['name']}", "info")
+        try:
+            result = subprocess.run(
+                [readelf, "-h", "-S", "-l", so["path"]],
+                capture_output=True, text=True, timeout=30,
+                stdin=subprocess.DEVNULL,
+            )
+            if result.returncode == 0:
+                if log_mgr:
+                    for line in result.stdout.strip().split("\n"):
+                        log_mgr.add(f"[{so['name']}] {line.strip()}", "info")
+                return f"\n=== {so['name']} ===\n" + result.stdout
+            err = result.stderr.strip()
             if log_mgr:
-                log_mgr.add(f"Reading info: {so['name']}", "info")
-            out_f.write(f"\n=== {so['name']} ===\n")
-            try:
-                result = subprocess.run(
-                    [readelf, "-h", "-S", "-l", so["path"]],
-                    capture_output=True, text=True, timeout=30,
-                    stdin=subprocess.DEVNULL,
-                )
-                if result.returncode == 0:
-                    out_f.write(result.stdout)
-                    if log_mgr:
-                        for line in result.stdout.strip().split("\n"):
-                            log_mgr.add(f"[{so['name']}] {line.strip()}", "info")
-                else:
-                    err = result.stderr.strip()
-                    out_f.write(f"(readelf error: {err})\n")
-                    if log_mgr:
-                        log_mgr.add(f"readelf error on {so['name']}: {err}", "warn")
-            except subprocess.TimeoutExpired:
-                out_f.write("(readelf timed out)\n")
-                if log_mgr:
-                    log_mgr.add(f"readelf timeout on {so['name']}", "warn")
-            except (OSError, subprocess.SubprocessError) as e:
-                out_f.write(f"(readelf error: {e})\n")
-                if log_mgr:
-                    log_mgr.add(f"Cannot read binary info on {so['name']}: {e}", "warn")
-            finally:
-                if log_mgr:
-                    log_mgr.step()
+                log_mgr.add(f"readelf error on {so['name']}: {err}", "warn")
+            return f"\n=== {so['name']} ===\n(readelf error: {err})\n"
+        except subprocess.TimeoutExpired:
+            if log_mgr:
+                log_mgr.add(f"readelf timeout on {so['name']}", "warn")
+            return f"\n=== {so['name']} ===\n(readelf timed out)\n"
+        except (OSError, subprocess.SubprocessError) as e:
+            if log_mgr:
+                log_mgr.add(f"Cannot read binary info on {so['name']}: {e}", "warn")
+            return f"\n=== {so['name']} ===\n(readelf error: {e})\n"
+        finally:
+            if log_mgr:
+                log_mgr.step()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=_r2_max_workers(len(so_list))) as pool:
+        sections = list(pool.map(_read_one, so_list))
+
+    info_path = os.path.join(outdir, "binary_info.txt")
+    with open(info_path, "w", encoding="utf-8") as out_f:
+        out_f.write("".join(sections))
     if log_mgr:
         log_mgr.add(f"Binary info written to {info_path}", "success")

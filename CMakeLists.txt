@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.20)
 
-project(blutter)
+project(elitf)
 if (NOT DEFINED DARTLIB)
         message(FATAL_ERROR "Please define DARTLIB to build the Elit-f project")
 endif()

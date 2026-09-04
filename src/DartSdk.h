@@ -57,6 +57,15 @@ constexpr intptr_t kLastInternalOnlyCid = kUnwindErrorCid;
 }
 #endif
 
+#if defined SEMIDBG && !defined DEBUG
+#undef ASSERT
+#define ASSERT(cond) RELEASE_ASSERT(cond)
+#endif
+
+#ifdef CACHED_FUNCTION_ENTRY_POINTS_LIST
+#define HAS_INIT_ASYNC 1
+#endif
+
 #ifdef NO_INIT_LATE_STATIC_FIELD
 #define InitLateStaticFieldStub InitStaticFieldStub
 #define InitLateFinalStaticFieldStub InitStaticFieldStub

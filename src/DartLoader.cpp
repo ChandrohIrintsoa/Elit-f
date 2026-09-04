@@ -44,6 +44,7 @@ static void init_dart(const uint8_t* vm_snapshot_data, const uint8_t* vm_snapsho
 		throw std::runtime_error(error);
 	}
 }
+#endif
 
 static Dart_Isolate load_isolate(const uint8_t* isolate_snapshot_data, const uint8_t* isolate_snapshot_instructions)
 {

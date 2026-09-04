@@ -166,6 +166,7 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
     if os.path.isfile(dart_api_path) and _search_in_file(dart_api_path, b'kSnapshotDataAsmSymbol'):
         macros.append('-DBLUTTER_DART_SINGLE_SNAPSHOT=1')
 
+
     major, minor = _parse_major_minor(dart_version)
     if major > 3 or (major == 3 and minor >= 5):
         macros.append('-DOLD_MARKING_STACK_BLOCK=1')
@@ -410,6 +411,9 @@ def check_dependencies():
         missing.append(('rich', 'pip install rich'))
     return missing
 
+def critical_dependencies_missing(missing):
+    return [m for m in missing if m[0] in ('pyelftools', 'requests')]
+
 def run_command(command):
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                shell=True)
@@ -451,6 +455,10 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
         for name, cmd in missing:
             print(f"  - {name} ({cmd})")
 
+    if critical_dependencies_missing(missing):
+        print("\nAnalyse impossible: installez les dépendances ci-dessus puis relancez.")
+        return 1
+
     if not HAS_RICH:
 
         print(f"\n  Auteur : {AUTHOR}")
@@ -472,6 +480,11 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
     if choice == 0:
         return
     if choice == 1:
+        if critical_dependencies_missing(check_dependencies()):
+            ui._print("[bold red]Analyse impossible: installez pyelftools et requests d'abord.[/]"
+                      if ui.console
+                      else "Analyse impossible: installez pyelftools et requests d'abord.")
+            return 1
         os.makedirs(outdir, exist_ok=True)
         ui.log_mgr.clear()
         def work(lm):
@@ -607,6 +620,11 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             break
 
         if choice == 1:
+            if critical_dependencies_missing(check_dependencies()):
+                ui._print("[bold red]Analyse impossible: installez pyelftools et requests d'abord.[/]"
+                          if ui.console
+                          else "Analyse impossible: installez pyelftools et requests d'abord.")
+                continue
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
             def work(lm):
