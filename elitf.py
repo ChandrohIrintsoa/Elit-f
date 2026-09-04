@@ -746,7 +746,8 @@ def main():
         ui = ElitfUI(force_plain=args.plain)
         ui.indir = args.indir
         ui.outdir = args.outdir
-        main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn)
+        main_interactive(ui, args.rebuild, args.no_analysis, args.ida_fcn,
+                         vs_sln=args.vs_sln)
         return 0
 
     if not HAS_RICH:

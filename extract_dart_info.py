@@ -78,20 +78,28 @@ def extract_libflutter_info(libflutter_file):
     return engine_ids, dart_version, arch
 
 def get_dart_sdk_url_size(engine_ids, os_name='android', arch='arm64'):
-    os_map = {'android': 'linux', 'ios': 'mac', 'macos': 'mac'}
+    os_map = {'android': 'linux', 'ios': 'darwin', 'macos': 'darwin'}
     arch_map = {'arm64': 'arm64', 'x64': 'x64'}
     os_sdk = os_map.get(os_name, 'linux')
     arch_sdk = arch_map.get(arch, 'arm64')
     for engine_id in engine_ids:
-        url = f'https://storage.googleapis.com/flutter_infra_release/flutter/{engine_id}/dart-sdk-{os_sdk}-{arch_sdk}-release.zip'
-        resp = requests.head(url, timeout=30)
-        if resp.status_code == 200:
-            content_length = resp.headers.get('Content-Length')
-            if content_length:
-                sdk_size = int(content_length)
-            else:
-                sdk_size = 0
-            return engine_id, url, sdk_size
+        base = f'https://storage.googleapis.com/flutter_infra_release/flutter/{engine_id}'
+        candidates = (
+            f'{base}/dart-sdk-{os_sdk}-{arch_sdk}.zip',
+            f'{base}/dart-sdk-windows-x64.zip',
+        )
+        for url in candidates:
+            try:
+                resp = requests.head(url, timeout=30)
+            except requests.RequestException:
+                continue
+            if resp.status_code == 200:
+                content_length = resp.headers.get('Content-Length')
+                if content_length:
+                    sdk_size = int(content_length)
+                else:
+                    sdk_size = 0
+                return engine_id, url, sdk_size
 
     return None, None, None
 

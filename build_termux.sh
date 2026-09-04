@@ -1,18 +1,25 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -e
 
-NDK_TOOLCHAIN=$PREFIX/bin
-export PATH=$NDK_TOOLCHAIN:$PATH
-export CC=$NDK_TOOLCHAIN/aarch64-linux-android-clang
-export CXX=$NDK_TOOLCHAIN/aarch64-linux-android-clang++
-export AR=$NDK_TOOLCHAIN/aarch64-linux-android-ar
-export RANLIB=$NDK_TOOLCHAIN/aarch64-linux-android-ranlib
-export STRIP=$NDK_TOOLCHAIN/aarch64-linux-android-strip
-export PKG_CONFIG=$PREFIX/bin/pkg-config
-export CMAKE=$PREFIX/bin/cmake
-
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
+
+if [ -n "$TERMUX_VERSION" ] && [ -n "$PREFIX" ]; then
+        export PKG_CONFIG="${PKG_CONFIG:-$PREFIX/bin/pkg-config}"
+        export CMAKE="${CMAKE:-$PREFIX/bin/cmake}"
+        export NINJA="${NINJA:-$PREFIX/bin/ninja}"
+        for tool in clang clang++ ar ranlib strip pkg-config cmake ninja; do
+                if ! command -v "$tool" >/dev/null 2>&1; then
+                        echo "Outil manquant: $tool  (pkg install $tool)" >&2
+                        exit 1
+                fi
+        done
+else
+        echo "[!] Environnement Termux non detecte (TERMUX_VERSION/PREFIX absents)."
+        echo "    Ce script cible Termux natif ; sur un autre systeme, lancez directement :"
+        echo "    python3 elitf.py <indir> <outdir>"
+        exit 1
+fi
 
 
 
@@ -57,32 +64,25 @@ fi
 
 echo "[*] dartvm library: ${LIBFILE}"
 
-if [ ! -d "build" ]; then
-        mkdir build
-fi
-
 echo "[*] Computing compat macros for Dart ${DART_VERSION}"
 MACROS=$(python3 -c "
 import sys
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, r'''${SCRIPT_DIR}''')
 import elitf
 macros = elitf.find_compat_macro('${DART_VERSION}', False)
 print(' '.join(macros))
 ")
 echo "    Macros: ${MACROS}"
 
-cd "${SCRIPT_DIR}"
-if [ ! -d "build" ]; then
-        mkdir build
-fi
 CMAKE_BIN="${CMAKE:-cmake}"
 NINJA_BIN="${NINJA:-ninja}"
+BUILDDIR="build/elitf_${DARTLIB}"
 
-"${CMAKE_BIN}" -GNinja -B build -DDARTLIB=$DARTLIB -DCMAKE_BUILD_TYPE=Release ${MACROS}
+"${CMAKE_BIN}" -GNinja -B "$BUILDDIR" -DDARTLIB=$DARTLIB -DCMAKE_BUILD_TYPE=Release ${MACROS}
 
-"${NINJA_BIN}" -C build -j$(nproc)
+"${NINJA_BIN}" -C "$BUILDDIR" -j$(nproc)
 
-"${CMAKE_BIN}" --install build
+"${CMAKE_BIN}" --install "$BUILDDIR"
 
 if [ -f "bin/elitf_${DARTLIB}" ]; then
         STRIP_BIN="${STRIP:-strip}"
