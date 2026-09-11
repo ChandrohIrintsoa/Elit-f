@@ -27,7 +27,7 @@ def extract_snapshot_hash_flags(libapp_file):
         if not syms:
             raise ValueError('Symbol _kDartVmSnapshotData/_kDartSnapshotData not found in ' + libapp_file)
         sym = syms[0]
-        if sym['st_size'] <= 128:
+        if 0 < sym['st_size'] < 52:
             raise ValueError(f"Snapshot data symbol too small: {sym['st_size']}")
 
         offset = _va_to_file_offset(elf, sym['st_value'])
@@ -36,14 +36,13 @@ def extract_snapshot_hash_flags(libapp_file):
 
         f.seek(offset + 20)
         raw_hash = f.read(32)
-        try:
-            snapshot_hash = raw_hash.decode('ascii')
-        except UnicodeDecodeError:
-            snapshot_hash = raw_hash.hex()
+        if not re.fullmatch(rb'[0-9a-f]{32}', raw_hash):
+            raise ValueError('Invalid or truncated snapshot hash')
+        snapshot_hash = raw_hash.decode('ascii')
         data = f.read(256)
         null_pos = data.find(b'\x00')
         if null_pos == -1:
-            null_pos = len(data)
+            raise ValueError('Unterminated snapshot flags')
         flags = data[:null_pos].decode('ascii', errors='replace').strip().split(' ')
         flags = [f for f in flags if f]
 
@@ -66,8 +65,7 @@ def extract_libflutter_info(libflutter_file):
 
         sha_hashes = re.findall(rb'\x00([a-f0-9]{40})(?=\x00)', data)
         engine_ids = [h.decode() for h in sha_hashes]
-        if len(engine_ids) != 2:
-            raise ValueError(f'Expected 2 engine hashes, found {len(engine_ids)}: {", ".join(engine_ids)}')
+        engine_ids = list(dict.fromkeys(engine_ids))
 
         m = re.search(br'\x00([\d\w\.-]+) \((stable|beta|dev)\)', data)
         if m is None:
@@ -106,56 +104,61 @@ def get_dart_sdk_url_size(engine_ids, os_name='android', arch='arm64'):
 def get_dart_commit(url):
     if url is None:
         return None, None
-    commit_id = None
-    dart_version = None
-    fp = None
     try:
-        with requests.get(url, headers={"Range": "bytes=0-4096"}, stream=True, timeout=60) as r:
-            if r.status_code in (200, 206):
-                chunks = []
-                for chunk in r.iter_content(chunk_size=4096):
-                    chunks.append(chunk)
+        with requests.get(url, headers={"Range": "bytes=0-65535"}, stream=True, timeout=60) as response:
+            if response.status_code not in (200, 206):
+                return None, None
+            chunks = bytearray()
+            for chunk in response.iter_content(chunk_size=4096):
+                chunks.extend(chunk[:65536-len(chunks)])
+                if len(chunks) >= 65536:
                     break
-                x = b''.join(chunks)
-                fp = io.BytesIO(x)
-    except (requests.RequestException, ValueError):
-        return None, None
-
-    if fp is not None:
-        while fp.tell() < 4096 - 30 and (commit_id is None or dart_version is None):
-            raw = fp.read(30)
-            if len(raw) < 30:
+        fp = io.BytesIO(chunks)
+        values = {}
+        while len(chunks) - fp.tell() >= 30:
+            header = unpack('<IHHHHHIIIHH', fp.read(30))
+            signature, _, flags, method, _, _, _, size, _, name_len, extra_len = header
+            if signature != 0x04034b50 or flags & 9:
                 break
-            _, _, _, compMethod, _, _, _, compressSize, _, filenameLen, extraLen = unpack('<IHHHHHIIIHH', raw)
-            filename = fp.read(filenameLen)
-            if extraLen > 0:
-                fp.seek(extraLen, io.SEEK_CUR)
-            data = fp.read(compressSize)
-
-            if compMethod == zipfile.ZIP_STORED:
-                raw_data = data
-            elif compMethod == zipfile.ZIP_DEFLATED:
-                raw_data = zlib.decompress(data, wbits=-zlib.MAX_WBITS)
+            name = fp.read(name_len)
+            fp.seek(extra_len, io.SEEK_CUR)
+            data = fp.read(size)
+            if len(data) != size:
+                break
+            if name not in (b'dart-sdk/revision', b'dart-sdk/version'):
+                continue
+            if method == zipfile.ZIP_STORED:
+                raw = data
+            elif method == zipfile.ZIP_DEFLATED:
+                raw = zlib.decompressobj(-zlib.MAX_WBITS).decompress(data, 4096)
             else:
                 continue
+            values[name] = raw.decode('ascii').strip()
+        return values.get(b'dart-sdk/revision'), values.get(b'dart-sdk/version')
+    except (requests.RequestException, ValueError, zlib.error, UnicodeError):
+        return None, None
 
-            if filename == b'dart-sdk/revision':
-                commit_id = raw_data.decode('utf-8', errors='replace').strip()
-            elif filename == b'dart-sdk/version':
-                dart_version = raw_data.decode('utf-8', errors='replace').strip()
-
-    return commit_id, dart_version
+def extract_elf_arch(path):
+    with open(path, 'rb') as stream:
+        machine = ELFFile(stream).header.e_machine
+    mapping = {'EM_AARCH64': 'arm64', 'EM_X86_64': 'x64'}
+    if machine not in mapping:
+        raise ValueError(f'Unsupported ELF architecture: {machine}')
+    return mapping[machine]
 
 def extract_dart_info(libapp_file: str, libflutter_file: str, os_name: str = 'android', arch: str = 'arm64'):
     snapshot_hash, flags = extract_snapshot_hash_flags(libapp_file)
     engine_ids, dart_version, detected_arch = extract_libflutter_info(libflutter_file)
-    if arch is None or arch == 'arm64':
-        arch = detected_arch
+    if extract_elf_arch(libapp_file) != detected_arch:
+        raise ValueError('libapp and libflutter architectures differ')
+    arch = detected_arch
 
     if dart_version is None:
         engine_id, sdk_url, sdk_size = get_dart_sdk_url_size(engine_ids, os_name, arch)
         commit_id, dart_version = get_dart_commit(sdk_url)
 
+    if dart_version is None:
+        raise ValueError('Dart version could not be detected; use --dart-version')
     return dart_version, snapshot_hash, flags, arch, os_name
 
 if __name__ == "__main__":

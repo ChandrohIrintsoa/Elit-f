@@ -1,0 +1,2540 @@
+{
+  "v7": {
+    ".gitignore": {
+      "bytes": 48,
+      "sha256": "cc137df30ed25753f70295b286654c81511b780a19058cf945118b5a9e9acc60"
+    },
+    "CMakeLists.txt": {
+      "bytes": 6489,
+      "sha256": "42a40d4061bdef8a85e9672fe5abdda0677bb3d6077f5362230e0d1b4e9a7745"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3805,
+      "sha256": "c09fea073e5515717e594939ace08774918c60f300e5da53f5de7af77d83f881"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 35171,
+      "sha256": "7da6c24afa346db5436eaf944a634f9f6eda4015fb1310ba5b49a382ab5624d5"
+    },
+    "elitf_r2.py": {
+      "bytes": 38044,
+      "sha256": "5e686f6ae7b73cebae0e9f05c8a10ef6aedf40a3257e2878367c23bea16eb6c6"
+    },
+    "elitf_ui.py": {
+      "bytes": 42406,
+      "sha256": "f09254ef853a45bac35639fabd620bd2a02aa10494e8b9e0a52d30cc4851935c"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11561,
+      "sha256": "14a26f889f5b3fc0f9feb7e5eba76956ec61d7aa81d3c3fd2bcb2036d741bc42"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "sourcelist.cmake": {
+      "bytes": 765,
+      "sha256": "9c9784bfc63ce5bfc05e69b8eaa7068050455fd8d560bb8f6eb18ef31459c06f"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "5e57391ba80e9d1ca34a6813c2d7f0ba697944f94ec7691b15c443d4d11adf84"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139431,
+      "sha256": "0c19c5f8b3f94b17fa2be5ff437974f881febe95d00fa3fde93fe55cd148f6d2"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 24302,
+      "sha256": "be7f90d636e2ea123fa770a8bb4015f9174254afdf05d8f80eba1016df85797a"
+    },
+    "src/DartApp.h": {
+      "bytes": 2505,
+      "sha256": "8fa1cd4537c66a4d8bd8834406c5b29e5718adc15479ba3bae4e94dd53adf6f4"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 8277,
+      "sha256": "26914d6935276bf2b0d3e2885930d413dd37003e55518c8c5b555952a63c71c9"
+    },
+    "src/DartClass.h": {
+      "bytes": 3311,
+      "sha256": "7b9cf78edf7ece24d405750e0d4bd9227fcb1a228b29e1dee079732ea60d1223"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 30287,
+      "sha256": "d39f83e46c67dbbeb2f573d6f14348b6817b57a9741decba3f300e1294c1858c"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1099,
+      "sha256": "0096e5900fe1715d3d1abcdc2b4f9eee0f949c6c0ff1598af1c82c550d40310c"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1615,
+      "sha256": "034f69fc8c729fe6f1696c5dddc9c90dfb91231ed74e063e10b66b3baa825fcd"
+    },
+    "src/DartField.h": {
+      "bytes": 1148,
+      "sha256": "3ad0b38c8e78a6aa66eb913cd67754f1bf135bdb308e714f0ae45f236e6f71db"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1622,
+      "sha256": "868c4babb1f53885a1adf0662df05e7b1d2db72a7ed3f565fe9ce6ca15dbfd0b"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 8159,
+      "sha256": "d3365d0eb1f830f2db050e70d838b62fb57a9786e833c24ea2821299e99d54d2"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 3056,
+      "sha256": "837f693365bf14fe1477858f6ef48c496c4299ce8fbba6a87a9738325dcb0e4d"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 1113,
+      "sha256": "9522ace9f20adfc28ac5c005e249b2a3d0c928e1dc45efb583ec4e66e5dc231f"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2694,
+      "sha256": "d2841a93cffa33c9b43dd9d2f7db58bc5c17acda5a90609389a59adfc83f2900"
+    },
+    "src/DartLoader.h": {
+      "bytes": 501,
+      "sha256": "19c9fc1142b46d9d4192b896b7969ec9b104e26eed9b59890607ce2ac342a1a9"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 3256,
+      "sha256": "103eafa8aab88155112109c80bf5d1c8e0bb439872fdce9fa3f0fb7b9761367f"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 5284,
+      "sha256": "2dfbdff6421fa083f8279c2baa3c575d11b6e59d63882d97d3cc11e1546716c2"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 353,
+      "sha256": "010ac46ea170165c4c323b1dc2ec86357a8b6c30cfd40977d458ecbdffc760ad"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7228,
+      "sha256": "75753204de10b5002a008c96a1be50defc58036f4b64f12a313a1a21f252877e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 327,
+      "sha256": "526654c1fac48be60de0e685be43c4de46223a70764c3789751b90f4c5e549aa"
+    },
+    "src/Disassembler.h": {
+      "bytes": 3349,
+      "sha256": "4e59c52cba330ad5af67a9f941d65893876e5c22fda99cec69ceba5f75dc9609"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 6437,
+      "sha256": "7fc789317e458fef4bf1ca0f460d283d33d4b5331e8d270edbc6945335692737"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 410,
+      "sha256": "dda625291eb7c13111d48756667f5193424cbbddeed7437dbf8fe7ed666be367"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6743,
+      "sha256": "99062a11297feeddfaf1aa85fb5dfa951a5449cc15b112221105ed30e888ad7b"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 727,
+      "sha256": "e02e347cd5f226336a74a8dab894ad6fad4567cce10d10a67160526a5d1d2b88"
+    },
+    "src/Util.cpp": {
+      "bytes": 1425,
+      "sha256": "639b40f890096c505e59ffb0f83270f35af9b3fce5c8f3595467a8c17d810aec"
+    },
+    "src/Util.h": {
+      "bytes": 289,
+      "sha256": "d4b47a3055438a07fa0bf56226fc6dc17bce0590072e487494ad3a7a07de9eda"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "eed092b4dc8a19b6b070a216b01304f0beded76d3e6b925ee7c7c9d7a235fc37"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "53d5e08e87b44a3afb256efa3b82e96f80b58cedb3287d2a3161bd72d6af4ccc"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "68400aa48bf5949fb25b9c48abeb1c817f4584fd18ab99d9eaca4ffe6471f558"
+    },
+    "src/il.h": {
+      "bytes": 19740,
+      "sha256": "d061b9997e6e7de28520980944b46152eb992bf6ea05bf92f6b0c6d67569f5ac"
+    },
+    "src/main.cpp": {
+      "bytes": 2297,
+      "sha256": "d0a28a5e35e9cc0c21c95988a6f664e1386440952f5a141188dc5e0cc10aa6e8"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 4290,
+      "sha256": "fe9b3a68abb943976dea4e2260cb80f6768a7f728285be16ee97be6ce173f745"
+    }
+  },
+  "v4": {
+    "CMakeLists.txt": {
+      "bytes": 3441,
+      "sha256": "c11712ea56a07521068b1a2dfa5b6932aabcb8f94935b555961b1a1dfe285974"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3498,
+      "sha256": "db9a3bca36cdf3d13563c274b4e53d68688fdc756c3720eb5d1759dde9fb65d1"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 37300,
+      "sha256": "08168300d2563368125538ba5adff35d560a2b80e28c489870d01ae6d2180caf"
+    },
+    "elitf_r2.py": {
+      "bytes": 11262,
+      "sha256": "8beeb260a6959c703361542615a0c2c1182e5811407cd13a33e522af9fbc17bb"
+    },
+    "elitf_ui.py": {
+      "bytes": 18457,
+      "sha256": "ea96a08304cc8a5df932ea325d98f47681475d6820df56834a2338bce4dd0396"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11557,
+      "sha256": "e135976c82c95233ce279ec2d0340aa15b6fb8f3220283e64360ed43ab5a600e"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "363807ec9f10415fce9bea4f854f956098f6cdba8ae291e687921c769cee714d"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139775,
+      "sha256": "88f99a82bd5ca05f9355b81bc00cdc2cabbe548feba03fac5fba6c530e8cd0eb"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 36734,
+      "sha256": "989948b60ff8d68dd8815520e604597ea16d4eab2ffe6c2f7d2a4f5a4979ff1b"
+    },
+    "src/DartApp.h": {
+      "bytes": 3007,
+      "sha256": "17d2cca6f0681e300998cb432b310d32941d733e0fcf62278930e8a703f794e9"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 4980,
+      "sha256": "1189f49eb2f381dcac5a7c94a5d930c21df788c0c6a6b6a58a80d37f90359f3d"
+    },
+    "src/DartClass.h": {
+      "bytes": 2569,
+      "sha256": "617d0280813d37f46d182253fb88d7b68e6b5c7357003db27cbe18c096c0c963"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 51484,
+      "sha256": "68414fc56ab70a476dd9d64f4754ee0bb4ece145b9c01f542f7b33062f7d3146"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1149,
+      "sha256": "3137e7bb41d64c6ec18947d5e8e2cda1db380838c3513a06b0831e0b0367806f"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1497,
+      "sha256": "5bae8fb1a24d0f50e79ff91194f42193fedf70975e89499869b258290facb4f9"
+    },
+    "src/DartField.h": {
+      "bytes": 1125,
+      "sha256": "b4bb896b7f1d8e24e1535a223a1f15ee24667a08fb8a48c71f7a4b93cb0ac7dd"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1294,
+      "sha256": "731d9bbd610b5d31b4688b795c1a9d2dbcc09d526b711a0998146090a2db71c7"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 9916,
+      "sha256": "06600499a05064e9f9cd56bbd022b5b4fc5d6e8be7c62441615576350bfdcced"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 2438,
+      "sha256": "d10e60b93656aee00ab98375d96515a7b52432420bfe41c6b39bd2fbb2b3bbcd"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 852,
+      "sha256": "74f6da7033522911eb8310db1b77ebaf671a3dbc8a577aa048fb3c36e453fee5"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2507,
+      "sha256": "689d1de987800b9bb947db4f4cd89947fedfb668e6adde593089bb55b5b67bf6"
+    },
+    "src/DartLoader.h": {
+      "bytes": 178,
+      "sha256": "0b159f93da126af676c9f25ff53fc2af93a5120a73d253f07b8a8d29f6d727e6"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 2759,
+      "sha256": "52dcd663c2407ea09c397d7eeb0b360a3400b7a4b88512654a0af2f9a7009ea3"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 4504,
+      "sha256": "5838eb7035796d0d03c4e48146c0b5a5f67082f3bc60e293342273d24ab8b444"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 314,
+      "sha256": "d3c66e3bca04b27331d810cbf6bc3d89f367612d7eb1e3aad531873944206b38"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7245,
+      "sha256": "545d539de9e9f1a9117f0363267e0cb8d863fd4705737adbf88b1108775ec66e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 326,
+      "sha256": "5e6e2a3dbe7c8af82e299dd4f2c52b95804ff6541e15c40cead08a4631ae4219"
+    },
+    "src/Disassembler.h": {
+      "bytes": 2958,
+      "sha256": "6698e3d0216692f5ae620e567ac97925b601a3ee835a0fe6e5fbbd791f2e627e"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 7443,
+      "sha256": "defdca3b7519203ecbedea05daeb00d224efbb5acdd9f308b26b0f53deb92a58"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 482,
+      "sha256": "82792f73d8baa0d3061e531e47bb2b4ff7133b0fc4af9cf8db63a9646aa04397"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6785,
+      "sha256": "a5ab048083cd3eb5586f156c5857186e523f2a816a8b1bc4c56d6f5d042dabcd"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 744,
+      "sha256": "e26193a446678fbaae2ac6b6f219c2243602892840273778c9bc8c77bd006e13"
+    },
+    "src/Util.cpp": {
+      "bytes": 1471,
+      "sha256": "f45f09287d7773b326e1c9eed19e0de791846edbca472cf8a1e49d3c53dd2d9b"
+    },
+    "src/Util.h": {
+      "bytes": 288,
+      "sha256": "bbc96bec1162166a29e54f3cdbbd9be9cac42245a75f8b8662fff677276e48ad"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "7ff81d352bff21c698550707299fad751fa18a03b7a1bdf53682395a1e3016b1"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "c85e0396db974393331d9db33015cf49b45b3261fd5f4ada2f0bce762c15c1c5"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "d59391f649b23d3222fd630dd3cdfe9a7b99a75e0988e320b6aeaa96bc6a1320"
+    },
+    "src/il.h": {
+      "bytes": 19741,
+      "sha256": "004166ba0cdb0d3b25215a46d9679cfcedb2267c7d06d800e96063fe970ff3ec"
+    },
+    "src/main.cpp": {
+      "bytes": 3165,
+      "sha256": "6a41b241257b1181207a225dd15a051ba057f126f2361f72fe4f3166fa3129c2"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 2251,
+      "sha256": "b4ba63c3a79db8afa1ac62259bae3d17aa3a2b0084db62ea68a4a1b65f69054b"
+    }
+  },
+  "v2": {
+    ".gitignore": {
+      "bytes": 48,
+      "sha256": "cc137df30ed25753f70295b286654c81511b780a19058cf945118b5a9e9acc60"
+    },
+    "CMakeLists.txt": {
+      "bytes": 3382,
+      "sha256": "0e30765d25cdb6ceb243a668384017a300a7d0fed27c62c042bf352a4ba229d5"
+    },
+    "build_termux.sh": {
+      "bytes": 881,
+      "sha256": "28b1b9f95185681b4b0d212d16826481d0fff50ea1ac38baf58328de9ad4547c"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 5972,
+      "sha256": "6600c7e257f29b674e78a00fe9159eb31cd9ed1758a83344a3f44ed0a7faab02"
+    },
+    "elitf.py": {
+      "bytes": 46108,
+      "sha256": "199e6f350485d71a65796174bbe075df4d048449bc47105d5f9e722d6736072a"
+    },
+    "extract_dart_info.py": {
+      "bytes": 5325,
+      "sha256": "664ae1d3bc83a5bbd94a4e513927d1778c63c27d550431cd6fd938a391a11881"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3283,
+      "sha256": "106b35f1c5d4f378eda02794c38cb4a73fa45c8865786ae1482d0942bea0ee8f"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 1837,
+      "sha256": "1704401353710b574ea8d5ba3b350278928ed6c8ac65bb0df85739ac1e6eee79"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11557,
+      "sha256": "e135976c82c95233ce279ec2d0340aa15b6fb8f3220283e64360ed43ab5a600e"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "363807ec9f10415fce9bea4f854f956098f6cdba8ae291e687921c769cee714d"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139775,
+      "sha256": "88f99a82bd5ca05f9355b81bc00cdc2cabbe548feba03fac5fba6c530e8cd0eb"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 36734,
+      "sha256": "989948b60ff8d68dd8815520e604597ea16d4eab2ffe6c2f7d2a4f5a4979ff1b"
+    },
+    "src/DartApp.h": {
+      "bytes": 2580,
+      "sha256": "eefe9c28558a5a2d2664df749516fc823b276ca2c10e22beb7de3f0e119f81ca"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 4980,
+      "sha256": "1189f49eb2f381dcac5a7c94a5d930c21df788c0c6a6b6a58a80d37f90359f3d"
+    },
+    "src/DartClass.h": {
+      "bytes": 2569,
+      "sha256": "617d0280813d37f46d182253fb88d7b68e6b5c7357003db27cbe18c096c0c963"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 51492,
+      "sha256": "ad9e6b24db273172a6715c447e114cc01fc3b263729546993328e2f9a4bc9066"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1149,
+      "sha256": "3137e7bb41d64c6ec18947d5e8e2cda1db380838c3513a06b0831e0b0367806f"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1497,
+      "sha256": "5bae8fb1a24d0f50e79ff91194f42193fedf70975e89499869b258290facb4f9"
+    },
+    "src/DartField.h": {
+      "bytes": 1125,
+      "sha256": "b4bb896b7f1d8e24e1535a223a1f15ee24667a08fb8a48c71f7a4b93cb0ac7dd"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1294,
+      "sha256": "731d9bbd610b5d31b4688b795c1a9d2dbcc09d526b711a0998146090a2db71c7"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 9916,
+      "sha256": "06600499a05064e9f9cd56bbd022b5b4fc5d6e8be7c62441615576350bfdcced"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 2438,
+      "sha256": "d10e60b93656aee00ab98375d96515a7b52432420bfe41c6b39bd2fbb2b3bbcd"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 852,
+      "sha256": "74f6da7033522911eb8310db1b77ebaf671a3dbc8a577aa048fb3c36e453fee5"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2507,
+      "sha256": "689d1de987800b9bb947db4f4cd89947fedfb668e6adde593089bb55b5b67bf6"
+    },
+    "src/DartLoader.h": {
+      "bytes": 178,
+      "sha256": "0b159f93da126af676c9f25ff53fc2af93a5120a73d253f07b8a8d29f6d727e6"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 2759,
+      "sha256": "52dcd663c2407ea09c397d7eeb0b360a3400b7a4b88512654a0af2f9a7009ea3"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 4504,
+      "sha256": "5838eb7035796d0d03c4e48146c0b5a5f67082f3bc60e293342273d24ab8b444"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 314,
+      "sha256": "d3c66e3bca04b27331d810cbf6bc3d89f367612d7eb1e3aad531873944206b38"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7245,
+      "sha256": "545d539de9e9f1a9117f0363267e0cb8d863fd4705737adbf88b1108775ec66e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 326,
+      "sha256": "5e6e2a3dbe7c8af82e299dd4f2c52b95804ff6541e15c40cead08a4631ae4219"
+    },
+    "src/Disassembler.h": {
+      "bytes": 2958,
+      "sha256": "6698e3d0216692f5ae620e567ac97925b601a3ee835a0fe6e5fbbd791f2e627e"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 7443,
+      "sha256": "defdca3b7519203ecbedea05daeb00d224efbb5acdd9f308b26b0f53deb92a58"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 482,
+      "sha256": "82792f73d8baa0d3061e531e47bb2b4ff7133b0fc4af9cf8db63a9646aa04397"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6785,
+      "sha256": "a5ab048083cd3eb5586f156c5857186e523f2a816a8b1bc4c56d6f5d042dabcd"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 744,
+      "sha256": "e26193a446678fbaae2ac6b6f219c2243602892840273778c9bc8c77bd006e13"
+    },
+    "src/Util.cpp": {
+      "bytes": 1471,
+      "sha256": "f45f09287d7773b326e1c9eed19e0de791846edbca472cf8a1e49d3c53dd2d9b"
+    },
+    "src/Util.h": {
+      "bytes": 288,
+      "sha256": "bbc96bec1162166a29e54f3cdbbd9be9cac42245a75f8b8662fff677276e48ad"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "7ff81d352bff21c698550707299fad751fa18a03b7a1bdf53682395a1e3016b1"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "c85e0396db974393331d9db33015cf49b45b3261fd5f4ada2f0bce762c15c1c5"
+    },
+    "src/args.hxx": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "v5_1bug": {
+    ".gitignore": {
+      "bytes": 48,
+      "sha256": "cc137df30ed25753f70295b286654c81511b780a19058cf945118b5a9e9acc60"
+    },
+    "CHANGELOG.md": {
+      "bytes": 19268,
+      "sha256": "ab57ae83335c7df9aafd7f47f8e2a442135c5948008b8f0e906380d88e6909b0"
+    },
+    "CMakeLists.txt": {
+      "bytes": 6045,
+      "sha256": "80e564052d5863b1f61959ee895389c7af375a91796c595e2002e208bc8e6845"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3805,
+      "sha256": "c09fea073e5515717e594939ace08774918c60f300e5da53f5de7af77d83f881"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 38158,
+      "sha256": "cc415e48e28a616e4da55a17d8b35816f314e73f748759eaf000501b66e528f5"
+    },
+    "elitf_r2.py": {
+      "bytes": 11262,
+      "sha256": "8beeb260a6959c703361542615a0c2c1182e5811407cd13a33e522af9fbc17bb"
+    },
+    "elitf_ui.py": {
+      "bytes": 25085,
+      "sha256": "69450de6530eaaca979bad90a36df9f0b323ffcd2a692c41941b53f6bbf655c7"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11561,
+      "sha256": "14a26f889f5b3fc0f9feb7e5eba76956ec61d7aa81d3c3fd2bcb2036d741bc42"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "sourcelist.cmake": {
+      "bytes": 765,
+      "sha256": "9c9784bfc63ce5bfc05e69b8eaa7068050455fd8d560bb8f6eb18ef31459c06f"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "5e57391ba80e9d1ca34a6813c2d7f0ba697944f94ec7691b15c443d4d11adf84"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139431,
+      "sha256": "0c19c5f8b3f94b17fa2be5ff437974f881febe95d00fa3fde93fe55cd148f6d2"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 24302,
+      "sha256": "be7f90d636e2ea123fa770a8bb4015f9174254afdf05d8f80eba1016df85797a"
+    },
+    "src/DartApp.h": {
+      "bytes": 2505,
+      "sha256": "8fa1cd4537c66a4d8bd8834406c5b29e5718adc15479ba3bae4e94dd53adf6f4"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 8277,
+      "sha256": "26914d6935276bf2b0d3e2885930d413dd37003e55518c8c5b555952a63c71c9"
+    },
+    "src/DartClass.h": {
+      "bytes": 3311,
+      "sha256": "7b9cf78edf7ece24d405750e0d4bd9227fcb1a228b29e1dee079732ea60d1223"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 30287,
+      "sha256": "d39f83e46c67dbbeb2f573d6f14348b6817b57a9741decba3f300e1294c1858c"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1099,
+      "sha256": "0096e5900fe1715d3d1abcdc2b4f9eee0f949c6c0ff1598af1c82c550d40310c"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1615,
+      "sha256": "034f69fc8c729fe6f1696c5dddc9c90dfb91231ed74e063e10b66b3baa825fcd"
+    },
+    "src/DartField.h": {
+      "bytes": 1148,
+      "sha256": "3ad0b38c8e78a6aa66eb913cd67754f1bf135bdb308e714f0ae45f236e6f71db"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1622,
+      "sha256": "868c4babb1f53885a1adf0662df05e7b1d2db72a7ed3f565fe9ce6ca15dbfd0b"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 8159,
+      "sha256": "d3365d0eb1f830f2db050e70d838b62fb57a9786e833c24ea2821299e99d54d2"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 3056,
+      "sha256": "837f693365bf14fe1477858f6ef48c496c4299ce8fbba6a87a9738325dcb0e4d"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 1113,
+      "sha256": "9522ace9f20adfc28ac5c005e249b2a3d0c928e1dc45efb583ec4e66e5dc231f"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2694,
+      "sha256": "d2841a93cffa33c9b43dd9d2f7db58bc5c17acda5a90609389a59adfc83f2900"
+    },
+    "src/DartLoader.h": {
+      "bytes": 501,
+      "sha256": "19c9fc1142b46d9d4192b896b7969ec9b104e26eed9b59890607ce2ac342a1a9"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 3256,
+      "sha256": "103eafa8aab88155112109c80bf5d1c8e0bb439872fdce9fa3f0fb7b9761367f"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 5284,
+      "sha256": "2dfbdff6421fa083f8279c2baa3c575d11b6e59d63882d97d3cc11e1546716c2"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 353,
+      "sha256": "010ac46ea170165c4c323b1dc2ec86357a8b6c30cfd40977d458ecbdffc760ad"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7228,
+      "sha256": "75753204de10b5002a008c96a1be50defc58036f4b64f12a313a1a21f252877e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 327,
+      "sha256": "526654c1fac48be60de0e685be43c4de46223a70764c3789751b90f4c5e549aa"
+    },
+    "src/Disassembler.h": {
+      "bytes": 3349,
+      "sha256": "4e59c52cba330ad5af67a9f941d65893876e5c22fda99cec69ceba5f75dc9609"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 6437,
+      "sha256": "7fc789317e458fef4bf1ca0f460d283d33d4b5331e8d270edbc6945335692737"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 410,
+      "sha256": "dda625291eb7c13111d48756667f5193424cbbddeed7437dbf8fe7ed666be367"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6743,
+      "sha256": "99062a11297feeddfaf1aa85fb5dfa951a5449cc15b112221105ed30e888ad7b"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 727,
+      "sha256": "e02e347cd5f226336a74a8dab894ad6fad4567cce10d10a67160526a5d1d2b88"
+    },
+    "src/Util.cpp": {
+      "bytes": 1425,
+      "sha256": "639b40f890096c505e59ffb0f83270f35af9b3fce5c8f3595467a8c17d810aec"
+    },
+    "src/Util.h": {
+      "bytes": 289,
+      "sha256": "d4b47a3055438a07fa0bf56226fc6dc17bce0590072e487494ad3a7a07de9eda"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "eed092b4dc8a19b6b070a216b01304f0beded76d3e6b925ee7c7c9d7a235fc37"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "53d5e08e87b44a3afb256efa3b82e96f80b58cedb3287d2a3161bd72d6af4ccc"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "68400aa48bf5949fb25b9c48abeb1c817f4584fd18ab99d9eaca4ffe6471f558"
+    },
+    "src/il.h": {
+      "bytes": 19740,
+      "sha256": "d061b9997e6e7de28520980944b46152eb992bf6ea05bf92f6b0c6d67569f5ac"
+    },
+    "src/main.cpp": {
+      "bytes": 2297,
+      "sha256": "d0a28a5e35e9cc0c21c95988a6f664e1386440952f5a141188dc5e0cc10aa6e8"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 4290,
+      "sha256": "fe9b3a68abb943976dea4e2260cb80f6768a7f728285be16ee97be6ce173f745"
+    }
+  },
+  "v9": {
+    ".gitignore": {
+      "bytes": 48,
+      "sha256": "cc137df30ed25753f70295b286654c81511b780a19058cf945118b5a9e9acc60"
+    },
+    "CMakeLists.txt": {
+      "bytes": 6489,
+      "sha256": "42a40d4061bdef8a85e9672fe5abdda0677bb3d6077f5362230e0d1b4e9a7745"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3805,
+      "sha256": "c09fea073e5515717e594939ace08774918c60f300e5da53f5de7af77d83f881"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 35860,
+      "sha256": "1fb3a9f5e2f30d1fcb289ee15d6c2de69200b30f419c873e9cb499cefd1cf0f1"
+    },
+    "elitf_r2.py": {
+      "bytes": 38044,
+      "sha256": "5e686f6ae7b73cebae0e9f05c8a10ef6aedf40a3257e2878367c23bea16eb6c6"
+    },
+    "elitf_ui.py": {
+      "bytes": 38206,
+      "sha256": "dcbaad9395a7991b3a255ead5a20f332011def53f8d5cce7b1962c0ceee123b6"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11561,
+      "sha256": "14a26f889f5b3fc0f9feb7e5eba76956ec61d7aa81d3c3fd2bcb2036d741bc42"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "sourcelist.cmake": {
+      "bytes": 765,
+      "sha256": "9c9784bfc63ce5bfc05e69b8eaa7068050455fd8d560bb8f6eb18ef31459c06f"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "5e57391ba80e9d1ca34a6813c2d7f0ba697944f94ec7691b15c443d4d11adf84"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139431,
+      "sha256": "0c19c5f8b3f94b17fa2be5ff437974f881febe95d00fa3fde93fe55cd148f6d2"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 24302,
+      "sha256": "be7f90d636e2ea123fa770a8bb4015f9174254afdf05d8f80eba1016df85797a"
+    },
+    "src/DartApp.h": {
+      "bytes": 2505,
+      "sha256": "8fa1cd4537c66a4d8bd8834406c5b29e5718adc15479ba3bae4e94dd53adf6f4"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 8277,
+      "sha256": "26914d6935276bf2b0d3e2885930d413dd37003e55518c8c5b555952a63c71c9"
+    },
+    "src/DartClass.h": {
+      "bytes": 3311,
+      "sha256": "7b9cf78edf7ece24d405750e0d4bd9227fcb1a228b29e1dee079732ea60d1223"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 30287,
+      "sha256": "d39f83e46c67dbbeb2f573d6f14348b6817b57a9741decba3f300e1294c1858c"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1099,
+      "sha256": "0096e5900fe1715d3d1abcdc2b4f9eee0f949c6c0ff1598af1c82c550d40310c"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1615,
+      "sha256": "034f69fc8c729fe6f1696c5dddc9c90dfb91231ed74e063e10b66b3baa825fcd"
+    },
+    "src/DartField.h": {
+      "bytes": 1148,
+      "sha256": "3ad0b38c8e78a6aa66eb913cd67754f1bf135bdb308e714f0ae45f236e6f71db"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1622,
+      "sha256": "868c4babb1f53885a1adf0662df05e7b1d2db72a7ed3f565fe9ce6ca15dbfd0b"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 8159,
+      "sha256": "d3365d0eb1f830f2db050e70d838b62fb57a9786e833c24ea2821299e99d54d2"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 3056,
+      "sha256": "837f693365bf14fe1477858f6ef48c496c4299ce8fbba6a87a9738325dcb0e4d"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 1113,
+      "sha256": "9522ace9f20adfc28ac5c005e249b2a3d0c928e1dc45efb583ec4e66e5dc231f"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2694,
+      "sha256": "d2841a93cffa33c9b43dd9d2f7db58bc5c17acda5a90609389a59adfc83f2900"
+    },
+    "src/DartLoader.h": {
+      "bytes": 501,
+      "sha256": "19c9fc1142b46d9d4192b896b7969ec9b104e26eed9b59890607ce2ac342a1a9"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 3256,
+      "sha256": "103eafa8aab88155112109c80bf5d1c8e0bb439872fdce9fa3f0fb7b9761367f"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 5284,
+      "sha256": "2dfbdff6421fa083f8279c2baa3c575d11b6e59d63882d97d3cc11e1546716c2"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 353,
+      "sha256": "010ac46ea170165c4c323b1dc2ec86357a8b6c30cfd40977d458ecbdffc760ad"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7228,
+      "sha256": "75753204de10b5002a008c96a1be50defc58036f4b64f12a313a1a21f252877e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 327,
+      "sha256": "526654c1fac48be60de0e685be43c4de46223a70764c3789751b90f4c5e549aa"
+    },
+    "src/Disassembler.h": {
+      "bytes": 3349,
+      "sha256": "4e59c52cba330ad5af67a9f941d65893876e5c22fda99cec69ceba5f75dc9609"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 6437,
+      "sha256": "7fc789317e458fef4bf1ca0f460d283d33d4b5331e8d270edbc6945335692737"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 410,
+      "sha256": "dda625291eb7c13111d48756667f5193424cbbddeed7437dbf8fe7ed666be367"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6743,
+      "sha256": "99062a11297feeddfaf1aa85fb5dfa951a5449cc15b112221105ed30e888ad7b"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 727,
+      "sha256": "e02e347cd5f226336a74a8dab894ad6fad4567cce10d10a67160526a5d1d2b88"
+    },
+    "src/Util.cpp": {
+      "bytes": 1425,
+      "sha256": "639b40f890096c505e59ffb0f83270f35af9b3fce5c8f3595467a8c17d810aec"
+    },
+    "src/Util.h": {
+      "bytes": 289,
+      "sha256": "d4b47a3055438a07fa0bf56226fc6dc17bce0590072e487494ad3a7a07de9eda"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "eed092b4dc8a19b6b070a216b01304f0beded76d3e6b925ee7c7c9d7a235fc37"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "53d5e08e87b44a3afb256efa3b82e96f80b58cedb3287d2a3161bd72d6af4ccc"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "68400aa48bf5949fb25b9c48abeb1c817f4584fd18ab99d9eaca4ffe6471f558"
+    },
+    "src/il.h": {
+      "bytes": 19740,
+      "sha256": "d061b9997e6e7de28520980944b46152eb992bf6ea05bf92f6b0c6d67569f5ac"
+    },
+    "src/main.cpp": {
+      "bytes": 2297,
+      "sha256": "d0a28a5e35e9cc0c21c95988a6f664e1386440952f5a141188dc5e0cc10aa6e8"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "v8": {
+    "CMakeLists.txt": {
+      "bytes": 6489,
+      "sha256": "42a40d4061bdef8a85e9672fe5abdda0677bb3d6077f5362230e0d1b4e9a7745"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3805,
+      "sha256": "c09fea073e5515717e594939ace08774918c60f300e5da53f5de7af77d83f881"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 35860,
+      "sha256": "1fb3a9f5e2f30d1fcb289ee15d6c2de69200b30f419c873e9cb499cefd1cf0f1"
+    },
+    "elitf_r2.py": {
+      "bytes": 38044,
+      "sha256": "5e686f6ae7b73cebae0e9f05c8a10ef6aedf40a3257e2878367c23bea16eb6c6"
+    },
+    "elitf_ui.py": {
+      "bytes": 42406,
+      "sha256": "f09254ef853a45bac35639fabd620bd2a02aa10494e8b9e0a52d30cc4851935c"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11561,
+      "sha256": "14a26f889f5b3fc0f9feb7e5eba76956ec61d7aa81d3c3fd2bcb2036d741bc42"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "sourcelist.cmake": {
+      "bytes": 765,
+      "sha256": "9c9784bfc63ce5bfc05e69b8eaa7068050455fd8d560bb8f6eb18ef31459c06f"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "5e57391ba80e9d1ca34a6813c2d7f0ba697944f94ec7691b15c443d4d11adf84"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139431,
+      "sha256": "0c19c5f8b3f94b17fa2be5ff437974f881febe95d00fa3fde93fe55cd148f6d2"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 24302,
+      "sha256": "be7f90d636e2ea123fa770a8bb4015f9174254afdf05d8f80eba1016df85797a"
+    },
+    "src/DartApp.h": {
+      "bytes": 2505,
+      "sha256": "8fa1cd4537c66a4d8bd8834406c5b29e5718adc15479ba3bae4e94dd53adf6f4"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 8277,
+      "sha256": "26914d6935276bf2b0d3e2885930d413dd37003e55518c8c5b555952a63c71c9"
+    },
+    "src/DartClass.h": {
+      "bytes": 3311,
+      "sha256": "7b9cf78edf7ece24d405750e0d4bd9227fcb1a228b29e1dee079732ea60d1223"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 30287,
+      "sha256": "d39f83e46c67dbbeb2f573d6f14348b6817b57a9741decba3f300e1294c1858c"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1099,
+      "sha256": "0096e5900fe1715d3d1abcdc2b4f9eee0f949c6c0ff1598af1c82c550d40310c"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1615,
+      "sha256": "034f69fc8c729fe6f1696c5dddc9c90dfb91231ed74e063e10b66b3baa825fcd"
+    },
+    "src/DartField.h": {
+      "bytes": 1148,
+      "sha256": "3ad0b38c8e78a6aa66eb913cd67754f1bf135bdb308e714f0ae45f236e6f71db"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1622,
+      "sha256": "868c4babb1f53885a1adf0662df05e7b1d2db72a7ed3f565fe9ce6ca15dbfd0b"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 8159,
+      "sha256": "d3365d0eb1f830f2db050e70d838b62fb57a9786e833c24ea2821299e99d54d2"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 3056,
+      "sha256": "837f693365bf14fe1477858f6ef48c496c4299ce8fbba6a87a9738325dcb0e4d"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 1113,
+      "sha256": "9522ace9f20adfc28ac5c005e249b2a3d0c928e1dc45efb583ec4e66e5dc231f"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2694,
+      "sha256": "d2841a93cffa33c9b43dd9d2f7db58bc5c17acda5a90609389a59adfc83f2900"
+    },
+    "src/DartLoader.h": {
+      "bytes": 501,
+      "sha256": "19c9fc1142b46d9d4192b896b7969ec9b104e26eed9b59890607ce2ac342a1a9"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 3256,
+      "sha256": "103eafa8aab88155112109c80bf5d1c8e0bb439872fdce9fa3f0fb7b9761367f"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 5284,
+      "sha256": "2dfbdff6421fa083f8279c2baa3c575d11b6e59d63882d97d3cc11e1546716c2"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 353,
+      "sha256": "010ac46ea170165c4c323b1dc2ec86357a8b6c30cfd40977d458ecbdffc760ad"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7228,
+      "sha256": "75753204de10b5002a008c96a1be50defc58036f4b64f12a313a1a21f252877e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 327,
+      "sha256": "526654c1fac48be60de0e685be43c4de46223a70764c3789751b90f4c5e549aa"
+    },
+    "src/Disassembler.h": {
+      "bytes": 3349,
+      "sha256": "4e59c52cba330ad5af67a9f941d65893876e5c22fda99cec69ceba5f75dc9609"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 6437,
+      "sha256": "7fc789317e458fef4bf1ca0f460d283d33d4b5331e8d270edbc6945335692737"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 410,
+      "sha256": "dda625291eb7c13111d48756667f5193424cbbddeed7437dbf8fe7ed666be367"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6743,
+      "sha256": "99062a11297feeddfaf1aa85fb5dfa951a5449cc15b112221105ed30e888ad7b"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 727,
+      "sha256": "e02e347cd5f226336a74a8dab894ad6fad4567cce10d10a67160526a5d1d2b88"
+    },
+    "src/Util.cpp": {
+      "bytes": 1425,
+      "sha256": "639b40f890096c505e59ffb0f83270f35af9b3fce5c8f3595467a8c17d810aec"
+    },
+    "src/Util.h": {
+      "bytes": 289,
+      "sha256": "d4b47a3055438a07fa0bf56226fc6dc17bce0590072e487494ad3a7a07de9eda"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "eed092b4dc8a19b6b070a216b01304f0beded76d3e6b925ee7c7c9d7a235fc37"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "53d5e08e87b44a3afb256efa3b82e96f80b58cedb3287d2a3161bd72d6af4ccc"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "68400aa48bf5949fb25b9c48abeb1c817f4584fd18ab99d9eaca4ffe6471f558"
+    },
+    "src/il.h": {
+      "bytes": 19740,
+      "sha256": "d061b9997e6e7de28520980944b46152eb992bf6ea05bf92f6b0c6d67569f5ac"
+    },
+    "src/main.cpp": {
+      "bytes": 2297,
+      "sha256": "d0a28a5e35e9cc0c21c95988a6f664e1386440952f5a141188dc5e0cc10aa6e8"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "v3": {
+    "CMakeLists.txt": {
+      "bytes": 3441,
+      "sha256": "c11712ea56a07521068b1a2dfa5b6932aabcb8f94935b555961b1a1dfe285974"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3498,
+      "sha256": "db9a3bca36cdf3d13563c274b4e53d68688fdc756c3720eb5d1759dde9fb65d1"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 37938,
+      "sha256": "696df770a0bd37ede472d323deac883a27fbd80a91f23fabe270811df044a88b"
+    },
+    "elitf_r2.py": {
+      "bytes": 11262,
+      "sha256": "8beeb260a6959c703361542615a0c2c1182e5811407cd13a33e522af9fbc17bb"
+    },
+    "elitf_ui.py": {
+      "bytes": 23568,
+      "sha256": "bb6045279fbe9d9659e6d5c69d7a9d8270d73700f47125ac96667e21497d5185"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11557,
+      "sha256": "e135976c82c95233ce279ec2d0340aa15b6fb8f3220283e64360ed43ab5a600e"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "363807ec9f10415fce9bea4f854f956098f6cdba8ae291e687921c769cee714d"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139775,
+      "sha256": "88f99a82bd5ca05f9355b81bc00cdc2cabbe548feba03fac5fba6c530e8cd0eb"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 36734,
+      "sha256": "989948b60ff8d68dd8815520e604597ea16d4eab2ffe6c2f7d2a4f5a4979ff1b"
+    },
+    "src/DartApp.h": {
+      "bytes": 3007,
+      "sha256": "17d2cca6f0681e300998cb432b310d32941d733e0fcf62278930e8a703f794e9"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 4980,
+      "sha256": "1189f49eb2f381dcac5a7c94a5d930c21df788c0c6a6b6a58a80d37f90359f3d"
+    },
+    "src/DartClass.h": {
+      "bytes": 2569,
+      "sha256": "617d0280813d37f46d182253fb88d7b68e6b5c7357003db27cbe18c096c0c963"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 51484,
+      "sha256": "68414fc56ab70a476dd9d64f4754ee0bb4ece145b9c01f542f7b33062f7d3146"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1149,
+      "sha256": "3137e7bb41d64c6ec18947d5e8e2cda1db380838c3513a06b0831e0b0367806f"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1497,
+      "sha256": "5bae8fb1a24d0f50e79ff91194f42193fedf70975e89499869b258290facb4f9"
+    },
+    "src/DartField.h": {
+      "bytes": 1125,
+      "sha256": "b4bb896b7f1d8e24e1535a223a1f15ee24667a08fb8a48c71f7a4b93cb0ac7dd"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1294,
+      "sha256": "731d9bbd610b5d31b4688b795c1a9d2dbcc09d526b711a0998146090a2db71c7"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 9916,
+      "sha256": "06600499a05064e9f9cd56bbd022b5b4fc5d6e8be7c62441615576350bfdcced"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 2438,
+      "sha256": "d10e60b93656aee00ab98375d96515a7b52432420bfe41c6b39bd2fbb2b3bbcd"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 852,
+      "sha256": "74f6da7033522911eb8310db1b77ebaf671a3dbc8a577aa048fb3c36e453fee5"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2507,
+      "sha256": "689d1de987800b9bb947db4f4cd89947fedfb668e6adde593089bb55b5b67bf6"
+    },
+    "src/DartLoader.h": {
+      "bytes": 178,
+      "sha256": "0b159f93da126af676c9f25ff53fc2af93a5120a73d253f07b8a8d29f6d727e6"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 2759,
+      "sha256": "52dcd663c2407ea09c397d7eeb0b360a3400b7a4b88512654a0af2f9a7009ea3"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 4504,
+      "sha256": "5838eb7035796d0d03c4e48146c0b5a5f67082f3bc60e293342273d24ab8b444"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 314,
+      "sha256": "d3c66e3bca04b27331d810cbf6bc3d89f367612d7eb1e3aad531873944206b38"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7245,
+      "sha256": "545d539de9e9f1a9117f0363267e0cb8d863fd4705737adbf88b1108775ec66e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 326,
+      "sha256": "5e6e2a3dbe7c8af82e299dd4f2c52b95804ff6541e15c40cead08a4631ae4219"
+    },
+    "src/Disassembler.h": {
+      "bytes": 2958,
+      "sha256": "6698e3d0216692f5ae620e567ac97925b601a3ee835a0fe6e5fbbd791f2e627e"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 7443,
+      "sha256": "defdca3b7519203ecbedea05daeb00d224efbb5acdd9f308b26b0f53deb92a58"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 482,
+      "sha256": "82792f73d8baa0d3061e531e47bb2b4ff7133b0fc4af9cf8db63a9646aa04397"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6785,
+      "sha256": "a5ab048083cd3eb5586f156c5857186e523f2a816a8b1bc4c56d6f5d042dabcd"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 744,
+      "sha256": "e26193a446678fbaae2ac6b6f219c2243602892840273778c9bc8c77bd006e13"
+    },
+    "src/Util.cpp": {
+      "bytes": 1471,
+      "sha256": "f45f09287d7773b326e1c9eed19e0de791846edbca472cf8a1e49d3c53dd2d9b"
+    },
+    "src/Util.h": {
+      "bytes": 288,
+      "sha256": "bbc96bec1162166a29e54f3cdbbd9be9cac42245a75f8b8662fff677276e48ad"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "7ff81d352bff21c698550707299fad751fa18a03b7a1bdf53682395a1e3016b1"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "c85e0396db974393331d9db33015cf49b45b3261fd5f4ada2f0bce762c15c1c5"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "d59391f649b23d3222fd630dd3cdfe9a7b99a75e0988e320b6aeaa96bc6a1320"
+    },
+    "src/il.h": {
+      "bytes": 19741,
+      "sha256": "004166ba0cdb0d3b25215a46d9679cfcedb2267c7d06d800e96063fe970ff3ec"
+    },
+    "src/main.cpp": {
+      "bytes": 3165,
+      "sha256": "6a41b241257b1181207a225dd15a051ba057f126f2361f72fe4f3166fa3129c2"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 2251,
+      "sha256": "b4ba63c3a79db8afa1ac62259bae3d17aa3a2b0084db62ea68a4a1b65f69054b"
+    }
+  },
+  "v6_full": {
+    ".gitignore": {
+      "bytes": 48,
+      "sha256": "cc137df30ed25753f70295b286654c81511b780a19058cf945118b5a9e9acc60"
+    },
+    "CHANGELOG.md": {
+      "bytes": 21266,
+      "sha256": "20f29cccc6bbabf8937af25f6ac058619ff052f24e8fa7297759a0813493b470"
+    },
+    "CMakeLists.txt": {
+      "bytes": 6489,
+      "sha256": "42a40d4061bdef8a85e9672fe5abdda0677bb3d6077f5362230e0d1b4e9a7745"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3805,
+      "sha256": "c09fea073e5515717e594939ace08774918c60f300e5da53f5de7af77d83f881"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 38158,
+      "sha256": "cc415e48e28a616e4da55a17d8b35816f314e73f748759eaf000501b66e528f5"
+    },
+    "elitf_r2.py": {
+      "bytes": 13074,
+      "sha256": "b7dc8d409df7281369d69321b1ce4d046de40b3479050536fefec78e1df21d18"
+    },
+    "elitf_ui.py": {
+      "bytes": 25085,
+      "sha256": "69450de6530eaaca979bad90a36df9f0b323ffcd2a692c41941b53f6bbf655c7"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11561,
+      "sha256": "14a26f889f5b3fc0f9feb7e5eba76956ec61d7aa81d3c3fd2bcb2036d741bc42"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "sourcelist.cmake": {
+      "bytes": 765,
+      "sha256": "9c9784bfc63ce5bfc05e69b8eaa7068050455fd8d560bb8f6eb18ef31459c06f"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "5e57391ba80e9d1ca34a6813c2d7f0ba697944f94ec7691b15c443d4d11adf84"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139431,
+      "sha256": "0c19c5f8b3f94b17fa2be5ff437974f881febe95d00fa3fde93fe55cd148f6d2"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 24302,
+      "sha256": "be7f90d636e2ea123fa770a8bb4015f9174254afdf05d8f80eba1016df85797a"
+    },
+    "src/DartApp.h": {
+      "bytes": 2505,
+      "sha256": "8fa1cd4537c66a4d8bd8834406c5b29e5718adc15479ba3bae4e94dd53adf6f4"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 8277,
+      "sha256": "26914d6935276bf2b0d3e2885930d413dd37003e55518c8c5b555952a63c71c9"
+    },
+    "src/DartClass.h": {
+      "bytes": 3311,
+      "sha256": "7b9cf78edf7ece24d405750e0d4bd9227fcb1a228b29e1dee079732ea60d1223"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 30287,
+      "sha256": "d39f83e46c67dbbeb2f573d6f14348b6817b57a9741decba3f300e1294c1858c"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1099,
+      "sha256": "0096e5900fe1715d3d1abcdc2b4f9eee0f949c6c0ff1598af1c82c550d40310c"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1615,
+      "sha256": "034f69fc8c729fe6f1696c5dddc9c90dfb91231ed74e063e10b66b3baa825fcd"
+    },
+    "src/DartField.h": {
+      "bytes": 1148,
+      "sha256": "3ad0b38c8e78a6aa66eb913cd67754f1bf135bdb308e714f0ae45f236e6f71db"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1622,
+      "sha256": "868c4babb1f53885a1adf0662df05e7b1d2db72a7ed3f565fe9ce6ca15dbfd0b"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 8159,
+      "sha256": "d3365d0eb1f830f2db050e70d838b62fb57a9786e833c24ea2821299e99d54d2"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 3056,
+      "sha256": "837f693365bf14fe1477858f6ef48c496c4299ce8fbba6a87a9738325dcb0e4d"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 1113,
+      "sha256": "9522ace9f20adfc28ac5c005e249b2a3d0c928e1dc45efb583ec4e66e5dc231f"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2694,
+      "sha256": "d2841a93cffa33c9b43dd9d2f7db58bc5c17acda5a90609389a59adfc83f2900"
+    },
+    "src/DartLoader.h": {
+      "bytes": 501,
+      "sha256": "19c9fc1142b46d9d4192b896b7969ec9b104e26eed9b59890607ce2ac342a1a9"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 3256,
+      "sha256": "103eafa8aab88155112109c80bf5d1c8e0bb439872fdce9fa3f0fb7b9761367f"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 5284,
+      "sha256": "2dfbdff6421fa083f8279c2baa3c575d11b6e59d63882d97d3cc11e1546716c2"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 353,
+      "sha256": "010ac46ea170165c4c323b1dc2ec86357a8b6c30cfd40977d458ecbdffc760ad"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7228,
+      "sha256": "75753204de10b5002a008c96a1be50defc58036f4b64f12a313a1a21f252877e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 327,
+      "sha256": "526654c1fac48be60de0e685be43c4de46223a70764c3789751b90f4c5e549aa"
+    },
+    "src/Disassembler.h": {
+      "bytes": 3349,
+      "sha256": "4e59c52cba330ad5af67a9f941d65893876e5c22fda99cec69ceba5f75dc9609"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 6437,
+      "sha256": "7fc789317e458fef4bf1ca0f460d283d33d4b5331e8d270edbc6945335692737"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 410,
+      "sha256": "dda625291eb7c13111d48756667f5193424cbbddeed7437dbf8fe7ed666be367"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6743,
+      "sha256": "99062a11297feeddfaf1aa85fb5dfa951a5449cc15b112221105ed30e888ad7b"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 727,
+      "sha256": "e02e347cd5f226336a74a8dab894ad6fad4567cce10d10a67160526a5d1d2b88"
+    },
+    "src/Util.cpp": {
+      "bytes": 1425,
+      "sha256": "639b40f890096c505e59ffb0f83270f35af9b3fce5c8f3595467a8c17d810aec"
+    },
+    "src/Util.h": {
+      "bytes": 289,
+      "sha256": "d4b47a3055438a07fa0bf56226fc6dc17bce0590072e487494ad3a7a07de9eda"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "eed092b4dc8a19b6b070a216b01304f0beded76d3e6b925ee7c7c9d7a235fc37"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "53d5e08e87b44a3afb256efa3b82e96f80b58cedb3287d2a3161bd72d6af4ccc"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "68400aa48bf5949fb25b9c48abeb1c817f4584fd18ab99d9eaca4ffe6471f558"
+    },
+    "src/il.h": {
+      "bytes": 19740,
+      "sha256": "d061b9997e6e7de28520980944b46152eb992bf6ea05bf92f6b0c6d67569f5ac"
+    },
+    "src/main.cpp": {
+      "bytes": 2297,
+      "sha256": "d0a28a5e35e9cc0c21c95988a6f664e1386440952f5a141188dc5e0cc10aa6e8"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 4290,
+      "sha256": "fe9b3a68abb943976dea4e2260cb80f6768a7f728285be16ee97be6ce173f745"
+    }
+  },
+  "Elit-f-main": {
+    ".gitignore": {
+      "bytes": 48,
+      "sha256": "cc137df30ed25753f70295b286654c81511b780a19058cf945118b5a9e9acc60"
+    },
+    "CMakeLists.txt": {
+      "bytes": 6489,
+      "sha256": "42a40d4061bdef8a85e9672fe5abdda0677bb3d6077f5362230e0d1b4e9a7745"
+    },
+    "README.md": {
+      "bytes": 927,
+      "sha256": "5c42e4dbabc9436fe780e8c5df3757637429f69731b4b45e71720d6273402a92"
+    },
+    "build_termux.sh": {
+      "bytes": 3805,
+      "sha256": "c09fea073e5515717e594939ace08774918c60f300e5da53f5de7af77d83f881"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8596,
+      "sha256": "cd357ce3487fe81a3f7a75f4eb62ca71022d460929064d817ad6eedfefc02cab"
+    },
+    "elitf.py": {
+      "bytes": 35860,
+      "sha256": "1fb3a9f5e2f30d1fcb289ee15d6c2de69200b30f419c873e9cb499cefd1cf0f1"
+    },
+    "elitf_r2.py": {
+      "bytes": 38044,
+      "sha256": "5e686f6ae7b73cebae0e9f05c8a10ef6aedf40a3257e2878367c23bea16eb6c6"
+    },
+    "elitf_ui.py": {
+      "bytes": 38206,
+      "sha256": "dcbaad9395a7991b3a255ead5a20f332011def53f8d5cce7b1962c0ceee123b6"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6066,
+      "sha256": "c7c907a439bd21aa042c697c3805bf76d060ef8211ea0bd77f48f6d5149cd394"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3504,
+      "sha256": "8f2ad6aa436bd220ccdde9af9f0a0ea0f00cec53e1c1056e27599d097d32e2f1"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 2240,
+      "sha256": "eb7c4fdf594d38b77d5688ca12286e5ec100aff256fc78923c85bab78d6064b0"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11561,
+      "sha256": "14a26f889f5b3fc0f9feb7e5eba76956ec61d7aa81d3c3fd2bcb2036d741bc42"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "sourcelist.cmake": {
+      "bytes": 765,
+      "sha256": "9c9784bfc63ce5bfc05e69b8eaa7068050455fd8d560bb8f6eb18ef31459c06f"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "5e57391ba80e9d1ca34a6813c2d7f0ba697944f94ec7691b15c443d4d11adf84"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139431,
+      "sha256": "0c19c5f8b3f94b17fa2be5ff437974f881febe95d00fa3fde93fe55cd148f6d2"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 24302,
+      "sha256": "be7f90d636e2ea123fa770a8bb4015f9174254afdf05d8f80eba1016df85797a"
+    },
+    "src/DartApp.h": {
+      "bytes": 2505,
+      "sha256": "8fa1cd4537c66a4d8bd8834406c5b29e5718adc15479ba3bae4e94dd53adf6f4"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 8277,
+      "sha256": "26914d6935276bf2b0d3e2885930d413dd37003e55518c8c5b555952a63c71c9"
+    },
+    "src/DartClass.h": {
+      "bytes": 3311,
+      "sha256": "7b9cf78edf7ece24d405750e0d4bd9227fcb1a228b29e1dee079732ea60d1223"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 30287,
+      "sha256": "d39f83e46c67dbbeb2f573d6f14348b6817b57a9741decba3f300e1294c1858c"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1099,
+      "sha256": "0096e5900fe1715d3d1abcdc2b4f9eee0f949c6c0ff1598af1c82c550d40310c"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1615,
+      "sha256": "034f69fc8c729fe6f1696c5dddc9c90dfb91231ed74e063e10b66b3baa825fcd"
+    },
+    "src/DartField.h": {
+      "bytes": 1148,
+      "sha256": "3ad0b38c8e78a6aa66eb913cd67754f1bf135bdb308e714f0ae45f236e6f71db"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1622,
+      "sha256": "868c4babb1f53885a1adf0662df05e7b1d2db72a7ed3f565fe9ce6ca15dbfd0b"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 8159,
+      "sha256": "d3365d0eb1f830f2db050e70d838b62fb57a9786e833c24ea2821299e99d54d2"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 3056,
+      "sha256": "837f693365bf14fe1477858f6ef48c496c4299ce8fbba6a87a9738325dcb0e4d"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 1113,
+      "sha256": "9522ace9f20adfc28ac5c005e249b2a3d0c928e1dc45efb583ec4e66e5dc231f"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2694,
+      "sha256": "d2841a93cffa33c9b43dd9d2f7db58bc5c17acda5a90609389a59adfc83f2900"
+    },
+    "src/DartLoader.h": {
+      "bytes": 501,
+      "sha256": "19c9fc1142b46d9d4192b896b7969ec9b104e26eed9b59890607ce2ac342a1a9"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 3256,
+      "sha256": "103eafa8aab88155112109c80bf5d1c8e0bb439872fdce9fa3f0fb7b9761367f"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 5284,
+      "sha256": "2dfbdff6421fa083f8279c2baa3c575d11b6e59d63882d97d3cc11e1546716c2"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 353,
+      "sha256": "010ac46ea170165c4c323b1dc2ec86357a8b6c30cfd40977d458ecbdffc760ad"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7228,
+      "sha256": "75753204de10b5002a008c96a1be50defc58036f4b64f12a313a1a21f252877e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 327,
+      "sha256": "526654c1fac48be60de0e685be43c4de46223a70764c3789751b90f4c5e549aa"
+    },
+    "src/Disassembler.h": {
+      "bytes": 3349,
+      "sha256": "4e59c52cba330ad5af67a9f941d65893876e5c22fda99cec69ceba5f75dc9609"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 6437,
+      "sha256": "7fc789317e458fef4bf1ca0f460d283d33d4b5331e8d270edbc6945335692737"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 410,
+      "sha256": "dda625291eb7c13111d48756667f5193424cbbddeed7437dbf8fe7ed666be367"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6743,
+      "sha256": "99062a11297feeddfaf1aa85fb5dfa951a5449cc15b112221105ed30e888ad7b"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 727,
+      "sha256": "e02e347cd5f226336a74a8dab894ad6fad4567cce10d10a67160526a5d1d2b88"
+    },
+    "src/Util.cpp": {
+      "bytes": 1425,
+      "sha256": "639b40f890096c505e59ffb0f83270f35af9b3fce5c8f3595467a8c17d810aec"
+    },
+    "src/Util.h": {
+      "bytes": 289,
+      "sha256": "d4b47a3055438a07fa0bf56226fc6dc17bce0590072e487494ad3a7a07de9eda"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "eed092b4dc8a19b6b070a216b01304f0beded76d3e6b925ee7c7c9d7a235fc37"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "53d5e08e87b44a3afb256efa3b82e96f80b58cedb3287d2a3161bd72d6af4ccc"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "68400aa48bf5949fb25b9c48abeb1c817f4584fd18ab99d9eaca4ffe6471f558"
+    },
+    "src/il.h": {
+      "bytes": 19740,
+      "sha256": "d061b9997e6e7de28520980944b46152eb992bf6ea05bf92f6b0c6d67569f5ac"
+    },
+    "src/main.cpp": {
+      "bytes": 2297,
+      "sha256": "d0a28a5e35e9cc0c21c95988a6f664e1386440952f5a141188dc5e0cc10aa6e8"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "v1": {
+    ".gitignore": {
+      "bytes": 48,
+      "sha256": "cc137df30ed25753f70295b286654c81511b780a19058cf945118b5a9e9acc60"
+    },
+    "CMakeLists.txt": {
+      "bytes": 3382,
+      "sha256": "0e30765d25cdb6ceb243a668384017a300a7d0fed27c62c042bf352a4ba229d5"
+    },
+    "build_termux.sh": {
+      "bytes": 881,
+      "sha256": "28b1b9f95185681b4b0d212d16826481d0fff50ea1ac38baf58328de9ad4547c"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 5972,
+      "sha256": "6600c7e257f29b674e78a00fe9159eb31cd9ed1758a83344a3f44ed0a7faab02"
+    },
+    "elitf.py": {
+      "bytes": 10105,
+      "sha256": "c5ae789fc8b76a008236cfac225c31f404387b2d75fe90ecd0e5096247ebf668"
+    },
+    "extract_dart_info.py": {
+      "bytes": 5325,
+      "sha256": "664ae1d3bc83a5bbd94a4e513927d1778c63c27d550431cd6fd938a391a11881"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 5047,
+      "sha256": "9fca345f95281a89bead1baf74f92a70e84b1332941cb4b3780b64a020e30243"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 3283,
+      "sha256": "106b35f1c5d4f378eda02794c38cb4a73fa45c8865786ae1482d0942bea0ee8f"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 1837,
+      "sha256": "1704401353710b574ea8d5ba3b350278928ed6c8ac65bb0df85739ac1e6eee79"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 11557,
+      "sha256": "e135976c82c95233ce279ec2d0340aa15b6fb8f3220283e64360ed43ab5a600e"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 2130,
+      "sha256": "363807ec9f10415fce9bea4f854f956098f6cdba8ae291e687921c769cee714d"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 7353,
+      "sha256": "713b29dbcc42a9448914306e218cb0dc31dba6c1f41611b6a649c429547e0d6f"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 139775,
+      "sha256": "88f99a82bd5ca05f9355b81bc00cdc2cabbe548feba03fac5fba6c530e8cd0eb"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 36734,
+      "sha256": "989948b60ff8d68dd8815520e604597ea16d4eab2ffe6c2f7d2a4f5a4979ff1b"
+    },
+    "src/DartApp.h": {
+      "bytes": 2580,
+      "sha256": "eefe9c28558a5a2d2664df749516fc823b276ca2c10e22beb7de3f0e119f81ca"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 4980,
+      "sha256": "1189f49eb2f381dcac5a7c94a5d930c21df788c0c6a6b6a58a80d37f90359f3d"
+    },
+    "src/DartClass.h": {
+      "bytes": 2569,
+      "sha256": "617d0280813d37f46d182253fb88d7b68e6b5c7357003db27cbe18c096c0c963"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 51492,
+      "sha256": "ad9e6b24db273172a6715c447e114cc01fc3b263729546993328e2f9a4bc9066"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1149,
+      "sha256": "3137e7bb41d64c6ec18947d5e8e2cda1db380838c3513a06b0831e0b0367806f"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1497,
+      "sha256": "5bae8fb1a24d0f50e79ff91194f42193fedf70975e89499869b258290facb4f9"
+    },
+    "src/DartField.h": {
+      "bytes": 1125,
+      "sha256": "b4bb896b7f1d8e24e1535a223a1f15ee24667a08fb8a48c71f7a4b93cb0ac7dd"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1294,
+      "sha256": "731d9bbd610b5d31b4688b795c1a9d2dbcc09d526b711a0998146090a2db71c7"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 9916,
+      "sha256": "06600499a05064e9f9cd56bbd022b5b4fc5d6e8be7c62441615576350bfdcced"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3749,
+      "sha256": "718fd71f1982575d563414f58f4233728d925fb8800057a4a6e7db5ded860652"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 2438,
+      "sha256": "d10e60b93656aee00ab98375d96515a7b52432420bfe41c6b39bd2fbb2b3bbcd"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 852,
+      "sha256": "74f6da7033522911eb8310db1b77ebaf671a3dbc8a577aa048fb3c36e453fee5"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2507,
+      "sha256": "689d1de987800b9bb947db4f4cd89947fedfb668e6adde593089bb55b5b67bf6"
+    },
+    "src/DartLoader.h": {
+      "bytes": 178,
+      "sha256": "0b159f93da126af676c9f25ff53fc2af93a5120a73d253f07b8a8d29f6d727e6"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 39,
+      "sha256": "c09c6e624d4fa5063658faebbe38ff65115c7d678a53a54f3b9af81d4af10483"
+    },
+    "src/DartStub.h": {
+      "bytes": 2759,
+      "sha256": "52dcd663c2407ea09c397d7eeb0b360a3400b7a4b88512654a0af2f9a7009ea3"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 4504,
+      "sha256": "5838eb7035796d0d03c4e48146c0b5a5f67082f3bc60e293342273d24ab8b444"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 314,
+      "sha256": "d3c66e3bca04b27331d810cbf6bc3d89f367612d7eb1e3aad531873944206b38"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 11629,
+      "sha256": "fd547799a3534e88bdc24326a5fa2f42f8347fc9cfa55e51136f76441d353ab0"
+    },
+    "src/DartTypes.h": {
+      "bytes": 7245,
+      "sha256": "545d539de9e9f1a9117f0363267e0cb8d863fd4705737adbf88b1108775ec66e"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 326,
+      "sha256": "5e6e2a3dbe7c8af82e299dd4f2c52b95804ff6541e15c40cead08a4631ae4219"
+    },
+    "src/Disassembler.h": {
+      "bytes": 2958,
+      "sha256": "6698e3d0216692f5ae620e567ac97925b601a3ee835a0fe6e5fbbd791f2e627e"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1097,
+      "sha256": "6b25b9a0661ff75f334f38b934a74f90b5ec17416b8615006f572394ba9e3dfc"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 15934,
+      "sha256": "211ad358f874c7f0a703f2c647ea9179d2572f78f376b21520add0d88434fab8"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 7443,
+      "sha256": "defdca3b7519203ecbedea05daeb00d224efbb5acdd9f308b26b0f53deb92a58"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 482,
+      "sha256": "82792f73d8baa0d3061e531e47bb2b4ff7133b0fc4af9cf8db63a9646aa04397"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6785,
+      "sha256": "a5ab048083cd3eb5586f156c5857186e523f2a816a8b1bc4c56d6f5d042dabcd"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 744,
+      "sha256": "e26193a446678fbaae2ac6b6f219c2243602892840273778c9bc8c77bd006e13"
+    },
+    "src/Util.cpp": {
+      "bytes": 1471,
+      "sha256": "f45f09287d7773b326e1c9eed19e0de791846edbca472cf8a1e49d3c53dd2d9b"
+    },
+    "src/Util.h": {
+      "bytes": 288,
+      "sha256": "bbc96bec1162166a29e54f3cdbbd9be9cac42245a75f8b8662fff677276e48ad"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2901,
+      "sha256": "7ff81d352bff21c698550707299fad751fa18a03b7a1bdf53682395a1e3016b1"
+    },
+    "src/VarValue.h": {
+      "bytes": 12258,
+      "sha256": "c85e0396db974393331d9db33015cf49b45b3261fd5f4ada2f0bce762c15c1c5"
+    },
+    "src/args.hxx": {
+      "bytes": 153159,
+      "sha256": "c23c54ad2420512ae363a7f770e0eb510f83b8e3c40ab2b96dc8d9e6991a4874"
+    },
+    "src/il.cpp": {
+      "bytes": 433,
+      "sha256": "d59391f649b23d3222fd630dd3cdfe9a7b99a75e0988e320b6aeaa96bc6a1320"
+    },
+    "src/il.h": {
+      "bytes": 19741,
+      "sha256": "004166ba0cdb0d3b25215a46d9679cfcedb2267c7d06d800e96063fe970ff3ec"
+    },
+    "src/main.cpp": {
+      "bytes": 3165,
+      "sha256": "6a41b241257b1181207a225dd15a051ba057f126f2361f72fe4f3166fa3129c2"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 2251,
+      "sha256": "b4ba63c3a79db8afa1ac62259bae3d17aa3a2b0084db62ea68a4a1b65f69054b"
+    }
+  },
+  "Elit-f-main (1)": {
+    ".dockerignore": {
+      "bytes": 107,
+      "sha256": "dd8fe608deaebb2ced84f50c1b025ceb3b695902344769e107d0e0397754db1a"
+    },
+    ".gitignore": {
+      "bytes": 143,
+      "sha256": "c007c6ae4ef3773ab0f5d457f0aed5315b074b16a1475c0f28e7d4a2804049f7"
+    },
+    "CMakeLists.txt": {
+      "bytes": 4511,
+      "sha256": "8125bcb205e22868a8efc53116b665129e5e9661403f8ee2c04ad96be44d9802"
+    },
+    "Dockerfile": {
+      "bytes": 559,
+      "sha256": "dc97539af84e2e5c5e2263847848ff6b982051b8702fb0791bc27a76b6492912"
+    },
+    "LICENSE": {
+      "bytes": 1077,
+      "sha256": "32a34d62b373630361bfaef9aa4ea25d47677f5eac2e32c735a56f39f422cfae"
+    },
+    "README.md": {
+      "bytes": 5053,
+      "sha256": "371d7dba3b0705995616cf4c177ab0231c95fe44f1fd5ac2d916dc344ccdd317"
+    },
+    "build_termux.sh": {
+      "bytes": 3700,
+      "sha256": "dfa5735ee7885de077bb57441242c2b99013ad41cd1e17ecfd85040514d87bb2"
+    },
+    "dartvm_fetch_build.py": {
+      "bytes": 8935,
+      "sha256": "cf301cef76715a9e8f0e4ac70ea6110226ab62c52e2b0a79e5c66d0bcd125b80"
+    },
+    "docker/run.sh": {
+      "bytes": 986,
+      "sha256": "5bc5ddf1132b76ade39ef1552339e8f49ac3d2fb8e6e79da7ef5cfcabeb55ffa"
+    },
+    "elitf.py": {
+      "bytes": 34283,
+      "sha256": "aee0e0f9a8ea8080b96ac20071ef650a9804ff3f118128cb8df90a692d35705a"
+    },
+    "elitf_r2.py": {
+      "bytes": 32042,
+      "sha256": "26d5e40ee203a4e92ea12e6a0827c4b89efaba83a9ed3f79df52d77b098ebf88"
+    },
+    "elitf_ui.py": {
+      "bytes": 38125,
+      "sha256": "645af2a613585f4a535eaaacbff9e12d7b59c4c450fef7694dcd7b927e545430"
+    },
+    "extract_dart_info.py": {
+      "bytes": 6357,
+      "sha256": "d49b1a7523e26a170874fa7884923e334d67e7fef3e64312ad5911a5ce0a76a6"
+    },
+    "scripts/CMakeLists.txt.dartvm": {
+      "bytes": 4701,
+      "sha256": "f91dfcaa24178faf60da82c9bdc87b5d3c94e51cafb78fa6f8235af62ebe7305"
+    },
+    "scripts/dartvm_create_srclist.py": {
+      "bytes": 2737,
+      "sha256": "c8d964b347ce9d677c10c8c56aab4862bdb1bb84bec8cb00668f6cf255e0ea1a"
+    },
+    "scripts/dartvm_make_version.py": {
+      "bytes": 1915,
+      "sha256": "efbaaeabcf99bc85a24579a4d5763e86045bc105067301af1fd0673ac8e65df1"
+    },
+    "scripts/extract_libflutter_functions.py": {
+      "bytes": 4102,
+      "sha256": "d3b94af2f06256dba68a646f08c564ec24f60d23f937b37d42f2f9811bb65567"
+    },
+    "scripts/frida.template.js": {
+      "bytes": 10275,
+      "sha256": "f9bd1da5e08a7804f399614beeb18b2916f614b9d344f917d803643eefec50ad"
+    },
+    "scripts/generate_thread_offsets_cpp.py": {
+      "bytes": 458,
+      "sha256": "7acac01642cd1788c1227dd61ff01ac1d0fc020b6c2ab66c689b3841e16b996d"
+    },
+    "scripts/icu_compat.h": {
+      "bytes": 225,
+      "sha256": "2569b043e9d9abc88ec6ca7f8574e01d25bd990bb7bdac78c91569be98ad67e0"
+    },
+    "scripts/init_env_win.py": {
+      "bytes": 1846,
+      "sha256": "e61c342a9cbfc2c9fd0486896eb60a21f4db42f2b8e85a9e303d8dc860112572"
+    },
+    "shell.nix": {
+      "bytes": 400,
+      "sha256": "18f7fddfb8591ffaa608f141f74fa806019717abe9e12f7bed1654aae00efe85"
+    },
+    "sourcelist.cmake": {
+      "bytes": 756,
+      "sha256": "d05ee89a7f3805d37e35cb1fc948c6f429e3bb15e03bdcfa76c32d2271c02952"
+    },
+    "src/CodeAnalyzer.cpp": {
+      "bytes": 1956,
+      "sha256": "8f85df06dad0098a7ad0470e0e1d4244cd5326498f370c00dc0e810105ec935b"
+    },
+    "src/CodeAnalyzer.h": {
+      "bytes": 6393,
+      "sha256": "aa3f1e57aae92d0120bc8ec7521580b30b3d65d781a53d0e10b49ba59356c9ba"
+    },
+    "src/CodeAnalyzer_arm64.cpp": {
+      "bytes": 158570,
+      "sha256": "09c45ee7b4a2e4207072c2c4809031aef32564e557fed5e48a24a01392582d3d"
+    },
+    "src/DartApp.cpp": {
+      "bytes": 21006,
+      "sha256": "86fa8a0a9df35d94fb30a7452a817ca59939090c0c3c0207996acfc3c7a449fd"
+    },
+    "src/DartApp.h": {
+      "bytes": 2319,
+      "sha256": "6a3284d2fb96f17433106b0603ac374dfdb622e3cf49c57a0b7e59c9c0b72d4f"
+    },
+    "src/DartClass.cpp": {
+      "bytes": 5048,
+      "sha256": "2ae6d124e25b4924ac446a351a213764e6ab5ca0e43af13818f971432e1099d8"
+    },
+    "src/DartClass.h": {
+      "bytes": 2567,
+      "sha256": "77bafee11b48e5cde30099b9270701636d87ef6797c246140ddfcdf77e6d2a31"
+    },
+    "src/DartDumper.cpp": {
+      "bytes": 27867,
+      "sha256": "06bfafa318f60bde3740aad600a633bd3663e69dbf344604c9271e4ffb45511f"
+    },
+    "src/DartDumper.h": {
+      "bytes": 1046,
+      "sha256": "2eea1113507d85201e4cf9f78df53104cdd535f5dbc699fd11bfeb088b5ae814"
+    },
+    "src/DartField.cpp": {
+      "bytes": 1502,
+      "sha256": "59dfcb9758eefe504a62a8dd5831c189e8bca825da5fdd5ef27c5338f74b781b"
+    },
+    "src/DartField.h": {
+      "bytes": 1126,
+      "sha256": "d2bdd87b5e8f5f84b58fbd7a037f143bbe14d6d4e730bfe11444e8a3a98603bf"
+    },
+    "src/DartFnBase.h": {
+      "bytes": 1295,
+      "sha256": "ab7ad3a74e4f8806df0956e6576875f17c410ec47d833ccc28dca673acd5ba85"
+    },
+    "src/DartFunction.cpp": {
+      "bytes": 9296,
+      "sha256": "210cbb8fbe279c0c17250a57c5cc687f51657651506692bd67dc47337a916d3c"
+    },
+    "src/DartFunction.h": {
+      "bytes": 3257,
+      "sha256": "2cd4088f94fb566c68664d4248935523fc8bb44efb80b7cab307f4c3578d313e"
+    },
+    "src/DartLibrary.cpp": {
+      "bytes": 2443,
+      "sha256": "a68e35dee4a3a79352d9c3716a2876f85c6329847c4f33cd9fb235f070bfcd5b"
+    },
+    "src/DartLibrary.h": {
+      "bytes": 853,
+      "sha256": "423bec30d979b32a7e84eccc5a7fbe55429fd7a3681ba330610d82f3a73fe219"
+    },
+    "src/DartLoader.cpp": {
+      "bytes": 2449,
+      "sha256": "883528a8ec38173f2f42f966897afeef55b3877f5169d71bbbdee2e3598f3800"
+    },
+    "src/DartLoader.h": {
+      "bytes": 180,
+      "sha256": "9297c20141d5f6fd420291dbdaa4401d63711a867b8fa1648b447ddb2b1cc68b"
+    },
+    "src/DartSdk.h": {
+      "bytes": 2087,
+      "sha256": "32a1f664a0df2c91465d2847691c5b4a15abcc0d398564be08a79b1123111210"
+    },
+    "src/DartStub.cpp": {
+      "bytes": 44,
+      "sha256": "0545503e4069ffd6f3064315c24ab01ccaecbf7c15928a43534516641c8fcbff"
+    },
+    "src/DartStub.h": {
+      "bytes": 2767,
+      "sha256": "8a5612c6775f9b9e917e9da1ada15db993e5d82397202e17d5f8a93ea801680d"
+    },
+    "src/DartThreadInfo.cpp": {
+      "bytes": 4802,
+      "sha256": "dad254a1088e65b06ada3b1aa302ae42e720301f286da471fe4c9c0cc8c26837"
+    },
+    "src/DartThreadInfo.h": {
+      "bytes": 256,
+      "sha256": "50fb93e0b7ee115960b026f107d218b74b0870c1e6c733529726c05326327def"
+    },
+    "src/DartTypes.cpp": {
+      "bytes": 10747,
+      "sha256": "96fa435b5d8a57abd36631faebb20130465a9246bf6e8c4a2f31e304da17baf2"
+    },
+    "src/DartTypes.h": {
+      "bytes": 5760,
+      "sha256": "0c83829b908bc25aa76852653264fd12deb8c3642f473ada8ada01674e3ee47a"
+    },
+    "src/Disassembler.cpp": {
+      "bytes": 333,
+      "sha256": "90d9bce89882483439d362d75259c5c162a3160da283d533461d288b22cd3fb9"
+    },
+    "src/Disassembler.h": {
+      "bytes": 3423,
+      "sha256": "e73a40df58b44f17234bf0535dcc4b7ae94c145acc35e933293e30e865056f42"
+    },
+    "src/Disassembler_arm64.cpp": {
+      "bytes": 1020,
+      "sha256": "af2e9f208186e21152bc171becef6be09a89db3260fa1a4b3a87ccef181d55c7"
+    },
+    "src/Disassembler_arm64.h": {
+      "bytes": 13961,
+      "sha256": "d54523edfe828d84919ee3d19f79679a6521349eefa786941735d64d5d6c24a3"
+    },
+    "src/ElfHelper.cpp": {
+      "bytes": 7600,
+      "sha256": "06e5a3a3d367a2908de68e633c8703dd06162762d9c5afe14607185fc88e6c6d"
+    },
+    "src/ElfHelper.h": {
+      "bytes": 410,
+      "sha256": "dda625291eb7c13111d48756667f5193424cbbddeed7437dbf8fe7ed666be367"
+    },
+    "src/FridaWriter.cpp": {
+      "bytes": 6249,
+      "sha256": "b978b25db71dc393b8360e47c1dad00b8164d8695d139320f34611cfdfbd3162"
+    },
+    "src/FridaWriter.h": {
+      "bytes": 171,
+      "sha256": "faace171688535d4bbca491e5a14e317fae3ce54102a8c5bd72df2fcd63aab9a"
+    },
+    "src/HtArrayIterator.h": {
+      "bytes": 727,
+      "sha256": "e02e347cd5f226336a74a8dab894ad6fad4567cce10d10a67160526a5d1d2b88"
+    },
+    "src/Util.cpp": {
+      "bytes": 1304,
+      "sha256": "6de9e6cc4e3e14e19761f3011f64f75b9eff4675618f71849379147235718e45"
+    },
+    "src/Util.h": {
+      "bytes": 266,
+      "sha256": "354432f47c52a04b80a7dc6377095c08f96c9f96622d2a05a6f2523ff77d8054"
+    },
+    "src/VarValue.cpp": {
+      "bytes": 2505,
+      "sha256": "592b1de5b4d4aef304006f21bb3d2de968d3c2a380ddc00b6ea300261ea4ac68"
+    },
+    "src/VarValue.h": {
+      "bytes": 10712,
+      "sha256": "40120fca58e99c0b6ccc721d6b9153402b64be6d2e39853a48e80ad67e170a00"
+    },
+    "src/args.hxx": {
+      "bytes": 128338,
+      "sha256": "c91b9f4415580481c61d1b026af9f51a0489d29bb9b1fc6a522cefcf5b3457c5"
+    },
+    "src/il.cpp": {
+      "bytes": 439,
+      "sha256": "b7c5580dbf1a936a34a6100e6d6f595865d849c812510161940345dda663a3c1"
+    },
+    "src/il.h": {
+      "bytes": 22734,
+      "sha256": "357e7903e5ce9bdfde84a42a74f4b24fd011082ca22890c9689625075ba3e9bc"
+    },
+    "src/main.cpp": {
+      "bytes": 2974,
+      "sha256": "9c92cb43cbe9b6e7a80fa88870380289fe1cb0dba96f451e1efbb1dc49b64ce7"
+    },
+    "src/pch.cpp": {
+      "bytes": 186,
+      "sha256": "b20ad711fa06e3ef62f8e3c626e13b3bdc69cff08c60c8b358f38b09e16c99ef"
+    },
+    "src/pch.h": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

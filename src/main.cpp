@@ -21,7 +21,7 @@ int main(int argc, char** argv)
 
                 std::filesystem::path outDir{ args::get(outdir) };
                 std::error_code ec;
-                if (!std::filesystem::create_directory(outDir, ec) && ec.value() != 0) {
+                if (!std::filesystem::create_directories(outDir, ec) && ec.value() != 0) {
                         std::cerr << "Failed to create output directory: " << ec.message() << "\n";
                         return 1;
                 }
@@ -75,6 +75,7 @@ int main(int argc, char** argv)
         }
         catch (std::exception& e) {
                 std::cerr << "exception: " << e.what() << "\n";
+                return 1;
         }
 
         return 0;

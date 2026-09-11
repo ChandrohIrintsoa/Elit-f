@@ -36,7 +36,7 @@ if (NOT "${TARGET_ARCH}" MATCHES "^(arm64|x64)$")
 endif()
 
 set(SRCDIR "runtime")
-set(LIBNAME "dartvm${DART_VERSION}_${TARGET_OS}_${TARGET_ARCH}")
+set(LIBNAME "dartvm${DART_VERSION}_${TARGET_OS}_${TARGET_ARCH}${DARTLIB_SUFFIX}")
 
 set(CMAKE_DEBUG_POSTFIX "_d")
 

@@ -7,6 +7,7 @@ PRAGMA_WARNING(push, 0)
 PRAGMA_WARNING(pop)
 #include <algorithm>
 #include <stdexcept>
+#include <filesystem>
 #if defined(_WIN32) || defined(WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -38,8 +39,10 @@ static void* load_map_file(const char* path)
         }
 
         HANDLE hMapFile = CreateFileMapping(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
-        if (hMapFile == INVALID_HANDLE_VALUE)
-                return NULL;
+        if (hMapFile == NULL) {
+                CloseHandle(hFile);
+                throw std::runtime_error("Cannot create file mapping");
+        }
 
         void* mem = MapViewOfFile(hMapFile, FILE_MAP_COPY, 0, 0, 0);
         CloseHandle(hMapFile);
@@ -53,10 +56,17 @@ static void* load_map_file(const char* path)
         int fd = open(path, O_RDONLY);
         struct stat st;
 
-        fstat(fd, &st);
+        if (fd < 0)
+                throw std::runtime_error("Cannot open ELF input");
+        if (fstat(fd, &st) != 0 || st.st_size < 64) {
+                close(fd);
+                throw std::runtime_error("Cannot stat ELF input or truncated header");
+        }
         void* mem = mmap(NULL, st.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 
         close(fd);
+        if (mem == MAP_FAILED)
+                throw std::runtime_error("Cannot map ELF input");
         return mem;
 }
 #endif
@@ -96,6 +106,9 @@ LibAppInfo ElfHelper::findSnapshots(const uint8_t* elf)
                 if (dynsym != nullptr && dynstr != nullptr)
                         break;
         }
+
+        if (dynsym == nullptr || dynstr == nullptr)
+                throw std::invalid_argument("ELF: Missing dynamic symbol or string table");
 
 #ifdef BLUTTER_DART_SINGLE_SNAPSHOT
         const uint8_t* snapshot_data = nullptr;
@@ -161,22 +174,12 @@ LibAppInfo ElfHelper::findSnapshots(const uint8_t* elf)
 
 LibAppInfo ElfHelper::MapLibAppSo(const char* path)
 {
+        if (std::filesystem::file_size(path) < 64)
+                throw std::invalid_argument("ELF: Truncated header");
         void* lib = load_map_file(path);
+        if (lib == nullptr)
+                throw std::runtime_error("Cannot map ELF input");
         uint8_t* elf = (uint8_t*)(lib);
-#if defined(DART_TARGET_OS_MACOS)
-        auto header = (dart::mach_o::mach_header_64*)lib;
-        switch (header->magic) {
-        case dart::mach_o::MH_MAGIC:
-        case dart::mach_o::MH_CIGAM:
-                throw std::invalid_argument("Mach-O: Support only 64 bits");
-        case dart::mach_o::MH_CIGAM_64:
-                throw std::invalid_argument("Mach-O: Expected a host endian header");
-        case dart::mach_o::MH_MAGIC_64:
-                return size >= sizeof(mach_o::mach_header_64);
-        default:
-                throw std::invalid_argument("Mach-O: Invalid magic header");
-        }
-#else
         const auto* hdr = (ElfHeader*)elf;
         const auto* ident = (ElfIdent*)hdr->ident;
         if (memcmp(ident->ei_magic, "\x7f" "ELF", 4) != 0)
@@ -187,7 +190,6 @@ LibAppInfo ElfHelper::MapLibAppSo(const char* path)
         if (ident->ei_class != ELFCLASS64) {
                 throw std::invalid_argument("ELF: Support only 64 bits");
         }
-#endif
 
         return findSnapshots(elf);
 }

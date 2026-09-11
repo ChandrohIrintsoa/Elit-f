@@ -4,6 +4,8 @@ import glob
 import mmap
 import os
 import platform
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -12,7 +14,7 @@ import zipfile
 
 from dartvm_fetch_build import DartLibInfo
 from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH
-from elitf_r2 import display_binary_info, r2_unified_analysis
+from elitf_r2 import display_binary_info, r2_unified_analysis, run_r2_custom, R2_PRESETS
 
 CMAKE_CMD = os.getenv('CMAKE', 'cmake')
 NINJA_CMD = os.getenv('NINJA', 'ninja')
@@ -25,11 +27,11 @@ BUILD_DIR = os.path.join(SCRIPT_DIR, 'build')
 
 EXPECTED_LIBS = ('libapp.so', 'libflutter.so')
 
-ABI_DIRS = ['lib/arm64-v8a/', 'lib/armeabi-v7a/', 'lib/x86_64/', 'lib/x86/']
+ABI_DIRS = ['lib/arm64-v8a/', 'lib/x86_64/']
 
 def _safe_zip_extract(zf: zipfile.ZipFile, member_name: str, out_dir: str) -> str:
-    target_path = os.path.abspath(os.path.join(out_dir, member_name))
-    base_dir = os.path.abspath(out_dir) + os.sep
+    target_path = os.path.realpath(os.path.join(out_dir, member_name))
+    base_dir = os.path.realpath(out_dir) + os.sep
     if not target_path.startswith(base_dir):
         raise ValueError(f"Refusing to extract '{member_name}' outside of '{out_dir}' (path traversal)")
     zf.extract(member_name, out_dir)
@@ -37,6 +39,8 @@ def _safe_zip_extract(zf: zipfile.ZipFile, member_name: str, out_dir: str) -> st
 
 def _search_in_file(path: str, needle: bytes) -> bool:
     with open(path, 'rb') as f:
+        if os.fstat(f.fileno()).st_size == 0:
+            return False
         with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
             return mm.find(needle) != -1
 
@@ -61,43 +65,22 @@ def validate_two_libs(indir: str):
         raise ValueError(
             f"Input is not a directory containing {EXPECTED_LIBS[0]} and {EXPECTED_LIBS[1]}")
 
-    import glob as globmod
-
-    try:
-        so_files = sorted(f for f in os.listdir(indir) if f.endswith('.so'))
-    except OSError as e:
-        raise ValueError(f"Cannot list directory '{indir}': {e}")
-
-    expected = sorted(EXPECTED_LIBS)
-    if all(f in so_files for f in expected):
-        return (os.path.abspath(os.path.join(indir, EXPECTED_LIBS[0])),
-                os.path.abspath(os.path.join(indir, EXPECTED_LIBS[1])))
-
-    try:
-        all_so = globmod.glob(os.path.join(indir, '**', '*.so'), recursive=True)
-    except (PermissionError, OSError):
-        all_so = []
-
-    found = {}
-    for p in all_so:
-        name = os.path.basename(p)
-        if name in EXPECTED_LIBS and name not in found:
-            found[name] = os.path.abspath(p)
-
-    missing = [f for f in EXPECTED_LIBS if f not in found]
-    if missing:
-        alt = {}
-        for std_name, raw_name in (('libapp.so', 'App'), ('libflutter.so', 'Flutter')):
-            raw_path = os.path.join(indir, raw_name)
-            if os.path.isfile(raw_path):
-                alt[std_name] = os.path.abspath(raw_path)
-        if all(s in alt for s in EXPECTED_LIBS):
-            return (alt[EXPECTED_LIBS[0]], alt[EXPECTED_LIBS[1]])
-        raise ValueError(
-            f"Missing libraries: {missing}. The Flutter libs must be exactly two: "
-            f"{EXPECTED_LIBS[0]} and {EXPECTED_LIBS[1]}")
-
-    return (found[EXPECTED_LIBS[0]], found[EXPECTED_LIBS[1]])
+    candidates = []
+    for root, dirs, files in os.walk(indir):
+        dirs.sort()
+        for app, flutter in (EXPECTED_LIBS, ('App', 'Flutter')):
+            if app in files and flutter in files:
+                candidates.append((os.path.abspath(os.path.join(root, app)),
+                                   os.path.abspath(os.path.join(root, flutter))))
+    direct = [pair for pair in candidates if os.path.dirname(pair[0]) == os.path.abspath(indir)]
+    if direct:
+        return direct[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        raise ValueError('Multiple Flutter library pairs found; select an ABI directory: ' +
+                         ', '.join(os.path.dirname(pair[0]) for pair in candidates))
+    raise ValueError('No co-located libapp.so/libflutter.so or App/Flutter pair found')
 
 def extract_libs_from_apk(apk_file: str, out_dir: str):
     try:
@@ -129,7 +112,7 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
 
     required_files = [
         'class_id.h', 'class_table.h', 'stub_code_list.h',
-        'object_store.h', 'object.h',
+        'object_store.h', 'object.h', 'thread.h',
     ]
     for required in required_files:
         if not os.path.isfile(os.path.join(vm_path, required)):
@@ -168,7 +151,7 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
 
 
     major, minor = _parse_major_minor(dart_version)
-    if major > 3 or (major == 3 and minor >= 5):
+    if _search_in_file(os.path.join(vm_path, 'thread.h'), b'old_marking_stack_block'):
         macros.append('-DOLD_MARKING_STACK_BLOCK=1')
 
     if ida_fcn:
@@ -199,6 +182,8 @@ class ElitfInput:
                 else:
                     print(msg)
             no_analysis = True
+        if dart_info.arch != 'arm64' or dart_info.os_name != 'android':
+            raise ValueError('The supplied AOT C++ engine supports Android ARM64 only; use --action r2 for other ELF architectures')
         self.no_analysis = no_analysis
 
         self.name_suffix = ''
@@ -209,7 +194,7 @@ class ElitfInput:
         if ida_fcn:
             self.name_suffix += '_ida-fcn'
         self.bin_name = f'elitf_{dart_info.lib_name}{self.name_suffix}'
-        self.bin_file = os.path.join(BIN_DIR, self.bin_name)
+        self.bin_file = os.path.join(BIN_DIR, self.bin_name + ('.exe' if sys.platform == 'win32' else ''))
 
 def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
     builddir = os.path.join(BUILD_DIR, elitf_input.bin_name)
@@ -376,12 +361,35 @@ def _analyze_libs(libapp_file, libflutter_file, outdir, rebuild, no_analysis, id
                            ida_fcn, log_mgr, create_vs_sln=vs_sln)
     build_and_run(input_obj, log_mgr)
 
+def prepare_so_targets(indir, outdir, ui):
+    if os.path.isfile(indir) and zipfile.is_zipfile(indir):
+        import hashlib
+        hasher = hashlib.sha256()
+        with open(indir, 'rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                hasher.update(chunk)
+        digest = hasher.hexdigest()[:16]
+        target_dir = os.path.abspath(os.path.join(outdir, 'inputs', digest))
+        with zipfile.ZipFile(indir) as archive:
+            for member in archive.namelist():
+                if member.startswith('lib/') and member.endswith('.so'):
+                    _safe_zip_extract(archive, member, target_dir)
+        ui.detect_so_files(target_dir)
+    else:
+        ui.detect_so_files(indir)
+    return ui.detected_so
+
 def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_mgr,
                          vs_sln=False):
-    if indir.endswith(".apk"):
+    if os.path.isfile(indir) and zipfile.is_zipfile(indir):
         if log_mgr:
             log_mgr.add(f"Extracting APK: {indir}", "info")
             log_mgr.step()
+        if vs_sln:
+            tmp_dir = os.path.abspath(os.path.join(outdir, 'inputs'))
+            libapp_file, libflutter_file = extract_libs_from_apk(indir, tmp_dir)
+            return _analyze_libs(libapp_file, libflutter_file, outdir, rebuild,
+                                 no_analysis, ida_fcn, ui, log_mgr, vs_sln)
         with tempfile.TemporaryDirectory() as tmp_dir:
             libapp_file, libflutter_file = extract_libs_from_apk(indir, tmp_dir)
             if log_mgr:
@@ -415,26 +423,21 @@ def critical_dependencies_missing(missing):
     return [m for m in missing if m[0] in ('pyelftools', 'requests')]
 
 def run_command(command):
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               shell=True)
-    output, error = process.communicate()
-    if error:
-        return error.decode('utf-8')
-    return output.decode('utf-8')
+    result = subprocess.run(shlex.split(command) if isinstance(command, str) else command,
+                            cwd=SCRIPT_DIR, capture_output=True, text=True,
+                            timeout=30, check=True, stdin=subprocess.DEVNULL)
+    return result.stdout
 
 def check_for_updates():
     if not os.path.isdir(os.path.join(SCRIPT_DIR, '.git')):
         return
-    run_command('git fetch')
-    behind = run_command('git rev-list --count HEAD..@{u}')
-    if not behind.strip().isdigit() or int(behind) == 0:
+    try:
+        run_command(['git', 'fetch'])
+        behind = run_command(['git', 'rev-list', '--count', 'HEAD..@{u}'])
+        if behind.strip().isdigit() and int(behind):
+            print('Elit-f update available. Run git pull --ff-only, then --rebuild.')
+    except (OSError, subprocess.SubprocessError):
         return
-    dirty = run_command('git status --porcelain')
-    if dirty.strip():
-        print('Elit-f update skipped: local changes present')
-        return
-    run_command('git pull --ff-only')
-    print('Elit-f updated. Run again with --rebuild to rebuild the executable')
 
 def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=False,
              vs_sln=False):
@@ -459,80 +462,11 @@ def main_cli(indir, outdir, rebuild, no_analysis, ida_fcn=False, force_plain=Fal
         print("\nAnalyse impossible: installez les dépendances ci-dessus puis relancez.")
         return 1
 
-    if not HAS_RICH:
-
-        print(f"\n  Auteur : {AUTHOR}")
-        print("  Pour l'interface complète, installez: pip install rich\n")
-        run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, None,
-                             vs_sln)
-        return
-
-    ui.indir = indir
-    ui.outdir = outdir
-    ui.display_logo()
-    is_apk = indir.endswith(".apk")
-    if not is_apk and os.path.isdir(indir):
-        ui.detect_so_files(indir)
-        ui.display_so_table()
-    ui.display_menu()
-    choice = ui.get_choice()
-
-    if choice == 0:
-        return
-    if choice == 1:
-        if critical_dependencies_missing(check_dependencies()):
-            ui._print("[bold red]Analyse impossible: installez pyelftools et requests d'abord.[/]"
-                      if ui.console
-                      else "Analyse impossible: installez pyelftools et requests d'abord.")
-            return 1
-        os.makedirs(outdir, exist_ok=True)
-        ui.log_mgr.clear()
-        def work(lm):
-            run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm,
-                                 vs_sln)
-        try:
-            ui.run_with_live_display("Flutter/Dart AOT Analysis", 20, work)
-        except Exception as e:
-            ui._print_error(e)
-            return 1
-    elif choice == 2:
-        if not ui.detected_so and not is_apk:
-            ui.detect_so_files(indir)
-        if not ui.detected_so:
-            print("No .so files detected")
-            return 1
-        os.makedirs(outdir, exist_ok=True)
-        ui.log_mgr.clear()
-        def work(lm):
-            r2_unified_analysis(ui.detected_so, outdir, lm, ui)
-        try:
-            ui.run_with_live_display("Radare2 - Analyse unifiée",
-                                     len(ui.detected_so) * 5, work)
-        except Exception as e:
-            ui._print_error(e)
-            return 1
-    elif choice == 3:
-        print("Les scripts IDA sont générés automatiquement lors de l'analyse Flutter (option 1).")
-    elif choice == 4:
-        print("Les scripts Frida sont générés automatiquement lors de l'analyse Flutter (option 1).")
-    elif choice == 5:
-        if not ui.detected_so and not is_apk:
-            ui.detect_so_files(indir)
-        if not ui.detected_so:
-            print("No .so files detected")
-            return 1
-        os.makedirs(outdir, exist_ok=True)
-        ui.log_mgr.clear()
-        def work(lm):
-            display_binary_info(ui.detected_so, outdir, lm)
-        try:
-            ui.run_with_live_display("Information binaire",
-                                     len(ui.detected_so) * 2, work)
-        except Exception as e:
-            ui._print_error(e)
-            return 1
-    else:
-        print("Option invalide.")
+    os.makedirs(outdir, exist_ok=True)
+    try:
+        run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, None, vs_sln)
+    except Exception as exc:
+        print(f'ERREUR: {type(exc).__name__}: {exc}', file=sys.stderr)
         return 1
     return 0
 
@@ -579,7 +513,7 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
     ui.indir = indir
     ui.outdir = outdir
 
-    is_apk = indir.endswith(".apk")
+    is_apk = os.path.isfile(indir) and zipfile.is_zipfile(indir)
     if is_apk:
         ui._print("[bright_cyan]Mode APK détecté.[/]" if ui.console else "Mode APK detecte.")
     elif os.path.isdir(indir):
@@ -640,8 +574,8 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
                 ui._print_error(e)
 
         elif choice == 2:
-            if not ui.detected_so and not is_apk:
-                ui.detect_so_files(indir)
+            if not ui.detected_so:
+                prepare_so_targets(indir, outdir, ui)
             if not ui.detected_so:
                 ui._print("[bold yellow]Aucun fichier .so à analyser.[/]" if ui.console
                           else "Aucun fichier .so a analyser.")
@@ -651,8 +585,7 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             def work(lm):
                 r2_unified_analysis(ui.detected_so, outdir, lm, ui)
             try:
-                ui.run_with_live_display("Radare2 - Analyse unifiée",
-                                         len(ui.detected_so) * 5, work)
+                r2_unified_analysis(ui.detected_so, outdir, ui.log_mgr, ui)
                 if ui.console:
                     ui.console.print(_Panel(
                         "[bright_green]Analyse r2 unifiée terminée.[/]",
@@ -671,8 +604,8 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
                       else "Les scripts Frida sont generes automatiquement lors de l'analyse Flutter (option 1).")
 
         elif choice == 5:
-            if not ui.detected_so and not is_apk:
-                ui.detect_so_files(indir)
+            if not ui.detected_so:
+                prepare_so_targets(indir, outdir, ui)
             if not ui.detected_so:
                 ui._print("[bold yellow]Aucun fichier .so détecté.[/]" if ui.console
                           else "Aucun fichier .so detecte.")
@@ -703,12 +636,16 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
 def main_no_flutter(libapp_path: str, dart_version: str, outdir: str,
                     rebuild: bool, no_analysis: bool, ida_fcn: bool = False,
                     vs_sln: bool = False):
-    parts = dart_version.split('_')
+    parts = dart_version.split('_', 2)
     if len(parts) != 3:
         sys.exit(f'Invalid dart-version format: "{dart_version}". '
                  'Expected "<version>_<os>_<arch>" (e.g. "3.4.2_android_arm64")')
     version, os_name, arch = parts
-    dart_info = DartLibInfo(version, os_name, arch)
+    from extract_dart_info import extract_snapshot_hash_flags, extract_elf_arch
+    snapshot_hash, flags = extract_snapshot_hash_flags(libapp_path)
+    if extract_elf_arch(libapp_path) != arch:
+        raise ValueError('Requested architecture does not match libapp')
+    dart_info = DartLibInfo(version, os_name, arch, 'compressed-pointers' in flags, snapshot_hash)
     input_obj = ElitfInput(libapp_path, dart_info, outdir, rebuild, no_analysis, ida_fcn,
                            create_vs_sln=vs_sln)
     build_and_run(input_obj)
@@ -741,18 +678,54 @@ def main():
                              '(run from a Visual Studio Developer console)')
     parser.add_argument('--nu', action='store_false', default=True,
                         help='Do not check for updates')
+    parser.add_argument('--action', choices=('flutter', 'r2', 'info'), default='flutter')
+    parser.add_argument('--r2-preset', choices=tuple(R2_PRESETS), default='full')
+    parser.add_argument('--generate-only', action='store_true')
     args = parser.parse_args()
+
+    if args.cli and not args.indir:
+        parser.error('--cli requires an input path')
+    if args.cli and not args.outdir:
+        args.outdir = './out'
 
     if args.nu:
         check_for_updates()
+
+    if args.action != 'flutter':
+        if not args.indir:
+            parser.error('--action requires an input path')
+        if args.dart_version or args.vs_sln:
+            parser.error('--dart-version and --vs-sln require --action flutter')
+        outdir = args.outdir or './out'
+        ui = ElitfUI(force_plain=True)
+        try:
+            targets = prepare_so_targets(args.indir, outdir, ui)
+            if not targets:
+                raise ValueError('No shared libraries found')
+            if args.action == 'info':
+                display_binary_info(targets, outdir, ui.log_mgr)
+            else:
+                preset = R2_PRESETS[args.r2_preset]
+                run_r2_custom(targets, outdir, preset['analysis_key'],
+                              preset['extraction_keys'], ui.log_mgr,
+                              execute=not args.generate_only)
+            print(ui.log_mgr.get_plain_text())
+            return 0
+        except Exception as exc:
+            print(f'ERREUR: {exc}', file=sys.stderr)
+            return 1
 
     if args.dart_version is not None:
         if not args.indir:
             sys.exit('--dart-version requires indir (libapp.so path)')
         outdir = args.outdir or './out'
-        main_no_flutter(args.indir, args.dart_version, outdir,
-                        args.rebuild, args.no_analysis, args.ida_fcn,
-                        vs_sln=args.vs_sln)
+        try:
+            main_no_flutter(args.indir, args.dart_version, outdir,
+                            args.rebuild, args.no_analysis, args.ida_fcn,
+                            vs_sln=args.vs_sln)
+        except Exception as exc:
+            print(f'ERREUR: {exc}', file=sys.stderr)
+            return 1
         return 0
 
     if args.indir and args.outdir:

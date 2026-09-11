@@ -1,0 +1,13 @@
+Python syntax 3.9: elitf_r2.py
+Python syntax 3.9: extract_dart_info.py
+Python syntax 3.9: elitf.py
+Python syntax 3.9: dartvm_fetch_build.py
+Python syntax 3.9: elitf_ui.py
+Python syntax 3.9: scripts/generate_thread_offsets_cpp.py
+Python syntax 3.9: scripts/extract_libflutter_functions.py
+Python syntax 3.9: scripts/init_env_win.py
+Python syntax 3.9: scripts/dartvm_create_srclist.py
+Python syntax 3.9: scripts/dartvm_make_version.py
+Python syntax 3.9: tests/test_regressions.py
+Bash syntax: build_termux.sh
+Bash syntax: docker/run.sh

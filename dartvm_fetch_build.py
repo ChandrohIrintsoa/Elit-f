@@ -1,3 +1,4 @@
+import re
 import mmap
 import os
 import shutil
@@ -30,64 +31,26 @@ def load_source(modname, filename):
     return module
 """
 
-dart_versions = {
-    "3.0_aa": ["3.0.0", "3.0.1", "3.0.2"],
-    "3.0_90": ["3.0.3", "3.0.4", "3.0.5", "3.0.6", "3.0.7"],
-    "3.1": ["3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.4", "3.1.5"],
-    "3.2": ["3.2.0", "3.2.1", "3.2.2", "3.2.3", "3.2.4", "3.2.5", "3.2.6"],
-    "3.3": ["3.3.0", "3.3.1", "3.3.2", "3.3.3", "3.3.4"],
-    "3.4": ["3.4.0", "3.4.1", "3.4.2", "3.4.3", "3.4.4"],
-    "3.5": ["3.5.0", "3.5.1", "3.5.2", "3.5.3", "3.5.4", "3.5.5", "3.5.6"],
-    "3.6": ["3.6.0", "3.6.1", "3.6.2", "3.6.3", "3.6.4"],
-    "3.7": ["3.7.0", "3.7.1", "3.7.2"],
-    "3.8": ["3.8.0", "3.8.1", "3.8.2", "3.8.3", "3.8.4", "3.8.5"],
-    "3.9": ["3.9.0", "3.9.1", "3.9.2", "3.9.3", "3.9.4", "3.9.5"],
-    "3.10": ["3.10.0", "3.10.1", "3.10.2", "3.10.3", "3.10.4", "3.10.5", "3.10.6", "3.10.7", "3.10.8", "3.10.9"],
-    "3.11": ["3.11.0", "3.11.1", "3.11.2", "3.11.3", "3.11.4", "3.11.5", "3.11.6"],
-    "3.12": ["3.12.0", "3.12.1", "3.12.2", "3.12.3", "3.12.4", "3.12.5", "3.12.6", "3.12.7", "3.12.8"],
-    "3.13": ["3.13.0", "3.13.1", "3.13.2", "3.13.3", "3.13.4", "3.13.5"],
-    "3.14": ["3.14.0", "3.14.1", "3.14.2"],
-    "3.15": ["3.15.0", "3.15.1"],
-    "3.16": ["3.16.0"],
-    "3.17": ["3.17.0"],
-    "3.18": ["3.18.0"],
-}
-
 class DartLibInfo:
     def __init__(self, version: str, os_name: str, arch: str, has_compressed_ptrs=None, snapshot_hash=None):
+        if not isinstance(version, str) or not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', version):
+            raise ValueError(f'Invalid or undetected Dart version: {version!r}')
+        if os_name not in ('android', 'ios') or arch not in ('arm64', 'x64'):
+            raise ValueError(f'Unsupported Dart target: {os_name}/{arch}')
+        if snapshot_hash is not None and not re.fullmatch(r'[0-9a-f]{32}', snapshot_hash):
+            raise ValueError('Invalid snapshot hash')
+        self.version = version
         self.os_name = os_name
         self.arch = arch
         self.snapshot_hash = snapshot_hash
-        if has_compressed_ptrs is None:
-            self.has_compressed_ptrs = os_name != 'ios'
-        else:
-            self.has_compressed_ptrs = has_compressed_ptrs
-
-        bin_dir = os.path.join(SCRIPT_DIR, 'bin')
-        if os.path.exists(bin_dir):
-            file_name_version = []
-            suffixes = [
-                '', '_no-analysis', '_ida-fcn', '_no-analysis_ida-fcn',
-                '_no-compressed-ptrs', '_no-compressed-ptrs_no-analysis',
-                '_no-compressed-ptrs_no-analysis_ida-fcn', '_no-compressed-ptrs_ida-fcn',
-            ]
-            for file in os.listdir(bin_dir):
-                for suffix in suffixes:
-                    if file.startswith('elitf_dartvm') and file.endswith(f'{os_name}_{arch}{suffix}'):
-                        file_name_version.append(file.split('_')[1].replace('dartvm', ''))
-
-            for _key, versions in dart_versions.items():
-                if version in versions and any(v in versions for v in file_name_version):
-                    matched_version = next(v for v in file_name_version if v in versions)
-                    self.lib_name = f'dartvm{matched_version}_{os_name}_{arch}'
-                    self.version = matched_version
-                    return
-
-        self.version = version
-        self.lib_name = f'dartvm{version}_{os_name}_{arch}'
+        self.has_compressed_ptrs = os_name != 'ios' if has_compressed_ptrs is None else bool(has_compressed_ptrs)
+        self.variant_suffix = '' if self.has_compressed_ptrs else '_uncompressed'
+        if snapshot_hash:
+            self.variant_suffix += '_' + snapshot_hash
+        self.lib_name = f'dartvm{version}_{os_name}_{arch}{self.variant_suffix}'
 
 def checkout_dart(info: DartLibInfo):
-    clonedir = os.path.join(SDK_DIR, 'v' + info.version)
+    clonedir = os.path.join(SDK_DIR, 'v' + info.version + info.variant_suffix)
 
     version_file = os.path.join(clonedir, 'runtime', 'vm', 'version.cc')
     if os.path.exists(clonedir) and not os.path.exists(version_file):
@@ -129,7 +92,7 @@ def checkout_dart(info: DartLibInfo):
 
     if sys.platform == 'win32':
         vers = info.version.split('.', 2)
-        if int(vers[0]) >= 3 and int(vers[1]) >= 8:
+        if (int(vers[0]), int(vers[1])) >= (3, 8):
             with open(os.path.join(clonedir, 'runtime', 'platform', 'unwinding_records.h'), 'r+b') as f:
                 mm = mmap.mmap(f.fileno(), 0)
                 pos = mm.find(b'\n#if !defined(DART_HOST_OS_WINDOWS) || !defined(HOST_ARCH_ARM64)')
@@ -172,6 +135,7 @@ def cmake_dart(info: DartLibInfo, target_dir: str):
     builddir = os.path.join(BUILD_DIR, info.lib_name)
     subprocess.run([CMAKE_CMD, '-GNinja', '-B', builddir,
                     f'-DTARGET_OS={info.os_name}', f'-DTARGET_ARCH={info.arch}',
+                    f'-DDARTLIB_SUFFIX={info.variant_suffix}',
                     f'-DCOMPRESSED_PTRS={1 if info.has_compressed_ptrs else 0}',
                     '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE'],
                    cwd=target_dir, check=True)

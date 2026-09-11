@@ -65,20 +65,19 @@ fi
 echo "[*] dartvm library: ${LIBFILE}"
 
 echo "[*] Computing compat macros for Dart ${DART_VERSION}"
-MACROS=$(python3 -c "
+MACROS=$(python3 - "$DART_VERSION" <<'PYCODE'
 import sys
-sys.path.insert(0, r'''${SCRIPT_DIR}''')
 import elitf
-macros = elitf.find_compat_macro('${DART_VERSION}', False)
-print(' '.join(macros))
-")
+print(' '.join(elitf.find_compat_macro(sys.argv[1], False)))
+PYCODE
+)
 echo "    Macros: ${MACROS}"
 
 CMAKE_BIN="${CMAKE:-cmake}"
 NINJA_BIN="${NINJA:-ninja}"
 BUILDDIR="build/elitf_${DARTLIB}"
 
-"${CMAKE_BIN}" -GNinja -B "$BUILDDIR" -DDARTLIB=$DARTLIB -DCMAKE_BUILD_TYPE=Release ${MACROS}
+"${CMAKE_BIN}" -GNinja -B "$BUILDDIR" -DDARTLIB="$DARTLIB" -DCMAKE_BUILD_TYPE=Release ${MACROS}
 
 "${NINJA_BIN}" -C "$BUILDDIR" -j$(nproc)
 

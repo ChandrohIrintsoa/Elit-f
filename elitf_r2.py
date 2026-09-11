@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import concurrent.futures
 import os
+import re
+import shlex
+import hashlib
 import shutil
 import subprocess
 
@@ -63,7 +66,7 @@ aflq > __OUTDIR__/__NAME__func_list.txt
 aflq~? > __OUTDIR__/__NAME__func_count.txt
 afl~sym\. > __OUTDIR__/__NAME__sym_functions.txt
 afl~sub\. > __OUTDIR__/__NAME__sub_functions.txt
-afl* > __OUTDIR__/__NAME__functions_json.txt
+aflj > __OUTDIR__/__NAME__functions_json.txt
 afij > __OUTDIR__/__NAME__functions_info.json
 e log.dest=stderr
 """,
@@ -126,7 +129,7 @@ e log.dest=stderr
         "commands": """e log.dest=FILE
 ic > __OUTDIR__/__NAME__classes.txt
 icq > __OUTDIR__/__NAME__classes_raw.txt
-ic* > __OUTDIR__/__NAME__classes_json.txt
+icj > __OUTDIR__/__NAME__classes_json.txt
 e log.dest=stderr
 """,
     },
@@ -158,8 +161,8 @@ e log.dest=stderr
         "label": "Réseau (URLs, endpoints, auth)",
         "desc": "HTTP(S), WebSocket, Firebase, APIs, cookies, bearer, JWT, autorisations",
         "commands": """e log.dest=FILE
-/w \x00http > __OUTDIR__/__NAME__urls.txt
-/w \x00file:// > __OUTDIR__/__NAME__file_urls.txt
+/w http > __OUTDIR__/__NAME__urls.txt
+/w file:// > __OUTDIR__/__NAME__file_urls.txt
 /w https:// > __OUTDIR__/__NAME__https_urls.txt
 /w http:// > __OUTDIR__/__NAME__http_urls.txt
 /w ws:// > __OUTDIR__/__NAME__ws_urls.txt
@@ -189,7 +192,7 @@ e log.dest=stderr
 /w lib/ > __OUTDIR__/__NAME__lib_paths.txt
 /w dex > __OUTDIR__/__NAME__dex_refs.txt
 /w classes.dex > __OUTDIR__/__NAME__dex_files.txt
-/w \x00/content/ > __OUTDIR__/__NAME__content_uris.txt
+/w /content/ > __OUTDIR__/__NAME__content_uris.txt
 /w SharedPreferences > __OUTDIR__/__NAME__shared_prefs.txt
 e log.dest=stderr
 """,
@@ -332,14 +335,14 @@ axt sym.imp.* > __OUTDIR__/__NAME__xrefs_to_imports.txt
 axt * > __OUTDIR__/__NAME__xrefs_all.txt
 axf * > __OUTDIR__/__NAME__xrefs_from.txt
 axt *~? > __OUTDIR__/__NAME__xrefs_count.txt
-afl* > __OUTDIR__/__NAME__functions_json.txt
+aflj > __OUTDIR__/__NAME__functions_json.txt
 afij > __OUTDIR__/__NAME__functions_info.json
 icq > __OUTDIR__/__NAME__classes_raw.txt
-ic* > __OUTDIR__/__NAME__classes_json.txt
+icj > __OUTDIR__/__NAME__classes_json.txt
 
-/w \x00http > __OUTDIR__/__NAME__urls.txt
-/w \x00file:// > __OUTDIR__/__NAME__file_urls.txt
-/w \x00/content/ > __OUTDIR__/__NAME__content_uris.txt
+/w http > __OUTDIR__/__NAME__urls.txt
+/w file:// > __OUTDIR__/__NAME__file_urls.txt
+/w /content/ > __OUTDIR__/__NAME__content_uris.txt
 /w JNI_OnLoad > __OUTDIR__/__NAME__jni.txt
 /w Java_ > __OUTDIR__/__NAME__jni_methods.txt
 /w registerNatives > __OUTDIR__/__NAME__register_natives.txt
@@ -406,34 +409,68 @@ q
 
 R2_BATCH_TEMPLATE = r"""#!/usr/bin/env bash
 
-OUTDIR="__OUTDIR__"
+OUTDIR=__OUTDIR__
 mkdir -p "$OUTDIR"
+FAILURES=$(mktemp "$OUTDIR/.r2_failures.XXXXXX")
+trap 'rm -f "$FAILURES"' EXIT
 
 MAXJOBS="${R2_BATCH_JOBS:-$(nproc 2>/dev/null || echo 2)}"
 case "$MAXJOBS" in ''|*[!0-9]*) MAXJOBS=2 ;; esac
 [ "$MAXJOBS" -lt 1 ] && MAXJOBS=1
 
 run_one() {
-    "$@" || echo "FAILED: $*" >> "$OUTDIR/.r2_failures"
+    "$@" || echo "FAILED: $*" >> "$FAILURES"
 }
 
 JOBCOUNT=0
 __SCRIPTS_BLOCK__
 
 wait
-if [ -f "$OUTDIR/.r2_failures" ]; then
+if [ -s "$FAILURES" ]; then
     echo "[ERR] Radare2 analysis had failures (see $OUTDIR/.r2_failures): $OUTDIR/"
+    cat "$FAILURES" >&2
     exit 1
 fi
 echo "[OK] Radare2 analysis complete: $OUTDIR/"
 """
 
 def _batch_line(cmd, target):
-    return f'run_one {cmd} "{target}" &\nJOBCOUNT=$((JOBCOUNT+1))\n[ $((JOBCOUNT % MAXJOBS)) -eq 0 ] && wait\n'
+    return f'run_one {cmd} {shlex.quote(target)} &\nJOBCOUNT=$((JOBCOUNT+1))\n[ $((JOBCOUNT % MAXJOBS)) -eq 0 ] && wait\n'
+
+def _targets(so_list):
+    result = []
+    seen = set()
+    for so in so_list:
+        path = os.path.realpath(so['path'])
+        if path in seen:
+            continue
+        seen.add(path)
+        name = re.sub(r'[^A-Za-z0-9_.-]', '_', os.path.basename(path))
+        digest = hashlib.sha256(path.encode()).hexdigest()[:12]
+        result.append({**so, 'path': path, 'name': name + '_' + digest})
+    return result
+
+def _render_script(template, outdir, name):
+    outdir = os.path.abspath(outdir)
+    if any(c in outdir for c in '\r\n\x00'):
+        raise ValueError('Invalid output directory')
+    def replace(match):
+        path = os.path.join(outdir, name + match.group(1)).replace('\\', '/')
+        if any(c in path for c in '\"`$;|'):
+            raise ValueError('Output path contains unsupported Radare2 metacharacters')
+        return '"' + path + '"'
+    return re.sub(r'__OUTDIR__/__NAME__([^\s]+)', replace, template)
+
+def _timeout():
+    try:
+        value = int(os.getenv('R2_TIMEOUT', '600'))
+    except ValueError:
+        value = 600
+    return value if value > 0 else 600
 
 def _r2_max_workers(count):
     try:
-        workers = int(_R2_BATCH_JOBS_ENV)
+        workers = int(os.getenv('R2_BATCH_JOBS', ''))
     except ValueError:
         workers = 0
     if workers <= 0:
@@ -458,6 +495,10 @@ def _find_readelf():
 
 def _build_r2_script(analysis_key, extraction_keys, use_write=False,
                      asm_bytes=False, asm_lines=False):
+    if analysis_key is not None and analysis_key not in R2_ANALYSIS_LEVELS:
+        raise ValueError(f'Unknown analysis level: {analysis_key}')
+    if any(key not in R2_EXTRACTION_BLOCKS for key in (extraction_keys or [])):
+        raise ValueError('Unknown extraction block')
     parts = [R2_HEADER]
 
     if asm_bytes:
@@ -502,13 +543,15 @@ def _build_write_script(patch_mode, patch_data, extraction_keys=None):
     return "".join(parts)
 
 def generate_r2_scripts(so_list, outdir, log_mgr=None):
+    so_list = _targets(so_list)
+    outdir = os.path.abspath(outdir)
     r2_out = os.path.join(outdir, "r2_output")
     os.makedirs(r2_out, exist_ok=True)
     generated = []
     batch_lines = []
     for so in so_list:
         name = so["name"].removesuffix(".so") + "_"
-        script_content = R2_SCRIPT_TEMPLATE.replace("__OUTDIR__", r2_out).replace("__NAME__", name)
+        script_content = _render_script(R2_SCRIPT_TEMPLATE, r2_out, name)
         script_path = os.path.join(r2_out, f"r2_{so['name']}.r2")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
@@ -518,9 +561,9 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
             log_mgr.step()
 
         abs_so = so["path"]
-        batch_lines.append(f'r2 -q -i "{script_path}" "{abs_so}"')
+        batch_lines.append(_batch_line('r2 -q -i ' + shlex.quote(script_path), abs_so))
 
-        disasm_funcs = f'aflq > "{os.path.join(r2_out, name + "func_list.txt")}"\n'
+        disasm_funcs = _render_script('pdr @@f > __OUTDIR__/__NAME__disassembly.txt\n', r2_out, name)
         disasm_content = (R2_DISASM_TEMPLATE
                           .replace("__OUTDIR__", r2_out)
                           .replace("__NAME__", name)
@@ -533,7 +576,7 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
             log_mgr.step()
 
     batch_content = (R2_BATCH_TEMPLATE
-                     .replace("__OUTDIR__", r2_out)
+                     .replace("__OUTDIR__", shlex.quote(r2_out))
                      .replace("__SCRIPTS_BLOCK__", "\n".join(batch_lines)))
     batch_path = os.path.join(outdir, "r2_analyze_all.sh")
     with open(batch_path, "w", encoding="utf-8") as f:
@@ -551,10 +594,10 @@ def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name, use_
         cmd += ["-q", "-i", script_path, so_path]
         result = subprocess.run(
             cmd,
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, text=True, errors='replace', timeout=timeout,
             stdin=subprocess.DEVNULL,
         )
-        if result.returncode == 0:
+        if result.returncode == 0 and not re.search(r'(?im)^(?:ERROR|ERR|Invalid command)[: ]', result.stderr):
             if log_mgr:
                 log_mgr.add(f"r2 ok: {so_name}", "success")
             return True
@@ -575,6 +618,8 @@ def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name, use_
         return False
 
 def run_r2_scripts(so_list, outdir, log_mgr=None):
+    so_list = _targets(so_list)
+    outdir = os.path.abspath(outdir)
     r2_out = os.path.join(outdir, "r2_output")
     os.makedirs(r2_out, exist_ok=True)
     r2_bin = _find_r2()
@@ -586,7 +631,7 @@ def run_r2_scripts(so_list, outdir, log_mgr=None):
     generated = []
     succeeded = 0
     try:
-        timeout = int(_R2_TIMEOUT_ENV)
+        timeout = _timeout()
     except ValueError:
         timeout = 600
 
@@ -609,12 +654,16 @@ def run_r2_scripts(so_list, outdir, log_mgr=None):
         for fut in concurrent.futures.as_completed(jobs):
             if fut.result():
                 succeeded += 1
+    if succeeded != len(generated):
+        raise RuntimeError(f"Radare2 failed for {len(generated)-succeeded} target(s)")
     if log_mgr:
         log_mgr.add(f"r2 analysis finished: {succeeded}/{len(generated)} succeeded", "success")
     return generated
 
 def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
                    use_write=False, execute=True):
+    so_list = _targets(so_list)
+    outdir = os.path.abspath(outdir)
     r2_out = os.path.join(outdir, "r2_output")
     os.makedirs(r2_out, exist_ok=True)
     r2_bin = _find_r2() if execute else None
@@ -624,7 +673,7 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
         execute = False
 
     try:
-        timeout = int(_R2_TIMEOUT_ENV)
+        timeout = _timeout()
     except ValueError:
         timeout = 600
 
@@ -650,7 +699,7 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
             script_content = _build_r2_script(
                 analysis_key, extraction_keys, use_write=use_write
             )
-            script_content = script_content.replace("__OUTDIR__", r2_out).replace("__NAME__", name)
+            script_content = _render_script(script_content, r2_out, name)
             script_path = os.path.join(r2_out, f"r2_{so['name']}_{mode_tag}.r2")
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(script_content)
@@ -664,9 +713,9 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
                 jobs.append(pool.submit(_run_single_r2, r2_bin, script_path, so["path"],
                                         timeout, log_mgr, so["name"], use_write))
 
-            cmd = f'r2 -q -i "{script_path}"'
+            cmd = 'r2 -q -i ' + shlex.quote(script_path)
             if use_write:
-                cmd = f'r2 -w -q -i "{script_path}"'
+                cmd = 'r2 -w -q -i ' + shlex.quote(script_path)
             batch_lines.append(_batch_line(cmd, so["path"]))
             if log_mgr:
                 log_mgr.step()
@@ -677,7 +726,7 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
 
     if generated:
         batch_content = (R2_BATCH_TEMPLATE
-                         .replace("__OUTDIR__", r2_out)
+                         .replace("__OUTDIR__", shlex.quote(r2_out))
                          .replace("__SCRIPTS_BLOCK__", "\n".join(batch_lines)))
         batch_path = os.path.join(r2_out, f"r2_{mode_tag}_batch.sh")
         with open(batch_path, "w", encoding="utf-8") as f:
@@ -686,6 +735,8 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
         if log_mgr:
             log_mgr.add(f"Batch script: r2_{mode_tag}_batch.sh", "success")
 
+    if execute and succeeded != len(generated):
+        raise RuntimeError(f"Radare2 failed for {len(generated)-succeeded} target(s)")
     if log_mgr and execute:
         log_mgr.add(f"r2 {mode_tag}: {succeeded}/{len(generated)} succeeded", "success")
     return generated
@@ -787,11 +838,10 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
     return None
 
 def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
+    targets = _targets(targets)
     r2_bin = _find_r2()
     if not r2_bin:
-        if log_mgr:
-            log_mgr.add("r2 not found. Cannot use write mode.", "error")
-        return None
+        raise RuntimeError('r2 not found. Cannot use write mode.')
 
     cmd_labels = {
         "wa": "Écriture assembleur (wa) — écrire des instructions asm à une adresse",
@@ -834,11 +884,22 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
             if not data:
                 continue
 
-            patch_specs.append((so, f'{write_cmd} {data} @ {addr}', addr))
+            if not re.fullmatch(r'(?:0x[0-9a-fA-F]+|[A-Za-z_][A-Za-z0-9_.]*)', addr):
+                raise ValueError('Invalid patch address')
+            if any(c in data for c in '\r\n\x00'):
+                raise ValueError('Patch data must be a single line')
+            if write_cmd == 'wx' and not re.fullmatch(r'(?:[0-9a-fA-F]{2})+', data):
+                raise ValueError('Invalid hexadecimal bytes')
+            if write_cmd == 'w':
+                data = data.encode('utf-8').hex()
+                patch_cmd = 'wx'
+            else:
+                patch_cmd = write_cmd
+            patch_specs.append((so, f'{patch_cmd} {data} @ {addr}', addr))
 
     if patch_specs:
         try:
-            timeout = int(_R2_TIMEOUT_ENV)
+            timeout = _timeout()
         except ValueError:
             timeout = 600
 
@@ -856,9 +917,12 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
                 log_mgr.add(f"Patch script: {so['name']} ({write_cmd} @ {addr})", "info")
 
             try:
+                backup = so["path"] + ".elitf.bak"
+                with open(so["path"], "rb") as source, open(backup, "xb") as saved:
+                    shutil.copyfileobj(source, saved)
                 result = subprocess.run(
                     [r2_bin, "-w", "-q", "-i", script_path, so["path"]],
-                    capture_output=True, text=True, timeout=timeout,
+                    capture_output=True, text=True, errors='replace', timeout=timeout,
                     stdin=subprocess.DEVNULL,
                 )
                 if result.returncode == 0:
@@ -870,9 +934,11 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
                         if len(err) > 200:
                             err = err[:200] + '...'
                         log_mgr.add(f"Patch erreur sur {so['name']}: {err}", "error")
+                    raise RuntimeError(f"Patch failed: {so['name']}")
             except Exception as e:
                 if log_mgr:
                     log_mgr.add(f"Patch échoué sur {so['name']}: {e}", "error")
+                raise
             if log_mgr:
                 log_mgr.step()
             return script_path
@@ -918,9 +984,10 @@ def display_binary_info(so_list, outdir, log_mgr=None):
         if log_mgr:
             log_mgr.add("readelf not found (tried: readelf, greadelf, llvm-readelf). "
                         "Cannot read binary info.", "warn")
-        return
+        raise RuntimeError('readelf not found')
 
     os.makedirs(outdir, exist_ok=True)
+    failures = []
 
     def _read_one(so):
         if log_mgr:
@@ -937,14 +1004,17 @@ def display_binary_info(so_list, outdir, log_mgr=None):
                         log_mgr.add(f"[{so['name']}] {line.strip()}", "info")
                 return f"\n=== {so['name']} ===\n" + result.stdout
             err = result.stderr.strip()
+            failures.append(so["path"])
             if log_mgr:
                 log_mgr.add(f"readelf error on {so['name']}: {err}", "warn")
             return f"\n=== {so['name']} ===\n(readelf error: {err})\n"
         except subprocess.TimeoutExpired:
+            failures.append(so["path"])
             if log_mgr:
                 log_mgr.add(f"readelf timeout on {so['name']}", "warn")
             return f"\n=== {so['name']} ===\n(readelf timed out)\n"
         except (OSError, subprocess.SubprocessError) as e:
+            failures.append(so["path"])
             if log_mgr:
                 log_mgr.add(f"Cannot read binary info on {so['name']}: {e}", "warn")
             return f"\n=== {so['name']} ===\n(readelf error: {e})\n"
@@ -958,5 +1028,7 @@ def display_binary_info(so_list, outdir, log_mgr=None):
     info_path = os.path.join(outdir, "binary_info.txt")
     with open(info_path, "w", encoding="utf-8") as out_f:
         out_f.write("".join(sections))
+    if failures:
+        raise RuntimeError(f"readelf failed for {len(failures)} target(s); see {info_path}")
     if log_mgr:
         log_mgr.add(f"Binary info written to {info_path}", "success")

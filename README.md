@@ -1,161 +1,62 @@
-# Elit-f
+# Elit-f — version de travail consolidée
 
-Outil de rétro-ingénierie d'applications Flutter par compilation du runtime Dart AOT.
+Lire `SYNTHESE.md` avant utilisation : 30 tests locaux passent, mais la compilation/exécution AOT multi-version et les moteurs externes n'ont pas été validés dans cet environnement. Ce paquet n'est pas une version certifiée sans erreurs.
 
-L'outil analyse `libapp.so` (snapshot Dart AOT d'une application Android), détecte automatiquement la version du Dart VM depuis `libflutter.so`, compile le runtime Dart correspondant puis décompile le snapshot : assemblies commentées, Object Pool, objets, script Frida prêt à l'emploi et script de labels IDA.
+## Installation Python
 
-- Versions de Dart supportées : **3.0 → 3.18** (détection dynamique par scan des en-têtes du SDK, macros de compatibilité automatiques)
-- Architectures APK : `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`
-- Modes : interface interactive (Rich), CLI classique, mode `--plain` recommandé sur Termux
-- Génération : assemblies `asm/`, dump Object Pool `pp.txt`, dump objets imbriqués `objs.txt`, script Frida `blutter_frida.js` (Closure/Map/Set inclus), script IDA `ida_script/`
+Python 3.9 ou supérieur ; dépendances :
 
-## Termux
-
-```bash
-pkg update && pkg upgrade -y
-pkg install -y git cmake ninja clang python capstone icu pkg-config
-pip install rich pyelftools requests
+```sh
+python -m pip install -r requirements.txt
 ```
 
-Cloner le dépôt puis lancer le build initial :
+Le moteur AOT fourni cible Android ARM64 ELF. Il nécessite Git, CMake, Ninja, un compilateur et une bibliothèque standard supportant C++20 (`std::format`), ICU et Capstone. Les fichiers Docker, Nix, Windows et Termux sont conservés ; leur exécution native reste à vérifier.
 
-```bash
-chmod +x build_termux.sh
-./build_termux.sh <dart_version>            # build ciblé d'un dartvm déjà construit
-Elit-f ~/cibles/MonApp.apk ~/cibles/out --cli   # pipeline complet automatique
+## Utilisation
+
+```sh
+python elitf.py application.apk sortie --cli --nu
+python elitf.py chemin/lib/arm64-v8a sortie --cli --plain --nu
+python elitf.py libapp.so sortie --dart-version 3.4.2_android_arm64 --nu
+python elitf.py application.apk sortie --action r2 --r2-preset standard --nu
+python elitf.py application.apk sortie --action r2 --generate-only --nu
+python elitf.py chemin/libs sortie --action info --nu
+python elitf.py --help
 ```
 
-Le binaire est installé dans `bin/`, un lanceur `Elit-f` est déposé dans `$PREFIX/bin` (environnements Termux uniquement).
+Sans `--cli`, l'interface Rich reste disponible. Radare2 est optionnel pour générer des scripts, obligatoire pour les exécuter. `readelf`, `greadelf` ou `llvm-readelf` est nécessaire pour les informations binaires.
 
-> Permission stockage : `termux-setup-storage` si `/sdcard` n'est pas accessible.
+Les options historiques `--rebuild`, `--no-analysis`, `--ida-fcn`, `--dart-version`, `--plain`, `--vs-sln` et `--nu` sont conservées. La génération VS nécessite une console développeur Visual Studio. `--nu` désactive la recherche de mises à jour ; sans cette option, une mise à jour est seulement signalée, jamais appliquée automatiquement.
 
-## Debian / Ubuntu (g++ >= 13)
+Le cache est exact par version/configuration/snapshot. Les anciens binaires ne sont pas réutilisés entre versions présumées compatibles. La première exécution peut donc reconstruire le runtime.
 
-Le code C++ utilise la bibliothèque de formatage C++20 (`std::format`) : un compilateur récent est requis (`g++ >= 13` ou `clang >= 16`).
+Les noms App/Flutter alternatifs ne signifient pas que Mach-O/iOS est pris en charge. Pour les autres architectures ELF, utiliser `--action r2`. Le C++ AOT x64 et le chargeur iOS ne sont pas fonctionnels dans les sources reçues et sont refusés explicitement.
 
-```bash
-apt install python3-pyelftools python3-requests git cmake ninja-build \
-    build-essential pkg-config libicu-dev libcapstone-dev
-python3 elitf.py <indir> <outdir>
+## Sorties
+
+AOT : `asm/`, `pp.txt`, `objs.txt`, `ida_script/`, `blutter_frida.js`.
+
+Radare2 : `r2_output/`, scripts et batch ; noms suffixés d'une empreinte du chemin pour éviter les collisions. Les bibliothèques extraites d'un APK sont conservées dans `inputs/` pour permettre la relance des scripts générés.
+
+Informations binaires : `binary_info.txt`.
+
+Les modes de patch restent dans le menu r2. Ils modifient la cible sélectionnée après création d'une sauvegarde `.elitf.bak`. Si cette sauvegarde existe, la nouvelle écriture échoue sans l'écraser.
+
+## Parallélisme
+
+```sh
+R2_BATCH_JOBS=2 R2_TIMEOUT=600 python elitf.py chemin/libs sortie --action r2 --nu
 ```
 
-## Windows
+Les cibles indépendantes sont parallélisées. Analyse puis extraction dans une même session restent ordonnées. Ne pas lancer plusieurs builds simultanés de la même variante dans le même dossier.
 
-- Installer git et Python 3
-- Installer Visual Studio avec « Desktop development with C++ » et « C++ CMake tools »
-- Installer les bibliothèques requises (capstone, icu4c) :
+## Tests
 
-```
-python scripts\init_env_win.py
-```
-
-- Démarrer « x64 Native Tools Command Prompt » puis lancer `python elitf.py <indir> <outdir>`
-
-## Docker
-
-```bash
-docker build -t elitf .
-docker/run.sh /path/to/app.apk /path/to/output
-docker/run.sh <indir> <outdir> [extra args...]
+```sh
+python -m unittest discover -s tests -v
+python -m compileall -q .
 ```
 
-`docker/run.sh` accepte les mêmes arguments que `elitf.py` :
+Le test ELF natif nécessite GCC et readelf. Les appels réseau et le moteur r2 sont simulés dans les tests concernés ; voir la distinction complète dans `SYNTHESE.md`.
 
-- `indir` : APK ou dossier contenant `libapp.so` et `libflutter.so`
-- `outdir` : répertoire de sortie de l'analyse
-- `extra args` : options supplémentaires (ex. `--no-analysis`, `--ida-fcn`)
-
-```bash
-docker/run.sh /path/to/lib/arm64-v8a /path/to/output --no-analysis --ida-fcn
-```
-
-## macOS Ventura / Sonoma (clang 16)
-
-```bash
-brew install llvm@16 cmake ninja pkg-config icu4c capstone
-pip3 install pyelftools requests rich
-```
-
-`elitf.py` sélectionne automatiquement `llvm@16` (via `brew --prefix`) sur macOS antérieur à 15.
-
-## Nix
-
-```bash
-nix-shell
-python3 elitf.py <indir> <outdir>
-```
-
-## Usage
-
-### Fichier APK
-
-```shell
-python3 elitf.py path/to/app.apk out_dir
-```
-
-### Fichiers `.so`
-
-1. Dossier extrait d'un APK (recherche récursive de `libapp.so` + `libflutter.so`, avec repli sur les fichiers `App`/`Flutter` sans extension) :
-
-```shell
-python3 elitf.py path/to/app/lib/arm64-v8a out_dir
-```
-
-2. `libapp.so` seul avec une version Dart connue :
-
-```shell
-python3 elitf.py --dart-version 3.4.2_android_arm64 libapp.so out_dir
-```
-
-Si l'exécutable correspondant à la version Dart n'existe pas encore, le code source du Dart VM est récupéré et compilé automatiquement.
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `indir` | APK ou dossier contenant exactement `libapp.so` + `libflutter.so` |
-| `outdir` | Répertoire de sortie |
-| `--rebuild` | Force la recompilation de l'exécutable Elit-f |
-| `--no-analysis` | Construit sans analyse de code (Dart < 2.15 l'impose) |
-| `--ida-fcn` | Génère le script de fonctions IDA (sans les commentaires de structs/pool) |
-| `--dart-version` | Mode sans libflutter : `<version>_<os>_<arch>` (ex. `3.4.2_android_arm64`) |
-| `--cli` | Force le mode CLI (pas de menu interactif) |
-| `--plain` | Désactive les animations Rich (recommandé sur Termux) |
-| `--vs-sln` | Génère une solution Visual Studio dans `<outdir>` (console développeur VS requise) |
-| `--nu` | Désactive la vérification de mise à jour |
-
-Le suffixe du binaire produit reflète la configuration : `elitf_dartvm<ver>_<os>_<arch>[_no-compressed-ptrs][_no-analysis][_ida-fcn]`.
-
-## Mise à jour
-
-```bash
-git pull
-python3 elitf.py path/to/app/lib/arm64-v8a out_dir --rebuild
-```
-
-Par défaut, `elitf.py` vérifie silencieusement les mises à jour du dépôt (si le dossier est un clone git propre) ; utilisez `--nu` pour désactiver ce comportement.
-
-## Fichiers de sortie
-
-- **asm/** : assemblies de libapp avec symboles
-- **blutter_frida.js** : script Frida pour l'application cible (Closure, Map, Set supportés)
-- **objs.txt** : dump complet (imbriqué) des objets de l'Object Pool
-- **pp.txt** : tous les objets Dart de l'Object Pool
-- **ida_script/** : `addNames.py` (labels/fonctions IDA) et `ida_dart_struct.h` (structs Thread/Object Pool)
-
-## Répertoires
-
-- **bin** : exécutables Elit-f par version de Dart au format `elitf_dartvm<ver>_<os>_<arch>`
-- **build** : projets de build (supprimable après le build)
-- **dartsdk** : checkout du runtime Dart (supprimable après le build)
-- **packages** : bibliothèques statiques du Dart Runtime
-- **scripts** : scripts Python de récupération/build du Dart VM
-- **src** : code source C++, à compiler contre la bibliothèque Dart VM
-
-## Génération d'une solution Visual Studio (développement)
-
-```shell
-python elitf.py path\to\lib\arm64-v8a build\vs --vs-sln
-```
-
-La solution est générée dans `<outdir>` avec la commande de debug préconfigurée (`-i <libapp> -o <outdir>/out`) et les DLL requises copiées dans `Debug\`.
+Le dossier `audit/` contient inventaire par archive, comparaison des fonctions, patch par rapport à `Elit-f-main (1)` et résultats des tests.

@@ -19,6 +19,7 @@ if [ $# -lt 2 ]; then
 fi
 
 INDIR="$(realpath "$1")"
+mkdir -p "$2"
 OUTDIR="$(realpath "$2")"
 shift 2
 
@@ -28,11 +29,11 @@ if [ ! -e "$INDIR" ]; then
 fi
 
 mkdir -p "$OUTDIR"
-chmod 777 "$OUTDIR"
+
 
 docker run --rm \
     -v "$INDIR:/app/input:ro" \
     -v "$OUTDIR:/app/output" \
     -w /app \
     $IMAGE_NAME \
-    /app/input /app/output "$@"
+    /app/input /app/output --cli "$@"
