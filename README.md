@@ -3,7 +3,7 @@
 ## Installation Python
 **Clone*
 ```sh
-https://github.com/ChandrohIrintsoa/Elit-f.git
+git clone https://github.com/ChandrohIrintsoa/Elit-f.git
 ```
 Python 3.9 ou supérieur ; dépendances :
 
