@@ -1,7 +1,9 @@
 FROM python:3.13-slim
 
-RUN groupadd -g 999 appuser && \
-    useradd -r -u 999 -g appuser appuser
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd -g ${APP_GID} appuser && \
+    useradd -m -u ${APP_UID} -g appuser appuser
 
 WORKDIR /app
 
@@ -14,6 +16,7 @@ RUN apt-get -qq update && apt-get -qq install -y \
     ninja-build \
     pkg-config \
     libicu-dev \
+    libfmt-dev \
     libcapstone-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

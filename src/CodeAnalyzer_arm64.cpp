@@ -67,7 +67,7 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
                         return new VarString(dart::String::Cast(obj).ToCString());
 
                 if (obj.IsTypedData()) {
-                        return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+                        return new VarExpression(elitf_format::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
                 }
 
                 switch (obj.GetClassId()) {
@@ -101,10 +101,10 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
                 case dart::kClosureCid:
                 case dart::kConstMapCid:
                 case dart::kConstSetCid:
-                        return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+                        return new VarExpression(elitf_format::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
 #ifdef HAS_RECORD_TYPE
                 case dart::kRecordCid: {
-                        return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+                        return new VarExpression(elitf_format::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
                 }
 #endif
                 case dart::kTypeParametersCid:
@@ -136,7 +136,7 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
                 case dart::kInt32x4Cid:
                 case dart::kFloat32x4Cid:
                 case dart::kFloat64x2Cid:
-                        return new VarExpression(std::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
+                        return new VarExpression(elitf_format::format("{}", obj.ToCString()), (int32_t)obj.GetClassId());
                 case dart::kLibraryPrefixCid:
                 case dart::kInstanceCid:
                         return new VarInstance(app.GetClass(dart::kInstanceCid));
@@ -145,7 +145,7 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
                 if (obj.IsInstance()) {
                         auto dartCls = app.GetClass(obj.GetClassId());
                         if (dartCls->Id() < dart::kNumPredefinedCids) {
-                                std::cerr << std::format("Unhandle predefined class {} ({})\n", dartCls->Name(), dartCls->Id());
+                                std::cerr << elitf_format::format("Unhandle predefined class {} ({})\n", dartCls->Name(), dartCls->Id());
                         }
                         return new VarInstance(dartCls);
                 }
@@ -160,10 +160,10 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
         }
         else if (objType == dart::ObjectPool::EntryType::kNativeFunction) {
                 const auto addr = pool.RawValueAt(idx);
-                return new VarExpression(std::format("NativeFn_{:#x}", addr));
+                return new VarExpression(elitf_format::format("NativeFn_{:#x}", addr));
         }
         else {
-                throw std::runtime_error(std::format("unknown pool object type: {}", (int)objType).c_str());
+                throw std::runtime_error(elitf_format::format("unknown pool object type: {}", (int)objType).c_str());
         }
 }
 
@@ -455,13 +455,13 @@ void FunctionAnalyzer::printInsnException(InsnException& e)
                 --ins;
         }
         while (ins != e.insn) {
-                std::cerr << std::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
+                std::cerr << elitf_format::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
                 ++ins;
         }
-        std::cerr << std::format("  * {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
+        std::cerr << elitf_format::format("  * {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
         if (ins->address + ins->size < fnInfo->dartFn.AddressEnd()) {
                 ++ins;
-                std::cerr << std::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
+                std::cerr << elitf_format::format("    {:#x}: {} {}\n", ins->address, &ins->mnemonic[0], &ins->op_str[0]);
         }
 }
 

@@ -553,7 +553,7 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             ui._print("[dim]Au revoir.[/]" if ui.console else "Au revoir.")
             break
 
-        if choice == 1:
+        if choice in (1, 3, 4):
             if critical_dependencies_missing(check_dependencies()):
                 ui._print("[bold red]Analyse impossible: installez pyelftools et requests d'abord.[/]"
                           if ui.console
@@ -562,7 +562,7 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
             def work(lm):
-                run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, lm,
+                run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn or choice == 3, ui, lm,
                                      vs_sln)
             try:
                 ui.run_with_live_display("Flutter/Dart AOT Analysis", 20, work)
@@ -582,8 +582,6 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
                 continue
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
-            def work(lm):
-                r2_unified_analysis(ui.detected_so, outdir, lm, ui)
             try:
                 r2_unified_analysis(ui.detected_so, outdir, ui.log_mgr, ui)
                 if ui.console:
@@ -592,16 +590,6 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
                         border_style=_Style(color="bright_green")))
             except Exception as e:
                 ui._print_error(e)
-
-        elif choice == 3:
-            ui._print("[bright_cyan]Les scripts IDA sont générés automatiquement lors de l'analyse Flutter (option 1).[/]"
-                      if ui.console
-                      else "Les scripts IDA sont generes automatiquement lors de l'analyse Flutter (option 1).")
-
-        elif choice == 4:
-            ui._print("[bright_cyan]Les scripts Frida sont générés automatiquement lors de l'analyse Flutter (option 1).[/]"
-                      if ui.console
-                      else "Les scripts Frida sont generes automatiquement lors de l'analyse Flutter (option 1).")
 
         elif choice == 5:
             if not ui.detected_so:
@@ -679,7 +667,7 @@ def main():
     parser.add_argument('--nu', action='store_false', default=True,
                         help='Do not check for updates')
     parser.add_argument('--action', choices=('flutter', 'r2', 'info'), default='flutter')
-    parser.add_argument('--r2-preset', choices=tuple(R2_PRESETS), default='full')
+    parser.add_argument('--r2-preset', choices=tuple(R2_PRESETS), default='standard')
     parser.add_argument('--generate-only', action='store_true')
     args = parser.parse_args()
 

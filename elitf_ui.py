@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sys
 import re
 import platform
 import threading
@@ -109,6 +110,7 @@ def strip_rich_tags(text: str) -> str:
 class LogManager:
     def __init__(self, maxlen=200):
         self.logs = deque(maxlen=maxlen)
+        self.pending = None
         self.lock = threading.Lock()
         self.step_count = 0
         self.total_steps = 0
@@ -117,6 +119,18 @@ class LogManager:
         ts = datetime.now().strftime("%H:%M:%S")
         with self.lock:
             self.logs.append((ts, msg, level))
+            if self.pending is not None:
+                self.pending.append((ts, msg, level))
+
+    def begin_stream(self):
+        with self.lock:
+            self.pending = deque()
+
+    def drain_stream(self, finish=False):
+        with self.lock:
+            entries = list(self.pending or ())
+            self.pending = None if finish else deque()
+            return entries
 
     def clear(self):
         with self.lock:
@@ -177,9 +191,9 @@ def _is_termux() -> bool:
 
 class ElitfUI:
     def __init__(self, force_plain: bool = False):
-        self.force_plain = force_plain or _is_termux()
+        self.force_plain = force_plain or not sys.stdout.isatty()
         if HAS_RICH:
-            self.console = Console(force_terminal=True)
+            self.console = Console()
         else:
             self.console = None
         self.log_mgr = LogManager(200)
@@ -327,8 +341,8 @@ class ElitfUI:
             menu_items = [
                 ("1", "Flutter/Dart AOT Analysis", "Analyse complète libapp.so + libflutter.so", "bright_cyan"),
                 ("2", "Radare2 - Analyse unifiée", "Sélection cibles + sous-menu r2 (a/aa/aaa/-w/wa/extraits/...)", "bright_green"),
-                ("3", "Générer scripts IDA uniquement", "Générer les scripts IDA sans exécution", "blue"),
-                ("4", "Générer scripts Frida uniquement", "Générer les scripts Frida sans exécution", "red"),
+                ("3", "Analyser et générer les scripts IDA", "Analyse AOT avec exports IDA", "blue"),
+                ("4", "Analyser et générer les scripts Frida", "Analyse AOT avec exports Frida", "red"),
                 ("5", "Information binaire détaillée", "Afficher les infos détaillées des .so", "white"),
                 ("0", "Quitter", "", "red"),
             ]
@@ -345,8 +359,8 @@ class ElitfUI:
             print("\n  === Menu Principal ===")
             print("  [1] Flutter/Dart AOT Analysis")
             print("  [2] Radare2 - Analyse unifiee")
-            print("  [3] Generer scripts IDA uniquement")
-            print("  [4] Generer scripts Frida uniquement")
+            print("  [3] Analyser et generer les scripts IDA")
+            print("  [4] Analyser et generer les scripts Frida")
             print("  [5] Information binaire detaillee")
             print("  [0] Quitter")
 
@@ -785,17 +799,15 @@ class ElitfUI:
                 error_holder[0] = e
 
         thread = threading.Thread(target=worker, daemon=True)
+        self.log_mgr.begin_stream()
         thread.start()
 
-        last_count = 0
         prefix_map = {"error": "✗", "success": "✓", "warn": "⚠", "debug": "  "}
         style_map = {"error": "bold red", "success": "bold bright_green",
                     "warn": "bold bright_yellow", "debug": "dim"}
 
         while thread.is_alive():
-            with self.log_mgr.lock:
-                current_logs = list(self.log_mgr.logs)
-            new_entries = current_logs[last_count:]
+            new_entries = self.log_mgr.drain_stream()
             for ts, msg, level in new_entries:
                 prefix = prefix_map.get(level, "→")
                 if self.console:
@@ -804,12 +816,9 @@ class ElitfUI:
                 else:
                     clean_msg = strip_rich_tags(str(msg))
                     print(f"  [{ts}] {prefix} {clean_msg}")
-            last_count = len(current_logs)
             time.sleep(0.2)
 
-        with self.log_mgr.lock:
-            current_logs = list(self.log_mgr.logs)
-        new_entries = current_logs[last_count:]
+        new_entries = self.log_mgr.drain_stream(finish=True)
         for ts, msg, level in new_entries:
             prefix = prefix_map.get(level, "→")
             if self.console:

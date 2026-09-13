@@ -108,7 +108,7 @@ public:
         AllocateStackInstr& operator=(const AllocateStackInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("AllocStack({:#x})", allocSize);
+                return elitf_format::format("AllocStack({:#x})", allocSize);
         }
         uint32_t AllocSize() { return allocSize; }
 
@@ -139,7 +139,7 @@ public:
         MoveRegInstr& operator=(const MoveRegInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = {}", dstReg.Name(), srcReg.Name());
+                return elitf_format::format("{} = {}", dstReg.Name(), srcReg.Name());
         }
 
         A64::Register dstReg;
@@ -188,7 +188,7 @@ public:
         StoreObjectPoolInstr& operator=(const StoreObjectPoolInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("[PP+{:#x}] = {}", offset, srcReg.Name());
+                return elitf_format::format("[PP+{:#x}] = {}", offset, srcReg.Name());
         }
 
         A64::Register srcReg;
@@ -290,7 +290,7 @@ public:
         GdtCallInstr& operator=(const GdtCallInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("r0 = GDT[cid_x0 + {:#x}]()", offset);
+                return elitf_format::format("r0 = GDT[cid_x0 + {:#x}]()", offset);
         }
 
 protected:
@@ -306,8 +306,8 @@ public:
 
         virtual std::string ToString() {
                 if (fnBase != nullptr)
-                        return std::format("r0 = {}()", fnBase->Name());
-                return std::format("r0 = call {:#x}", addr);
+                        return elitf_format::format("r0 = {}()", fnBase->Name());
+                return elitf_format::format("r0 = call {:#x}", addr);
         }
 
 protected:
@@ -335,7 +335,7 @@ public:
         BranchIfSmiInstr& operator=(const BranchIfSmiInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("branchIfSmi({}, {:#x})", objReg.Name(), branchAddr);
+                return elitf_format::format("branchIfSmi({}, {:#x})", objReg.Name(), branchAddr);
         }
 
         A64::Register objReg;
@@ -350,7 +350,7 @@ public:
         LoadClassIdInstr& operator=(const LoadClassIdInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = LoadClassIdInstr({})", cidReg.Name(), objReg.Name());
+                return elitf_format::format("{} = LoadClassIdInstr({})", cidReg.Name(), objReg.Name());
         }
 
         A64::Register objReg;
@@ -368,7 +368,7 @@ public:
         LoadTaggedClassIdMayBeSmiInstr& operator=(const LoadTaggedClassIdMayBeSmiInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = LoadTaggedClassIdMayBeSmiInstr({})", taggedCidReg.Name(), objReg.Name());
+                return elitf_format::format("{} = LoadTaggedClassIdMayBeSmiInstr({})", taggedCidReg.Name(), objReg.Name());
         }
 
         A64::Register taggedCidReg;
@@ -386,7 +386,7 @@ public:
         BoxInt64Instr& operator=(const BoxInt64Instr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = BoxInt64Instr({})", objReg.Name(), srcReg.Name());
+                return elitf_format::format("{} = BoxInt64Instr({})", objReg.Name(), srcReg.Name());
         }
 
         A64::Register objReg;
@@ -401,7 +401,7 @@ public:
         LoadInt32Instr& operator=(const LoadInt32Instr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = LoadInt32Instr({})", dstReg.Name(), srcObjReg.Name());
+                return elitf_format::format("{} = LoadInt32Instr({})", dstReg.Name(), srcObjReg.Name());
         }
 
         A64::Register dstReg;
@@ -417,7 +417,7 @@ public:
         AllocateObjectInstr& operator=(const AllocateObjectInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = inline_Allocate{}()", dstReg.Name(), dartCls.Name());
+                return elitf_format::format("{} = inline_Allocate{}()", dstReg.Name(), dartCls.Name());
         }
 
         A64::Register dstReg;
@@ -449,11 +449,11 @@ struct ArrayOp {
         }
         std::string ToString() {
                 switch (arrType) {
-                case List: return std::format("List_{}", size);
-                case TypedUnknown: return std::format("TypeUnknown_{}", size);
-                case TypedSigned: return std::format("TypedSigned_{}", size);
-                case TypedUnsigned: return std::format("TypedUnsigned_{}", size);
-                case Unknown: return std::format("Unknown_{}", size);
+                case List: return elitf_format::format("List_{}", size);
+                case TypedUnknown: return elitf_format::format("TypeUnknown_{}", size);
+                case TypedSigned: return elitf_format::format("TypedSigned_{}", size);
+                case TypedUnsigned: return elitf_format::format("TypedUnsigned_{}", size);
+                case Unknown: return elitf_format::format("Unknown_{}", size);
                 default: return "";
                 }
         }
@@ -468,7 +468,7 @@ public:
         LoadArrayElementInstr& operator=(const LoadArrayElementInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("ArrayLoad: {} = {}[{}]  ; {}", dstReg.Name(), arrReg.Name(), idx.Name(), arrayOp.ToString());
+                return elitf_format::format("ArrayLoad: {} = {}[{}]  ; {}", dstReg.Name(), arrReg.Name(), idx.Name(), arrayOp.ToString());
         }
 
         A64::Register dstReg;
@@ -486,7 +486,7 @@ public:
         StoreArrayElementInstr& operator=(const StoreArrayElementInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("ArrayStore: {}[{}] = {}  ; {}", arrReg.Name(), idx.Name(), valReg.Name(), arrayOp.ToString());
+                return elitf_format::format("ArrayStore: {}[{}] = {}  ; {}", arrReg.Name(), idx.Name(), valReg.Name(), arrayOp.ToString());
         }
 
         A64::Register valReg;
@@ -504,7 +504,7 @@ public:
         LoadFieldInstr& operator=(const LoadFieldInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("LoadField: {} = {}->field_{:x}", dstReg.Name(), objReg.Name(), offset);
+                return elitf_format::format("LoadField: {} = {}->field_{:x}", dstReg.Name(), objReg.Name(), offset);
         }
 
         A64::Register dstReg;
@@ -523,7 +523,7 @@ public:
         StoreFieldInstr& operator=(const StoreFieldInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("StoreField: {}->field_{:x} = {}", objReg.Name(), offset, valReg.Name());
+                return elitf_format::format("StoreField: {}->field_{:x} = {}", objReg.Name(), offset, valReg.Name());
         }
 
         A64::Register valReg;
@@ -540,7 +540,7 @@ public:
         InitLateStaticFieldInstr& operator=(const InitLateStaticFieldInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = InitLateStaticField({:#x}) // {}", dst.Name(), field.Offset(), field.FullName());
+                return elitf_format::format("{} = InitLateStaticField({:#x}) // {}", dst.Name(), field.Offset(), field.FullName());
         }
 
         std::string ValueExpression() {
@@ -561,7 +561,7 @@ public:
         LoadStaticFieldInstr& operator=(const LoadStaticFieldInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} = LoadStaticField({:#x})", dstReg.Name(), fieldOffset);
+                return elitf_format::format("{} = LoadStaticField({:#x})", dstReg.Name(), fieldOffset);
         }
 
 protected:
@@ -578,7 +578,7 @@ public:
         StoreStaticFieldInstr& operator=(const StoreStaticFieldInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("StoreStaticField({:#x}, {})", fieldOffset, valReg.Name());
+                return elitf_format::format("StoreStaticField({:#x}, {})", fieldOffset, valReg.Name());
         }
 
 protected:
@@ -595,7 +595,7 @@ public:
         WriteBarrierInstr& operator=(const WriteBarrierInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{}WriteBarrierInstr(obj = {}, val = {})", isArray ? "Array" : "", objReg.Name(), valReg.Name());
+                return elitf_format::format("{}WriteBarrierInstr(obj = {}, val = {})", isArray ? "Array" : "", objReg.Name(), valReg.Name());
         }
 
         A64::Register objReg;
@@ -612,7 +612,7 @@ public:
         TestTypeInstr& operator=(const TestTypeInstr&) = delete;
 
         virtual std::string ToString() {
-                return std::format("{} as {}", srcReg.Name(), typeName);
+                return elitf_format::format("{} as {}", srcReg.Name(), typeName);
         }
 
         A64::Register srcReg;

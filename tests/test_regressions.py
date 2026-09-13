@@ -155,7 +155,7 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(len(set(scripts)), 2)
         for path in scripts:
             content = Path(path).read_text()
-            self.assertIn('aflj > "', content)
+            self.assertRegex(content, r'aflj > [A-Za-z0-9_.-]+\n')
             self.assertNotIn('__OUTDIR__', content)
             self.assertNotIn('\x00', content)
         for path in (self.root/'out space').rglob('*.sh'):

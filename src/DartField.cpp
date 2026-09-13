@@ -33,7 +33,7 @@ void DartField::Print(std::ostream& of) const
 	if (ptr == nullptr) {
 		ASSERT(type);
 		of << type->ToString();
-		of << std::format(" field_{:x};\n", offset);
+		of << elitf_format::format(" field_{:x};\n", offset);
 	}
 	else {
 		if (is_static)
@@ -45,7 +45,7 @@ void DartField::Print(std::ostream& of) const
 		if (is_const)
 			of << "const ";
 		of << typeName << " " << name;
-		of << std::format("; // offset: {:#x}\n", offset);
+		of << elitf_format::format("; // offset: {:#x}\n", offset);
 	}
 }
 

@@ -19,6 +19,7 @@ pkgs.mkShell {
     cmake
     ninja
     pkg-config
+    fmt
     capstone_4
     openssl
     icu

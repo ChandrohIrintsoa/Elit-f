@@ -140,15 +140,15 @@ std::string DartClass::FullNameWithPackage() const
 void DartClass::PrintHead(std::ostream& of)
 {
 	if (superCls == NULL)
-		of << std::format("\n// class id: {}, size: {:#x}\n", id, size);
+		of << elitf_format::format("\n// class id: {}, size: {:#x}\n", id, size);
 	else
-		of << std::format("\n// class id: {}, size: {:#x}, field offset: {:#x}\n", id, size, superCls->size);
+		of << elitf_format::format("\n// class id: {}, size: {:#x}, field offset: {:#x}\n", id, size, superCls->size);
 	if (dart::ClassTable::IsTopLevelCid(id)) {
 		of << "class :: {\n";
 		return;
 	}
 	if (superCls == NULL) {
-		of << std::format("class {};\n", name.c_str());
+		of << elitf_format::format("class {};\n", name.c_str());
 		return;
 	}
 

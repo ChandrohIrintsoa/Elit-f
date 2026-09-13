@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-IMAGE_NAME="elitf:latest"
+IMAGE_NAME="${ELITF_IMAGE:-elitf:latest}"
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <indir> <outdir> [extra args...]"
@@ -32,8 +32,9 @@ mkdir -p "$OUTDIR"
 
 
 docker run --rm \
+    --user "$(id -u):$(id -g)" \
     -v "$INDIR:/app/input:ro" \
     -v "$OUTDIR:/app/output" \
     -w /app \
-    $IMAGE_NAME \
+    "$IMAGE_NAME" \
     /app/input /app/output --cli "$@"

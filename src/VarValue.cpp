@@ -10,15 +10,15 @@ std::string VarStorage::Name()
 	case Register:
 		return reg.Name();
 	case Local:
-		return std::format("local_{:x}", -offset);
+		return elitf_format::format("local_{:x}", -offset);
 	case Argument:
-		return std::format("arg_{}", idx);
+		return elitf_format::format("arg_{}", idx);
 	case Static:
-		return std::format("static_{:x}", offset);
+		return elitf_format::format("static_{:x}", offset);
 	case Pool:
-		return std::format("PP_{:x}", offset);
+		return elitf_format::format("PP_{:x}", offset);
 	case Thread:
-		return std::format("THR_{:x}", offset);
+		return elitf_format::format("THR_{:x}", offset);
 	case SmallImm:
 		return std::to_string(offset);
 	case InInstruction:

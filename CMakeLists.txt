@@ -16,12 +16,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        add_compile_options(-fexperimental-library)
-        add_link_options(-fexperimental-library)
         if (APPLE)
                 cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH LLVM_BIN_DIR)
                 add_link_options(-L${LLVM_BIN_DIR}/../lib/c++ -dead_strip)
         endif()
+endif()
+
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("#include <format>
+#include <string>
+int main() { return std::format(\"{}\", 42) == \"42\" ? 0 : 1; }" ELITF_HAS_STD_FORMAT)
+if(NOT ELITF_HAS_STD_FORMAT)
+        find_package(fmt 9 CONFIG REQUIRED)
 endif()
 
 find_package(${DARTLIB} REQUIRED PATHS "${PROJECT_SOURCE_DIR}/packages")
@@ -31,17 +37,22 @@ if (MSVC)
         set_target_properties(capstone PROPERTIES IMPORTED_IMPLIB "${PROJECT_SOURCE_DIR}/external/capstone/capstone_dll.lib")
         target_include_directories(capstone INTERFACE "${PROJECT_SOURCE_DIR}/external/capstone/include/capstone")
 else()
-        include(FindPkgConfig)
-        pkg_search_module(CAPSTONE REQUIRED capstone)
-        link_directories(${CAPSTONE_LIBDIR})
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+                pkg_search_module(CAPSTONE QUIET capstone)
+        endif()
         find_path(CAPSTONE_INCLUDE_DIR capstone.h
                 HINTS ${CAPSTONE_INCLUDE_DIRS} ${CAPSTONE_INCLUDEDIR}
-                PATH_SUFFIXES capstone
-        )
-        if(NOT CAPSTONE_INCLUDE_DIR)
-                message(FATAL_ERROR "capstone.h not found. Install capstone-dev (Debian: libcapstone-dev, Termux: capstone).")
-        endif()
-        include_directories(AFTER ${CAPSTONE_INCLUDE_DIR})
+                PATH_SUFFIXES capstone include/capstone
+                REQUIRED)
+        find_library(CAPSTONE_LIBRARY NAMES capstone
+                HINTS ${CAPSTONE_LIBRARY_DIRS} ${CAPSTONE_LIBDIR}
+                REQUIRED)
+        add_library(capstone UNKNOWN IMPORTED)
+        set_target_properties(capstone PROPERTIES
+                IMPORTED_LOCATION "${CAPSTONE_LIBRARY}"
+                INTERFACE_INCLUDE_DIRECTORIES "${CAPSTONE_INCLUDE_DIR}")
+
 endif()
 
 set(SRCDIR "src")
@@ -50,6 +61,10 @@ list(TRANSFORM SRCS PREPEND "${SRCDIR}/")
 add_executable(${BINNAME} ${SRCS})
 
 target_link_libraries(${BINNAME} PRIVATE ${DARTLIB} capstone)
+if(NOT ELITF_HAS_STD_FORMAT)
+        target_link_libraries(${BINNAME} PRIVATE fmt::fmt)
+        target_compile_definitions(${BINNAME} PRIVATE ELITF_USE_FMT)
+endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Android")
         target_link_libraries(${BINNAME} PRIVATE log)

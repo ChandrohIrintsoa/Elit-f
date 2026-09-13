@@ -17,8 +17,8 @@ R2_ANALYSIS_LEVELS = {
 
     "a": {
         "label": "a  — Analyse minimale",
-        "desc": "Analyse la plus légère (a uniquement)",
-        "commands": "a\nafl\n",
+        "desc": "Analyse minimale des fonctions (aa)",
+        "commands": "aa\nafl\n",
     },
 
     "aa": {
@@ -36,8 +36,7 @@ R2_ANALYSIS_LEVELS = {
     "all_anal": {
         "label": "Toutes les commandes d'analyse",
         "desc": "aa + aaa + aac + aar + afr + aae + aaft + aao + aav + aas + aat + aap + aau + ad",
-        "commands": """ab
-aa
+        "commands": """aa
 aaa
 aac
 aar
@@ -60,59 +59,50 @@ R2_EXTRACTION_BLOCKS = {
     "functions": {
         "label": "Fonctions uniquement",
         "desc": "Liste des fonctions (afl, aflq, afij)",
-        "commands": r"""e log.dest=FILE
-afl > __OUTDIR__/__NAME__functions.txt
+        "commands": r"""afl > __OUTDIR__/__NAME__functions.txt
 aflq > __OUTDIR__/__NAME__func_list.txt
 aflq~? > __OUTDIR__/__NAME__func_count.txt
 afl~sym\. > __OUTDIR__/__NAME__sym_functions.txt
 afl~sub\. > __OUTDIR__/__NAME__sub_functions.txt
 aflj > __OUTDIR__/__NAME__functions_json.txt
-afij > __OUTDIR__/__NAME__functions_info.json
-e log.dest=stderr
+aflj > __OUTDIR__/__NAME__functions_info.json
 """,
     },
     "strings": {
         "label": "Strings uniquement",
         "desc": "Extraction de strings (iz, izz, izq, izzq)",
-        "commands": """e log.dest=FILE
-izz > __OUTDIR__/__NAME__strings.txt
+        "commands": """izz > __OUTDIR__/__NAME__strings.txt
 iz > __OUTDIR__/__NAME__data_strings.txt
 izq > __OUTDIR__/__NAME__data_strings_raw.txt
 izzq > __OUTDIR__/__NAME__all_strings_raw.txt
-e log.dest=stderr
 """,
     },
     "imports_exports": {
         "label": "Imports / Exports",
         "desc": "Imports, exports, symboles, rélocations",
-        "commands": """e log.dest=FILE
-ii > __OUTDIR__/__NAME__imports.txt
+        "commands": """ii > __OUTDIR__/__NAME__imports.txt
 iiq > __OUTDIR__/__NAME__imports_raw.txt
 iE > __OUTDIR__/__NAME__exports.txt
 iEq > __OUTDIR__/__NAME__exports_raw.txt
 is > __OUTDIR__/__NAME__symbols.txt
 isq > __OUTDIR__/__NAME__symbols_raw.txt
-isq~FUNC > __OUTDIR__/__NAME__func_symbols.txt
+is~FUNC > __OUTDIR__/__NAME__func_symbols.txt
 ir > __OUTDIR__/__NAME__relocations.txt
-e log.dest=stderr
 """,
     },
     "xrefs": {
         "label": "Cross-références",
         "desc": "Xrefs vers imports, depuis fonctions, compteurs",
-        "commands": """e log.dest=FILE
-axt sym.imp.* > __OUTDIR__/__NAME__xrefs_to_imports.txt
-axt * > __OUTDIR__/__NAME__xrefs_all.txt
-axf * > __OUTDIR__/__NAME__xrefs_from.txt
-axt *~? > __OUTDIR__/__NAME__xrefs_count.txt
-e log.dest=stderr
+        "commands": """axt @@ sym.imp.* > __OUTDIR__/__NAME__xrefs_to_imports.txt
+axl > __OUTDIR__/__NAME__xrefs_all.txt
+axf @@f > __OUTDIR__/__NAME__xrefs_from.txt
+axlc > __OUTDIR__/__NAME__xrefs_count.txt
 """,
     },
     "binary_info": {
         "label": "Info binaire (headers, sections, arch)",
         "desc": "Headers, sections, entrypoints, mémoire, architecture",
-        "commands": """e log.dest=FILE
-iS > __OUTDIR__/__NAME__sections.txt
+        "commands": """iS > __OUTDIR__/__NAME__sections.txt
 iI > __OUTDIR__/__NAME__binary_info.txt
 ie > __OUTDIR__/__NAME__entrypoints.txt
 iH > __OUTDIR__/__NAME__headers.txt
@@ -120,24 +110,20 @@ im > __OUTDIR__/__NAME__memory_map.txt
 ia > __OUTDIR__/__NAME__arch_info.txt
 il > __OUTDIR__/__NAME__libraries.txt
 f > __OUTDIR__/__NAME__flags.txt
-e log.dest=stderr
 """,
     },
     "classes": {
         "label": "Classes (C++ / Obj-C)",
         "desc": "Classes, méthodes, hiérarchies",
-        "commands": """e log.dest=FILE
-ic > __OUTDIR__/__NAME__classes.txt
+        "commands": """ic > __OUTDIR__/__NAME__classes.txt
 icq > __OUTDIR__/__NAME__classes_raw.txt
 icj > __OUTDIR__/__NAME__classes_json.txt
-e log.dest=stderr
 """,
     },
     "security": {
         "label": "Sécurité (crypto, tokens, secrets)",
         "desc": "AES, RSA, SHA, MD5, HMAC, clés, mots de passe, tokens, JWT, certificats",
-        "commands": """e log.dest=FILE
-/w AES > __OUTDIR__/__NAME__crypto_aes.txt
+        "commands": """/w AES > __OUTDIR__/__NAME__crypto_aes.txt
 /w RSA > __OUTDIR__/__NAME__crypto_rsa.txt
 /w SHA > __OUTDIR__/__NAME__crypto_sha.txt
 /w MD5 > __OUTDIR__/__NAME__crypto_md5.txt
@@ -154,14 +140,12 @@ e log.dest=stderr
 /w encryption > __OUTDIR__/__NAME__encryption.txt
 /w decrypt > __OUTDIR__/__NAME__decryption.txt
 /w encrypt > __OUTDIR__/__NAME__encrypt_refs.txt
-e log.dest=stderr
 """,
     },
     "network": {
         "label": "Réseau (URLs, endpoints, auth)",
         "desc": "HTTP(S), WebSocket, Firebase, APIs, cookies, bearer, JWT, autorisations",
-        "commands": """e log.dest=FILE
-/w http > __OUTDIR__/__NAME__urls.txt
+        "commands": """/w http > __OUTDIR__/__NAME__urls.txt
 /w file:// > __OUTDIR__/__NAME__file_urls.txt
 /w https:// > __OUTDIR__/__NAME__https_urls.txt
 /w http:// > __OUTDIR__/__NAME__http_urls.txt
@@ -174,14 +158,12 @@ e log.dest=stderr
 /w jwt > __OUTDIR__/__NAME__jwt.txt
 /w Cookie > __OUTDIR__/__NAME__cookies.txt
 /w Set-Cookie > __OUTDIR__/__NAME__set_cookies.txt
-e log.dest=stderr
 """,
     },
     "android": {
         "label": "Android (JNI, paths, dex)",
         "desc": "JNI_OnLoad, Java_, registerNatives, paths Android, dex, SharedPreferences",
-        "commands": """e log.dest=FILE
-/w JNI_OnLoad > __OUTDIR__/__NAME__jni.txt
+        "commands": """/w JNI_OnLoad > __OUTDIR__/__NAME__jni.txt
 /w Java_ > __OUTDIR__/__NAME__jni_methods.txt
 /w registerNatives > __OUTDIR__/__NAME__register_natives.txt
 /w /proc/ > __OUTDIR__/__NAME__proc_paths.txt
@@ -194,26 +176,21 @@ e log.dest=stderr
 /w classes.dex > __OUTDIR__/__NAME__dex_files.txt
 /w /content/ > __OUTDIR__/__NAME__content_uris.txt
 /w SharedPreferences > __OUTDIR__/__NAME__shared_prefs.txt
-e log.dest=stderr
 """,
     },
     "databases": {
         "label": "Bases de données",
         "desc": "SQLite, .db, .sqlite, protobuf",
-        "commands": """e log.dest=FILE
-/w SQLite > __OUTDIR__/__NAME__sqlite.txt
+        "commands": """/w SQLite > __OUTDIR__/__NAME__sqlite.txt
 /w .db > __OUTDIR__/__NAME__db_refs.txt
 /w .sqlite > __OUTDIR__/__NAME__sqlite_refs.txt
 /w protobuf > __OUTDIR__/__NAME__protobuf.txt
-e log.dest=stderr
 """,
     },
     "hooks": {
         "label": "Hooks (x86 inline hooks)",
         "desc": "Détection de hooks x86 (pattern ff4889e7)",
-        "commands": """e log.dest=FILE
-/x ff4889e7 > __OUTDIR__/__NAME__x86_hooks.txt
-e log.dest=stderr
+        "commands": """/x ff4889e7 > __OUTDIR__/__NAME__x86_hooks.txt
 """,
     },
 }
@@ -246,7 +223,7 @@ R2_PRESETS = {
     },
     "minimal": {
         "label": "Analyse minimale (a + fonctions)",
-        "desc": "a uniquement + liste des fonctions",
+        "desc": "aa + liste des fonctions",
         "analysis_key": "a",
         "extraction_keys": ["functions"],
         "use_write": False,
@@ -262,164 +239,46 @@ R2_PRESETS = {
 
 _R2_BATCH_JOBS_ENV = os.getenv("R2_BATCH_JOBS", "")
 
-R2_SCRIPT_TEMPLATE = r"""e scr.color=0
-e scr.utf8=0
-e anal.strings=true
-e bin.cache=true
-e asm.bytes=false
-e asm.lines=false
-e asm.offset=true
-e log.dest=FILE
-
-ab
-
-aa
-
-aaa
-
-aac
-
-aar
-
-afr
-
-aae
-
-aaft
-
-aao
-
-aav
-
-aas
-
-aat
-
-aap
-
-aau
-
-ad@e:anal.depth=8
-
-afl
-
-e log.dest=stderr
-
-afl > __OUTDIR__/__NAME__functions.txt
-izz > __OUTDIR__/__NAME__strings.txt
-iS > __OUTDIR__/__NAME__sections.txt
-ii > __OUTDIR__/__NAME__imports.txt
-iE > __OUTDIR__/__NAME__exports.txt
-is > __OUTDIR__/__NAME__symbols.txt
-ir > __OUTDIR__/__NAME__relocations.txt
-ic > __OUTDIR__/__NAME__classes.txt
-iI > __OUTDIR__/__NAME__binary_info.txt
-ie > __OUTDIR__/__NAME__entrypoints.txt
-iH > __OUTDIR__/__NAME__headers.txt
-im > __OUTDIR__/__NAME__memory_map.txt
-ia > __OUTDIR__/__NAME__arch_info.txt
-il > __OUTDIR__/__NAME__libraries.txt
-iz > __OUTDIR__/__NAME__data_strings.txt
-izq > __OUTDIR__/__NAME__data_strings_raw.txt
-izzq > __OUTDIR__/__NAME__all_strings_raw.txt
-iEq > __OUTDIR__/__NAME__exports_raw.txt
-iiq > __OUTDIR__/__NAME__imports_raw.txt
-isq > __OUTDIR__/__NAME__symbols_raw.txt
-f > __OUTDIR__/__NAME__flags.txt
-aflq > __OUTDIR__/__NAME__func_list.txt
-aflq~? > __OUTDIR__/__NAME__func_count.txt
-afl~sym\. > __OUTDIR__/__NAME__sym_functions.txt
-afl~sub\. > __OUTDIR__/__NAME__sub_functions.txt
-isq~FUNC > __OUTDIR__/__NAME__func_symbols.txt
-axt sym.imp.* > __OUTDIR__/__NAME__xrefs_to_imports.txt
-axt * > __OUTDIR__/__NAME__xrefs_all.txt
-axf * > __OUTDIR__/__NAME__xrefs_from.txt
-axt *~? > __OUTDIR__/__NAME__xrefs_count.txt
-aflj > __OUTDIR__/__NAME__functions_json.txt
-afij > __OUTDIR__/__NAME__functions_info.json
-icq > __OUTDIR__/__NAME__classes_raw.txt
-icj > __OUTDIR__/__NAME__classes_json.txt
-
-/w http > __OUTDIR__/__NAME__urls.txt
-/w file:// > __OUTDIR__/__NAME__file_urls.txt
-/w /content/ > __OUTDIR__/__NAME__content_uris.txt
-/w JNI_OnLoad > __OUTDIR__/__NAME__jni.txt
-/w Java_ > __OUTDIR__/__NAME__jni_methods.txt
-/w registerNatives > __OUTDIR__/__NAME__register_natives.txt
-/w /proc/ > __OUTDIR__/__NAME__proc_paths.txt
-/w /data/ > __OUTDIR__/__NAME__data_paths.txt
-/w /sdcard/ > __OUTDIR__/__NAME__sdcard_paths.txt
-/w /system/ > __OUTDIR__/__NAME__system_paths.txt
-/w AES > __OUTDIR__/__NAME__crypto_aes.txt
-/w RSA > __OUTDIR__/__NAME__crypto_rsa.txt
-/w SHA > __OUTDIR__/__NAME__crypto_sha.txt
-/w MD5 > __OUTDIR__/__NAME__crypto_md5.txt
-/w HMAC > __OUTDIR__/__NAME__crypto_hmac.txt
-/w key= > __OUTDIR__/__NAME__key_assignments.txt
-/w password > __OUTDIR__/__NAME__passwords.txt
-/w secret > __OUTDIR__/__NAME__secrets.txt
-/w token > __OUTDIR__/__NAME__tokens.txt
-/w api_key > __OUTDIR__/__NAME__api_keys.txt
-/w .so > __OUTDIR__/__NAME__so_refs.txt
-/w lib/ > __OUTDIR__/__NAME__lib_paths.txt
-/w dex > __OUTDIR__/__NAME__dex_refs.txt
-/w classes.dex > __OUTDIR__/__NAME__dex_files.txt
-/x ff4889e7 > __OUTDIR__/__NAME__x86_hooks.txt
-/w SQLite > __OUTDIR__/__NAME__sqlite.txt
-/w .db > __OUTDIR__/__NAME__db_refs.txt
-/w .sqlite > __OUTDIR__/__NAME__sqlite_refs.txt
-/w SharedPreferences > __OUTDIR__/__NAME__shared_prefs.txt
-/w encryption > __OUTDIR__/__NAME__encryption.txt
-/w decrypt > __OUTDIR__/__NAME__decryption.txt
-/w encrypt > __OUTDIR__/__NAME__encrypt_refs.txt
-/w BASE64 > __OUTDIR__/__NAME__base64.txt
-/w protobuf > __OUTDIR__/__NAME__protobuf.txt
-/w https:// > __OUTDIR__/__NAME__https_urls.txt
-/w http:// > __OUTDIR__/__NAME__http_urls.txt
-/w ws:// > __OUTDIR__/__NAME__ws_urls.txt
-/w wss:// > __OUTDIR__/__NAME__wss_urls.txt
-/w firebase > __OUTDIR__/__NAME__firebase.txt
-/w googleapis > __OUTDIR__/__NAME__google_apis.txt
-/w Authorization > __OUTDIR__/__NAME__auth_headers.txt
-/w Bearer > __OUTDIR__/__NAME__bearer_tokens.txt
-/w jwt > __OUTDIR__/__NAME__jwt.txt
-/w private_key > __OUTDIR__/__NAME__private_keys.txt
-/w public_key > __OUTDIR__/__NAME__public_keys.txt
-/w BEGIN CERTIFICATE > __OUTDIR__/__NAME__certificates.txt
-/w Cookie > __OUTDIR__/__NAME__cookies.txt
-/w Set-Cookie > __OUTDIR__/__NAME__set_cookies.txt
-q
-"""
-
 R2_DISASM_TEMPLATE = r"""e scr.color=0
 e scr.utf8=0
 e asm.bytes=true
 e asm.lines=true
-e asm.offset=true
 e asm.cmt.right=true
 e asm.cmt.fold=true
 e anal.strings=true
 e bin.cache=true
 aaa
-e log.dest=FILE
 __FUNCS_BLOCK__
-e log.dest=stderr
 q
 """
 
 R2_BATCH_TEMPLATE = r"""#!/usr/bin/env bash
 
 OUTDIR=__OUTDIR__
-mkdir -p "$OUTDIR"
+mkdir -p "$OUTDIR" || exit 1
+cd "$OUTDIR" || exit 1
 FAILURES=$(mktemp "$OUTDIR/.r2_failures.XXXXXX")
 trap 'rm -f "$FAILURES"' EXIT
 
-MAXJOBS="${R2_BATCH_JOBS:-$(nproc 2>/dev/null || echo 2)}"
+DEFAULTJOBS=4
+case "${TERMUX_VERSION:-}:${PREFIX:-}" in ?*:*|*:*/com.termux/*) DEFAULTJOBS=1 ;; esac
+MAXJOBS="${R2_BATCH_JOBS:-$DEFAULTJOBS}"
 case "$MAXJOBS" in ''|*[!0-9]*) MAXJOBS=2 ;; esac
 [ "$MAXJOBS" -lt 1 ] && MAXJOBS=1
 
 run_one() {
-    "$@" || echo "FAILED: $*" >> "$FAILURES"
+    local errfile status
+    errfile=$(mktemp "$OUTDIR/.r2_stderr.XXXXXX") || {
+        echo "FAILED: cannot create stderr log" >> "$FAILURES"
+        return
+    }
+    status=0
+    "$@" 2> "$errfile" || status=$?
+    cat "$errfile" >&2
+    if [ "$status" -ne 0 ] || grep -Eiq '^(ERROR|ERR|Invalid command)[: ]' "$errfile"; then
+        echo "FAILED: $*" >> "$FAILURES"
+    fi
+    rm -f "$errfile"
 }
 
 JOBCOUNT=0
@@ -427,7 +286,7 @@ __SCRIPTS_BLOCK__
 
 wait
 if [ -s "$FAILURES" ]; then
-    echo "[ERR] Radare2 analysis had failures (see $OUTDIR/.r2_failures): $OUTDIR/"
+    echo "[ERR] Radare2 analysis had failures: $OUTDIR/"
     cat "$FAILURES" >&2
     exit 1
 fi
@@ -451,14 +310,11 @@ def _targets(so_list):
     return result
 
 def _render_script(template, outdir, name):
-    outdir = os.path.abspath(outdir)
-    if any(c in outdir for c in '\r\n\x00'):
-        raise ValueError('Invalid output directory')
     def replace(match):
-        path = os.path.join(outdir, name + match.group(1)).replace('\\', '/')
-        if any(c in path for c in '\"`$;|'):
-            raise ValueError('Output path contains unsupported Radare2 metacharacters')
-        return '"' + path + '"'
+        filename = name + match.group(1)
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+', filename):
+            raise ValueError('Invalid Radare2 output filename')
+        return filename
     return re.sub(r'__OUTDIR__/__NAME__([^\s]+)', replace, template)
 
 def _timeout():
@@ -474,7 +330,7 @@ def _r2_max_workers(count):
     except ValueError:
         workers = 0
     if workers <= 0:
-        workers = min(4, os.cpu_count() or 1)
+        workers = 1 if os.getenv('TERMUX_VERSION') or 'com.termux' in os.getenv('PREFIX', '') else min(4, os.cpu_count() or 1)
     return max(1, min(count, workers))
 
 _R2_TIMEOUT_ENV = os.getenv("R2_TIMEOUT", "600")
@@ -509,7 +365,6 @@ def _build_r2_script(analysis_key, extraction_keys, use_write=False,
         parts.append("e asm.lines=true\n")
     else:
         parts.append("e asm.lines=false\n")
-    parts.append("e asm.offset=true\n")
 
     if analysis_key and analysis_key in R2_ANALYSIS_LEVELS:
         parts.append("\n")
@@ -528,7 +383,6 @@ def _build_write_script(patch_mode, patch_data, extraction_keys=None):
     parts = [R2_HEADER]
     parts.append("e asm.bytes=true\n")
     parts.append("e asm.lines=true\n")
-    parts.append("e asm.offset=true\n")
     parts.append("e asm.cmt.right=true\n")
 
     parts.append("\n__PATCH_BLOCK__\n")
@@ -551,7 +405,7 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
     batch_lines = []
     for so in so_list:
         name = so["name"].removesuffix(".so") + "_"
-        script_content = _render_script(R2_SCRIPT_TEMPLATE, r2_out, name)
+        script_content = _render_script(_build_r2_script("all_anal", list(R2_EXTRACTION_BLOCKS)), r2_out, name)
         script_path = os.path.join(r2_out, f"r2_{so['name']}.r2")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
@@ -571,6 +425,7 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
         disasm_path = os.path.join(r2_out, f"r2_{so['name']}_disasm.r2")
         with open(disasm_path, "w", encoding="utf-8") as f:
             f.write(disasm_content)
+        batch_lines.append(_batch_line('r2 -q -i ' + shlex.quote(disasm_path), abs_so))
         if log_mgr:
             log_mgr.add(f"Generated r2 disasm script: r2_{so['name']}_disasm.r2", "success")
             log_mgr.step()
@@ -596,6 +451,7 @@ def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name, use_
             cmd,
             capture_output=True, text=True, errors='replace', timeout=timeout,
             stdin=subprocess.DEVNULL,
+            cwd=os.path.dirname(os.path.abspath(script_path)),
         )
         if result.returncode == 0 and not re.search(r'(?im)^(?:ERROR|ERR|Invalid command)[: ]', result.stderr):
             if log_mgr:
@@ -639,9 +495,7 @@ def run_r2_scripts(so_list, outdir, log_mgr=None):
     with concurrent.futures.ThreadPoolExecutor(max_workers=_r2_max_workers(len(so_list))) as pool:
         for so in so_list:
             name = so["name"].removesuffix(".so") + "_"
-            script_content = (R2_SCRIPT_TEMPLATE
-                              .replace("__OUTDIR__", r2_out)
-                              .replace("__NAME__", name))
+            script_content = _render_script(_build_r2_script("all_anal", list(R2_EXTRACTION_BLOCKS)), r2_out, name)
             script_path = os.path.join(r2_out, f"r2_{so['name']}.r2")
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(script_content)

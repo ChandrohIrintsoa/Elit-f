@@ -12,6 +12,6 @@ std::string CallLeafRuntimeInstr::ToString()
 {
 	const auto& name = GetThreadOffsetName(thrOffset);
 	const auto info = GetThreadLeafFunction(thrOffset);
-	return std::format("CallRuntime_{}({}) -> {}", name, info->params, info->returnType);
+	return elitf_format::format("CallRuntime_{}({}) -> {}", name, info->params, info->returnType);
 }
 

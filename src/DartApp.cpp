@@ -6,7 +6,7 @@ PRAGMA_WARNING(push, 0)
 #include <vm/stub_code.h>
 #include <vm/heap/safepoint.h>
 PRAGMA_WARNING(pop)
-#include <format>
+#include "Format.h"
 #include <iostream>
 
 DartApp::DartApp(const char* path) : ppool(NULL), nativeLib(0xdeadead), throwStubAddr(0)
@@ -353,7 +353,7 @@ DartFunction* DartApp::addFunctionNoCheck(const dart::Function& func)
 	else {
 		cls = classes[cid];
 		if (cls == NULL) {
-			auto msg = std::format("found invalid class id: {}", cid);
+			auto msg = elitf_format::format("found invalid class id: {}", cid);
 			throw std::runtime_error(msg);
 		}
 	}
@@ -454,10 +454,10 @@ void DartApp::findFunctionInHeap()
 			if (!obj.IsType()) {
 #ifdef HAS_RECORD_TYPE
 				if (!obj.IsRecordType()) {
-					std::cerr << std::format("TestType is not for Type or RecordType, but for {}\n", classes[obj.GetClassId()]->Name());
+					std::cerr << elitf_format::format("TestType is not for Type or RecordType, but for {}\n", classes[obj.GetClassId()]->Name());
 				}
 #else
-				std::cerr << std::format("TestType is not for Type, but for {}\n", classes[obj.GetClassId()]->Name());
+				std::cerr << elitf_format::format("TestType is not for Type, but for {}\n", classes[obj.GetClassId()]->Name());
 #endif
 			}
 			if (stubs.contains(ep_offset))
@@ -482,7 +482,7 @@ void DartApp::findFunctionInHeap()
 			}
 		}
 		else {
-			auto msg = std::format("[!] unknown code at: {:#x}, {}\n", ep_offset, obj.ToCString());
+			auto msg = elitf_format::format("[!] unknown code at: {:#x}, {}\n", ep_offset, obj.ToCString());
 			std::cout << msg;
 			std::cout << "  !!! Unhandle case. Please report with your APK\n";
 		}

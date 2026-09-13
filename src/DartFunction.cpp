@@ -203,7 +203,7 @@ std::string DartFunction::ToCallStatement(const std::vector<std::shared_ptr<VarI
                         callFn = args[0]->CallArgName() + "." + Name();
                 }
         }
-        return std::format("{}({})", callFn.c_str(), callArgs.c_str());
+        return elitf_format::format("{}({})", callFn.c_str(), callArgs.c_str());
 }
 
 void DartFunction::PrintHead(std::ostream& of) const
@@ -269,7 +269,7 @@ void DartFunction::PrintHead(std::ostream& of) const
         }
         of << " {\n";
 
-        of << std::format("    // ** addr: {:#x}, size: {:#x}\n", ep_addr, size);
+        of << elitf_format::format("    // ** addr: {:#x}, size: {:#x}\n", ep_addr, size);
 }
 
 void DartFunction::PrintFoot(std::ostream& of) const
