@@ -10,6 +10,42 @@ GIT_CMD = "git"
 CMAKE_CMD = os.getenv('CMAKE', 'cmake')
 NINJA_CMD = os.getenv('NINJA', 'ninja')
 
+REQUIRED_BUILD_TOOLS = (
+    (GIT_CMD, 'git'),
+    (CMAKE_CMD, 'cmake'),
+    (NINJA_CMD, 'ninja'),
+)
+
+TERMUX_INSTALL_HINT = (
+    "pkg install git cmake ninja clang python pkg-config"
+    "  &&  pip install pyelftools requests rich"
+)
+GENERIC_INSTALL_HINT = (
+    "Install: git, cmake, ninja, a C++20 compiler (clang/gcc), python3"
+    "  then:  pip install -r requirements.txt"
+)
+
+def check_build_tools():
+    missing = []
+    for cmd, label in REQUIRED_BUILD_TOOLS:
+        if shutil.which(cmd) is None:
+            missing.append((cmd, label))
+    if missing:
+        hint = TERMUX_INSTALL_HINT if _is_termux_env() else GENERIC_INSTALL_HINT
+        names = ', '.join(label for _, label in missing)
+        raise RuntimeError(
+            f"Missing required build tool(s): {names}. "
+            f"Resolve with: {hint}"
+        )
+
+def _is_termux_env():
+    if os.environ.get('TERMUX_VERSION'):
+        return True
+    if os.path.isdir('/data/data/com.termux'):
+        return True
+    prefix = os.environ.get('PREFIX', '')
+    return 'com.termux' in prefix
+
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CMAKE_TEMPLATE_FILE = os.path.join(SCRIPT_DIR, 'scripts', 'CMakeLists.txt.dartvm')
 CREATE_SRCLIST_FILE = os.path.join(SCRIPT_DIR, 'scripts', 'dartvm_create_srclist.py')
@@ -144,6 +180,7 @@ def cmake_dart(info: DartLibInfo, target_dir: str):
     subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=True)
 
 def fetch_and_build(info: DartLibInfo):
+    check_build_tools()
     outdir = checkout_dart(info)
     cmake_dart(info, outdir)
 

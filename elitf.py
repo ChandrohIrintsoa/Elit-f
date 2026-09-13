@@ -294,10 +294,21 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
             try:
                 from dartvm_fetch_build import fetch_and_build
                 fetch_and_build(elitf_input.dart_info)
-            except (subprocess.CalledProcessError, OSError, FileNotFoundError) as e:
+            except FileNotFoundError as e:
+                missing = os.path.basename(str(getattr(e, 'filename', None) or ''))
+                hint = (
+                    f"Required build tool not found: '{missing or 'unknown'}'. "
+                    "Install git, cmake and ninja (Termux: pkg install git cmake ninja clang; "
+                    "other: use your package manager), then retry."
+                )
+                raise RuntimeError(
+                    f"Failed to fetch/build Dart VM {elitf_input.dart_info.version}: {hint}"
+                ) from e
+            except (subprocess.CalledProcessError, OSError) as e:
                 raise RuntimeError(
                     f"Failed to fetch/build Dart VM {elitf_input.dart_info.version}: {e}. "
-                    "Check network connectivity and that 'git' is installed.") from e
+                    "Check network connectivity and that 'git', 'cmake' and 'ninja' are installed."
+                ) from e
             if log_mgr:
                 log_mgr.add(f"Dart VM {elitf_input.dart_info.version} built successfully", "success")
                 log_mgr.step()
@@ -532,14 +543,22 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
                 "\n".join(f"  - {name}  [dim]({cmd})[/]" for name, cmd in missing),
                 title="[bold bright_yellow]Dépendances manquantes[/]",
                 border_style=_Style(color="bright_yellow")))
-            ui.console.print("[dim]Installez-les avant de lancer une analyse :[/]")
-            ui.console.print("[dim]  pkg install python && pip install pyelftools requests rich[/]")
+            ui.console.print("[dim]Dépendances Python :[/]")
+            ui.console.print("[dim]  pip install pyelftools requests rich[/]")
+            ui.console.print("[dim]Outils système requis pour le build (Dart VM) :[/]")
+            ui.console.print("[dim]  Termux: pkg install git cmake ninja clang python pkg-config[/]")
+            ui.console.print("[dim]  Debian: sudo apt install git cmake ninja-build clang python3-pip[/]")
+            ui.console.print("[dim]  macOS : brew install git cmake ninja llvm[/]")
             ui.console.print()
         else:
             print("\nDépendances manquantes:")
             for name, cmd in missing:
                 print(f"  - {name} ({cmd})")
-            print("Installez-les: pkg install python && pip install pyelftools requests rich\n")
+            print("Installez les dépendances Python: pip install pyelftools requests rich")
+            print("Outils système requis pour le build (Dart VM):")
+            print("  Termux: pkg install git cmake ninja clang python pkg-config")
+            print("  Debian: sudo apt install git cmake ninja-build clang python3-pip")
+            print("  macOS : brew install git cmake ninja llvm\n")
 
     while True:
         ui._clear()

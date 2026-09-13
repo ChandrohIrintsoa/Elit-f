@@ -210,17 +210,37 @@ class ElitfUI:
             print(strip_rich_tags(msg))
 
     def _print_error(self, e):
+        msg = str(e)
+        is_missing_tool = (
+            isinstance(e, FileNotFoundError)
+            or "No such file or directory" in msg
+            or "not found" in msg.lower()
+            or "Missing required build tool" in msg
+        )
         if self.console:
             self.console.print()
             self.console.print(Panel(f"[bold red]Erreur: {type(e).__name__}: {e}[/]",
                                      title="[bright_red]Échec de l'opération[/]",
                                      border_style=Style(color="red")))
-            self.console.print("[dim]Vérifiez que toutes les dépendances sont installées :[/]")
-            self.console.print("[dim]  pkg install python  &&  pip install pyelftools requests rich[/]")
+            if is_missing_tool:
+                self.console.print("[dim]Outils système requis pour le build :[/]")
+                self.console.print("[dim]  Termux  : pkg install git cmake ninja clang python pkg-config[/]")
+                self.console.print("[dim]             && pip install pyelftools requests rich[/]")
+                self.console.print("[dim]  Debian  : sudo apt install git cmake ninja-build clang python3-pip[/]")
+                self.console.print("[dim]  macOS   : brew install git cmake ninja llvm[/]")
+            else:
+                self.console.print("[dim]Dépendances Python :[/]")
+                self.console.print("[dim]  pip install pyelftools requests rich[/]")
         else:
             print(f"\nERREUR: {type(e).__name__}: {e}")
-            print("Vérifiez que toutes les dépendances sont installées:")
-            print("  pkg install python && pip install pyelftools requests rich")
+            if is_missing_tool:
+                print("Outils système requis pour le build:")
+                print("  Termux: pkg install git cmake ninja clang python pkg-config && pip install pyelftools requests rich")
+                print("  Debian: sudo apt install git cmake ninja-build clang python3-pip")
+                print("  macOS : brew install git cmake ninja llvm")
+            else:
+                print("Dépendances Python:")
+                print("  pip install pyelftools requests rich")
 
     def _clear(self):
         os.system('cls' if platform.system() == 'Windows' else 'clear')
