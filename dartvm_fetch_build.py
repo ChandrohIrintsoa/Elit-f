@@ -1,4 +1,5 @@
 import re
+import glob
 import mmap
 import os
 import shutil
@@ -37,6 +38,8 @@ def _tool_search_dirs():
         dirs.append(os.path.join(prefix, 'bin'))
     dirs.append(TERMUX_USR_BIN)
     dirs.append(TERMUX_HOME_LOCAL_BIN)
+    for pattern in ('/data/data/*/files/usr/bin', '/data/data/*/files/home/.local/bin'):
+        dirs.extend(sorted(glob.glob(pattern)))
     dirs.append(os.path.expanduser('~/.local/bin'))
     try:
         import sysconfig
@@ -91,20 +94,35 @@ def _rmtree_rw(path, handler):
     except TypeError:
         shutil.rmtree(path, onexc=handler)
 
+def _candidate_names(label):
+    if label == 'git':
+        return (os.getenv('GIT') or 'git',)
+    if label == 'cmake':
+        return (os.getenv('CMAKE') or 'cmake', 'cmake3')
+    if label == 'ninja':
+        return (os.getenv('NINJA') or 'ninja',)
+    return (label,)
+
+def _blocked_tool_paths(labels, dirs):
+    blocked = []
+    for label in labels:
+        for name in _candidate_names(label):
+            if not name:
+                continue
+            for d in dirs:
+                if not d or not os.path.isdir(d):
+                    continue
+                p = os.path.join(d, name)
+                if os.path.isfile(p) and not os.access(p, os.X_OK) and p not in blocked:
+                    blocked.append(p)
+    return blocked
+
 def resolve_build_tools():
     global GIT_CMD, CMAKE_CMD, NINJA_CMD
     dirs = _tool_search_dirs()
-    cmake_names = ('cmake', 'cmake3')
-    ninja_names = ('ninja',)
-    env_cmake = os.getenv('CMAKE')
-    env_ninja = os.getenv('NINJA')
-    if env_cmake:
-        cmake_names = (env_cmake,)
-    if env_ninja:
-        ninja_names = (env_ninja,)
-    git_path = _find_tool((os.getenv('GIT') or 'git',), dirs)
-    cmake_path = _find_tool(cmake_names, dirs)
-    ninja_path = _find_tool(ninja_names, dirs)
+    git_path = _find_tool(_candidate_names('git'), dirs)
+    cmake_path = _find_tool(_candidate_names('cmake'), dirs)
+    ninja_path = _find_tool(_candidate_names('ninja'), dirs)
     if git_path:
         GIT_CMD = git_path
     if cmake_path:
@@ -113,21 +131,85 @@ def resolve_build_tools():
         NINJA_CMD = ninja_path
     return {'git': git_path, 'cmake': cmake_path, 'ninja': ninja_path}
 
+def _autoinstall_disabled():
+    return os.getenv('ELITF_AUTOINSTALL', '').strip().lower() in ('0', 'off', 'false', 'no')
+
+def _pkg_binary():
+    dirs = []
+    prefix = os.environ.get('PREFIX', '')
+    if prefix:
+        dirs.append(os.path.join(prefix, 'bin'))
+    dirs.append(TERMUX_USR_BIN)
+    for d in dirs:
+        p = os.path.join(d, 'pkg')
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return shutil.which('pkg')
+
+def _pkg_install(names):
+    pkg = _pkg_binary()
+    if not pkg:
+        return False, 'pkg not found in $PREFIX/bin'
+    install_cmd = [pkg, 'install', '-y'] + list(names)
+    try:
+        proc = subprocess.run(install_cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            subprocess.run([pkg, 'update', '-y'], capture_output=True, text=True)
+            proc = subprocess.run(install_cmd, capture_output=True, text=True)
+    except OSError as e:
+        return False, str(e)
+    if proc.returncode == 0:
+        return True, 'ok'
+    out = (proc.stdout or '') + (proc.stderr or '')
+    tail = [line.strip() for line in out.splitlines() if line.strip()]
+    return False, (tail[-1] if tail else f'exit code {proc.returncode}')[:200]
+
+def _missing_tools(tools):
+    return [label for label in ('git', 'cmake', 'ninja') if tools[label] is None]
+
 def check_build_tools():
     tools = resolve_build_tools()
-    missing = [label for label in ('git', 'cmake', 'ninja') if tools[label] is None]
+    missing = _missing_tools(tools)
+    install_note = ''
+    if missing and _is_termux_env() and not _autoinstall_disabled():
+        pkg_names = list(missing)
+        for extra in ('clang', 'pkg-config'):
+            if not shutil.which(extra) and extra not in pkg_names:
+                pkg_names.append(extra)
+        ok, detail = _pkg_install(pkg_names)
+        if ok:
+            tools = resolve_build_tools()
+            missing = _missing_tools(tools)
+        else:
+            install_note = (
+                f"Automatic install via pkg failed: {detail}. "
+                "Run the pkg command below manually, then retry "
+                "(set ELITF_AUTOINSTALL=0 to disable auto-install). "
+            )
     if missing:
-        hint = TERMUX_INSTALL_HINT if _is_termux_env() else GENERIC_INSTALL_HINT
+        termux = _is_termux_env()
+        hint = TERMUX_INSTALL_HINT if termux else GENERIC_INSTALL_HINT
         names = ', '.join(missing)
         path_note = (
             'If already installed, close and reopen Termux '
             'or run: export PATH="$PREFIX/bin:$PATH"'
-            if _is_termux_env() else
+            if termux else
             'If already installed, verify their directory is in PATH'
         )
+        dirs = _tool_search_dirs()
+        parts = [
+            f"PATH=\"{os.environ.get('PATH', '')}\"",
+            f"PREFIX=\"{os.environ.get('PREFIX', '')}\"",
+            'searched: ' + (', '.join(dirs) if dirs else 'none'),
+        ]
+        blocked = _blocked_tool_paths(missing, dirs)
+        if blocked:
+            parts.append('present but not executable: ' + ', '.join(blocked))
         raise RuntimeError(
             f"Missing required build tool(s): {names}. "
-            f"Resolve with: {hint}. {path_note}."
+            f"{install_note}"
+            f"Resolve with: {hint}. {path_note}. "
+            f"Diagnostic [{'; '.join(parts)}]"
         )
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
