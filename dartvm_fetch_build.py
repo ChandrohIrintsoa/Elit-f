@@ -12,7 +12,7 @@ CMAKE_CMD = os.getenv('CMAKE', 'cmake')
 NINJA_CMD = os.getenv('NINJA', 'ninja')
 
 TERMUX_INSTALL_HINT = (
-    "pkg install git cmake ninja clang python pkg-config"
+    "pkg install git cmake ninja clang python pkg-config capstone"
     "  &&  pip install pyelftools requests rich"
 )
 GENERIC_INSTALL_HINT = (
@@ -166,6 +166,58 @@ def _pkg_install(names):
 
 def _missing_tools(tools):
     return [label for label in ('git', 'cmake', 'ninja') if tools[label] is None]
+
+def _termux_include_dirs():
+    dirs = []
+    prefix = os.environ.get('PREFIX', '')
+    if prefix:
+        dirs.append(os.path.join(prefix, 'include'))
+    dirs.append('/data/data/com.termux/files/usr/include')
+    return dirs
+
+def _termux_lib_dirs():
+    dirs = []
+    prefix = os.environ.get('PREFIX', '')
+    if prefix:
+        dirs.append(os.path.join(prefix, 'lib'))
+    dirs.append('/data/data/com.termux/files/usr/lib')
+    return dirs
+
+def _capstone_available():
+    for d in _termux_include_dirs():
+        if (os.path.isfile(os.path.join(d, 'capstone.h'))
+                or os.path.isfile(os.path.join(d, 'capstone', 'capstone.h'))):
+            for libdir in _termux_lib_dirs():
+                if glob.glob(os.path.join(libdir, 'libcapstone.*')):
+                    return True
+            return False
+    return False
+
+def _fmt_available():
+    for d in _termux_include_dirs():
+        if os.path.isdir(os.path.join(d, 'fmt')):
+            return True
+    return False
+
+def ensure_native_deps():
+    if not _is_termux_env() or _autoinstall_disabled():
+        return
+    missing = []
+    if not _capstone_available():
+        missing.append('capstone')
+    if not _fmt_available():
+        missing.append('fmt')
+    if not missing:
+        return
+    ok, detail = _pkg_install(missing)
+    if not ok:
+        fallback = ['libcapstone' if name == 'capstone' else name for name in missing]
+        ok, detail = _pkg_install(fallback)
+    if not _capstone_available():
+        raise RuntimeError(
+            "Required library capstone not found and automatic install failed"
+            f" ({detail}). Install it with: pkg install capstone"
+        )
 
 def check_build_tools():
     tools = resolve_build_tools()

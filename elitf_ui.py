@@ -224,7 +224,7 @@ class ElitfUI:
                                      border_style=Style(color="red")))
             if is_missing_tool:
                 self.console.print("[dim]Outils système requis pour le build :[/]")
-                self.console.print("[dim]  Termux  : pkg install git cmake ninja clang python pkg-config[/]")
+                self.console.print("[dim]  Termux  : pkg install git cmake ninja clang python pkg-config capstone[/]")
                 self.console.print("[dim]             && pip install pyelftools requests rich[/]")
                 self.console.print("[dim]  Debian  : sudo apt install git cmake ninja-build clang python3-pip[/]")
                 self.console.print("[dim]  macOS   : brew install git cmake ninja llvm[/]")
@@ -235,7 +235,7 @@ class ElitfUI:
             print(f"\nERREUR: {type(e).__name__}: {e}")
             if is_missing_tool:
                 print("Outils système requis pour le build:")
-                print("  Termux: pkg install git cmake ninja clang python pkg-config && pip install pyelftools requests rich")
+                print("  Termux: pkg install git cmake ninja clang python pkg-config capstone && pip install pyelftools requests rich")
                 print("  Debian: sudo apt install git cmake ninja-build clang python3-pip")
                 print("  macOS : brew install git cmake ninja llvm")
             else:

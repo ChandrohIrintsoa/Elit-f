@@ -12,7 +12,7 @@ import sys
 import tempfile
 import zipfile
 
-from dartvm_fetch_build import DartLibInfo, resolve_build_tools
+from dartvm_fetch_build import DartLibInfo, resolve_build_tools, ensure_native_deps
 from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH
 from elitf_r2 import display_binary_info, r2_unified_analysis, run_r2_custom, R2_PRESETS
 
@@ -197,7 +197,13 @@ class ElitfInput:
         self.bin_name = f'elitf_{dart_info.lib_name}{self.name_suffix}'
         self.bin_file = os.path.join(BIN_DIR, self.bin_name + ('.exe' if sys.platform == 'win32' else ''))
 
+def _proc_output_tail(proc, limit=20):
+    text = ((proc.stdout or '') + '\n' + (proc.stderr or ''))
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    return lines[-limit:]
+
 def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
+    ensure_native_deps()
     builddir = os.path.join(BUILD_DIR, elitf_input.bin_name)
     macros = find_compat_macro(elitf_input.dart_info.version,
                                elitf_input.no_analysis, elitf_input.ida_fcn)
@@ -222,30 +228,49 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
     if log_mgr:
         log_mgr.add("Running cmake configure...", "info")
     try:
-        subprocess.run(cmd, cwd=SCRIPT_DIR, check=True, stdin=subprocess.DEVNULL, env=my_env)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"cmake configure failed (exit {e.returncode})") from e
+        proc = subprocess.run(cmd, cwd=SCRIPT_DIR, check=False, stdin=subprocess.DEVNULL,
+                              env=my_env, capture_output=True, text=True)
     except FileNotFoundError:
         raise RuntimeError(
             f"cmake binary not found ('{CMAKE_CMD}'). Install cmake or set CMAKE env var.")
+    if proc.returncode != 0:
+        tail = _proc_output_tail(proc)
+        if log_mgr:
+            for line in tail:
+                log_mgr.add(line, "warn")
+        raise RuntimeError(
+            f"cmake configure failed (exit {proc.returncode}):\n" + '\n'.join(tail))
     if log_mgr:
         log_mgr.add("Running ninja build...", "info")
         log_mgr.step()
     try:
-        subprocess.run([NINJA_CMD], cwd=builddir, check=True, stdin=subprocess.DEVNULL)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"ninja build failed (exit {e.returncode})") from e
+        proc = subprocess.run([NINJA_CMD], cwd=builddir, check=False,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
     except FileNotFoundError:
         raise RuntimeError(
             f"ninja binary not found ('{NINJA_CMD}'). Install ninja or set NINJA env var.")
+    if proc.returncode != 0:
+        tail = _proc_output_tail(proc, 30)
+        if log_mgr:
+            for line in tail:
+                log_mgr.add(line, "warn")
+        raise RuntimeError(
+            f"ninja build failed (exit {proc.returncode}):\n" + '\n'.join(tail))
     if log_mgr:
         log_mgr.add("Running cmake install...", "info")
         log_mgr.step()
     try:
-        subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=True,
-                       stdin=subprocess.DEVNULL)
+        proc = subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=False,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"cmake install failed (exit {e.returncode})") from e
+    if proc.returncode != 0:
+        tail = _proc_output_tail(proc, 15)
+        if log_mgr:
+            for line in tail:
+                log_mgr.add(line, "warn")
+        raise RuntimeError(
+            f"cmake install failed (exit {proc.returncode}):\n" + '\n'.join(tail))
     if log_mgr:
         log_mgr.step()
 
@@ -303,7 +328,7 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                 missing = os.path.basename(str(getattr(e, 'filename', None) or ''))
                 hint = (
                     f"Required build tool not found: '{missing or 'unknown'}'. "
-                    "Install git, cmake and ninja (Termux: pkg install git cmake ninja clang; "
+                    "Install git, cmake and ninja (Termux: pkg install git cmake ninja clang capstone; "
                     "other: use your package manager), then retry."
                 )
                 raise RuntimeError(
@@ -551,8 +576,8 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             ui.console.print("[dim]Dépendances Python :[/]")
             ui.console.print("[dim]  pip install pyelftools requests rich[/]")
             ui.console.print("[dim]Outils système requis pour le build (Dart VM) :[/]")
-            ui.console.print("[dim]  Termux: pkg install git cmake ninja clang python pkg-config[/]")
-            ui.console.print("[dim]  Debian: sudo apt install git cmake ninja-build clang python3-pip[/]")
+            ui.console.print("[dim]  Termux: pkg install git cmake ninja clang python pkg-config capstone[/]")
+            ui.console.print("[dim]  Debian: sudo apt install git cmake ninja-build clang python3-pip libcapstone-dev[/]")
             ui.console.print("[dim]  macOS : brew install git cmake ninja llvm[/]")
             ui.console.print()
         else:
@@ -561,8 +586,8 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
                 print(f"  - {name} ({cmd})")
             print("Installez les dépendances Python: pip install pyelftools requests rich")
             print("Outils système requis pour le build (Dart VM):")
-            print("  Termux: pkg install git cmake ninja clang python pkg-config")
-            print("  Debian: sudo apt install git cmake ninja-build clang python3-pip")
+            print("  Termux: pkg install git cmake ninja clang python pkg-config capstone")
+            print("  Debian: sudo apt install git cmake ninja-build clang python3-pip libcapstone-dev")
             print("  macOS : brew install git cmake ninja llvm\n")
 
     while True:

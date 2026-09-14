@@ -14,6 +14,10 @@ if [ -n "$TERMUX_VERSION" ] && [ -n "$PREFIX" ]; then
                         exit 1
                 fi
         done
+        if ! [ -f "$PREFIX/include/capstone.h" ] && ! [ -f "$PREFIX/include/capstone/capstone.h" ]; then
+                echo "Bibliotheque manquante: capstone  (pkg install capstone)" >&2
+                exit 1
+        fi
 else
         echo "[!] Environnement Termux non detecte (TERMUX_VERSION/PREFIX absents)."
         echo "    Ce script cible Termux natif ; sur un autre systeme, lancez directement :"
