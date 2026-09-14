@@ -2,6 +2,7 @@
 #include "FridaWriter.h"
 #include <fstream>
 #include <filesystem>
+#include <stdexcept>
 #include "Util.h"
 
 #ifndef FRIDA_TEMPLATE_DIR
@@ -13,6 +14,8 @@ void FridaWriter::Create(const char* filename)
 	std::filesystem::copy_file(FRIDA_TEMPLATE_DIR "/frida.template.js", filename, std::filesystem::copy_options::overwrite_existing);
 
 	std::ofstream of(filename, std::ios_base::app);
+	if (!of.is_open())
+		throw std::runtime_error(std::string("cannot open output file: ") + filename);
 
 	of << "const ClassIdTagPos = " << kUntaggedObjectClassIdTagPos << ";\n";
 	of << elitf_format::format("const ClassIdTagMask = {:#x};\n", (1 << dart::UntaggedObject::kClassIdTagSize) - 1);

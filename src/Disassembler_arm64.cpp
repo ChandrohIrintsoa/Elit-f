@@ -1,5 +1,6 @@
 #include "DartSdk.h"
 #include "Disassembler.h"
+#include <stdexcept>
 
 namespace A64 {
 const char* Register::RegisterNames[] = {

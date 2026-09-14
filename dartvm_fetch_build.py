@@ -6,15 +6,9 @@ import stat
 import subprocess
 import sys
 
-GIT_CMD = "git"
+GIT_CMD = os.getenv('GIT', 'git')
 CMAKE_CMD = os.getenv('CMAKE', 'cmake')
 NINJA_CMD = os.getenv('NINJA', 'ninja')
-
-REQUIRED_BUILD_TOOLS = (
-    (GIT_CMD, 'git'),
-    (CMAKE_CMD, 'cmake'),
-    (NINJA_CMD, 'ninja'),
-)
 
 TERMUX_INSTALL_HINT = (
     "pkg install git cmake ninja clang python pkg-config"
@@ -25,18 +19,8 @@ GENERIC_INSTALL_HINT = (
     "  then:  pip install -r requirements.txt"
 )
 
-def check_build_tools():
-    missing = []
-    for cmd, label in REQUIRED_BUILD_TOOLS:
-        if shutil.which(cmd) is None:
-            missing.append((cmd, label))
-    if missing:
-        hint = TERMUX_INSTALL_HINT if _is_termux_env() else GENERIC_INSTALL_HINT
-        names = ', '.join(label for _, label in missing)
-        raise RuntimeError(
-            f"Missing required build tool(s): {names}. "
-            f"Resolve with: {hint}"
-        )
+TERMUX_USR_BIN = '/data/data/com.termux/files/usr/bin'
+TERMUX_HOME_LOCAL_BIN = '/data/data/com.termux/files/home/.local/bin'
 
 def _is_termux_env():
     if os.environ.get('TERMUX_VERSION'):
@@ -45,6 +29,106 @@ def _is_termux_env():
         return True
     prefix = os.environ.get('PREFIX', '')
     return 'com.termux' in prefix
+
+def _tool_search_dirs():
+    dirs = []
+    prefix = os.environ.get('PREFIX', '')
+    if prefix:
+        dirs.append(os.path.join(prefix, 'bin'))
+    dirs.append(TERMUX_USR_BIN)
+    dirs.append(TERMUX_HOME_LOCAL_BIN)
+    dirs.append(os.path.expanduser('~/.local/bin'))
+    try:
+        import sysconfig
+        dirs.append(sysconfig.get_path('scripts'))
+        user_base = sysconfig.get_config_var('userbase')
+        if user_base:
+            dirs.append(os.path.join(user_base, 'bin'))
+    except (ImportError, ValueError, KeyError):
+        pass
+    try:
+        import site
+        dirs.append(os.path.join(site.getuserbase(), 'bin'))
+    except (ImportError, AttributeError):
+        pass
+    dirs.append(os.path.dirname(os.path.abspath(sys.executable)))
+    for mod_name, attr in (('cmake', 'CMAKE_BIN_DIR'), ('ninja', 'BIN_DIR')):
+        try:
+            mod = __import__(mod_name)
+            mod_dir = os.path.dirname(os.path.abspath(getattr(mod, '__file__', '')))
+            dirs.append(getattr(mod, attr, '') or os.path.join(mod_dir, 'data', 'bin'))
+        except (ImportError, AttributeError, OSError):
+            pass
+    seen = set()
+    unique = []
+    for d in dirs:
+        if d and d not in seen:
+            seen.add(d)
+            unique.append(d)
+    return unique
+
+def _find_tool(candidates, extra_dirs=()):
+    for name in candidates:
+        if not name:
+            continue
+        path = shutil.which(name)
+        if path:
+            return path
+    for d in extra_dirs:
+        if not d or not os.path.isdir(d):
+            continue
+        for name in candidates:
+            if not name:
+                continue
+            p = os.path.join(d, name)
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
+    return None
+
+def _rmtree_rw(path, handler):
+    try:
+        shutil.rmtree(path, onerror=handler)
+    except TypeError:
+        shutil.rmtree(path, onexc=handler)
+
+def resolve_build_tools():
+    global GIT_CMD, CMAKE_CMD, NINJA_CMD
+    dirs = _tool_search_dirs()
+    cmake_names = ('cmake', 'cmake3')
+    ninja_names = ('ninja',)
+    env_cmake = os.getenv('CMAKE')
+    env_ninja = os.getenv('NINJA')
+    if env_cmake:
+        cmake_names = (env_cmake,)
+    if env_ninja:
+        ninja_names = (env_ninja,)
+    git_path = _find_tool((os.getenv('GIT') or 'git',), dirs)
+    cmake_path = _find_tool(cmake_names, dirs)
+    ninja_path = _find_tool(ninja_names, dirs)
+    if git_path:
+        GIT_CMD = git_path
+    if cmake_path:
+        CMAKE_CMD = cmake_path
+    if ninja_path:
+        NINJA_CMD = ninja_path
+    return {'git': git_path, 'cmake': cmake_path, 'ninja': ninja_path}
+
+def check_build_tools():
+    tools = resolve_build_tools()
+    missing = [label for label in ('git', 'cmake', 'ninja') if tools[label] is None]
+    if missing:
+        hint = TERMUX_INSTALL_HINT if _is_termux_env() else GENERIC_INSTALL_HINT
+        names = ', '.join(missing)
+        path_note = (
+            'If already installed, close and reopen Termux '
+            'or run: export PATH="$PREFIX/bin:$PATH"'
+            if _is_termux_env() else
+            'If already installed, verify their directory is in PATH'
+        )
+        raise RuntimeError(
+            f"Missing required build tool(s): {names}. "
+            f"Resolve with: {hint}. {path_note}."
+        )
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CMAKE_TEMPLATE_FILE = os.path.join(SCRIPT_DIR, 'scripts', 'CMakeLists.txt.dartvm')
@@ -94,7 +178,7 @@ def checkout_dart(info: DartLibInfo):
         def remove_readonly(func, path, _):
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
             func(path)
-        shutil.rmtree(clonedir, onerror=remove_readonly)
+        _rmtree_rw(clonedir, remove_readonly)
 
     if not os.path.exists(clonedir):
         subprocess.run([GIT_CMD, '-c', 'advice.detachedHead=false', 'clone', '-b', info.version,
@@ -113,13 +197,13 @@ def checkout_dart(info: DartLibInfo):
                 if os.path.exists(utils_path):
                     with open(utils_path, "r+") as f:
                         content = f.read()
-                        if r"match_against('^MAJOR (\d+)$', content)" in content and "match_against(r'" not in content:
-                            content = content.replace(" ' awk ", " r' awk ").replace("match_against('", "match_against(r'").replace("re.search('", "re.search(r'")
-                            if "import imp\n" in content:
-                                content = content.replace("import imp\n", imp_replace_snippet).replace("imp.load_source", "load_source")
+                        new_content = content.replace("match_against('", "match_against(r'").replace("re.search('", "re.search(r'")
+                        if "import imp\n" in new_content:
+                            new_content = new_content.replace("import imp\n", imp_replace_snippet).replace("imp.load_source", "load_source")
+                        if new_content != content:
                             f.seek(0)
                             f.truncate()
-                            f.write(content)
+                            f.write(new_content)
             subprocess.run([sys.executable, 'tools/make_version.py', '--output', 'runtime/vm/version.cc',
                             '--input', 'runtime/vm/version_in.cc'], cwd=clonedir, check=True)
         else:

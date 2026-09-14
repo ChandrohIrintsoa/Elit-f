@@ -5,6 +5,8 @@
 #include "DartThreadInfo.h"
 #include <source_location>
 #include <unordered_set>
+#include <stdexcept>
+#include <cstring>
 
 #ifndef NO_CODE_ANALYSIS
 
@@ -168,17 +170,27 @@ static VarValue* getPoolObject(DartApp& app, intptr_t offset, A64::Register dstR
 }
 
 static inline void handleDecompressPointer(AsmIterator& insn, arm64_reg reg) {
+#if defined(DART_COMPRESSED_POINTERS)
         INSN_ASSERT(insn.id() == ARM64_INS_ADD);
         INSN_ASSERT(insn.ops(0).reg == insn.ops(1).reg && insn.ops(0).reg == reg);
         INSN_ASSERT(insn.ops(2).reg == CSREG_DART_HEAP && insn.ops(2).shift.value == 32);
         ++insn;
+#else
+        (void)insn;
+        (void)reg;
+#endif
 }
 
 static inline void handleExtraDecompressPointer(AsmIterator& insn, arm64_reg reg) {
+#if defined(DART_COMPRESSED_POINTERS)
         if (insn.id() != ARM64_INS_ADD) return;
         if (!(insn.ops(0).reg == insn.ops(1).reg && insn.ops(0).reg == reg)) return;
         if (!(insn.ops(2).reg == CSREG_DART_HEAP && insn.ops(2).shift.value == 32)) return;
         ++insn;
+#else
+        (void)insn;
+        (void)reg;
+#endif
 }
 
 static bool tryConsumeLeaveFrameRestore(AsmIterator& insn)

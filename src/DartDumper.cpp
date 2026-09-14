@@ -12,6 +12,7 @@
 #include "Disassembler.h"
 #include "DartThreadInfo.h"
 #include "CodeAnalyzer.h"
+#include <stdexcept>
 
 
 static std::unordered_map<std::string, std::string> OP_MAP {

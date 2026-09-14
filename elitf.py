@@ -12,12 +12,13 @@ import sys
 import tempfile
 import zipfile
 
-from dartvm_fetch_build import DartLibInfo
+from dartvm_fetch_build import DartLibInfo, resolve_build_tools
 from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH
 from elitf_r2 import display_binary_info, r2_unified_analysis, run_r2_custom, R2_PRESETS
 
-CMAKE_CMD = os.getenv('CMAKE', 'cmake')
-NINJA_CMD = os.getenv('NINJA', 'ninja')
+_TOOLS = resolve_build_tools()
+CMAKE_CMD = _TOOLS['cmake'] or os.getenv('CMAKE', 'cmake')
+NINJA_CMD = _TOOLS['ninja'] or os.getenv('NINJA', 'ninja')
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 BIN_DIR = os.path.join(SCRIPT_DIR, 'bin')
@@ -206,10 +207,14 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
     if platform.system() == 'Darwin':
         mac_ver = int(platform.mac_ver()[0].split('.', 1)[0])
         if mac_ver < 15:
-            llvm_prefix = subprocess.run(['brew', '--prefix', 'llvm@16'], capture_output=True,
-                                         check=True).stdout.decode().strip()
-            clang_file = os.path.join(llvm_prefix, 'bin', 'clang')
-            my_env = {**os.environ, 'CC': clang_file, 'CXX': clang_file + '++'}
+            try:
+                llvm_prefix = subprocess.run(['brew', '--prefix', 'llvm@16'], capture_output=True,
+                                             check=True).stdout.decode().strip()
+                clang_file = os.path.join(llvm_prefix, 'bin', 'clang')
+                if os.path.isfile(clang_file):
+                    my_env = {**os.environ, 'CC': clang_file, 'CXX': clang_file + '++'}
+            except (subprocess.SubprocessError, OSError):
+                my_env = None
     cmd = [CMAKE_CMD, '-GNinja', '-B', builddir,
            f'-DDARTLIB={elitf_input.dart_info.lib_name}',
            f'-DNAME_SUFFIX={elitf_input.name_suffix}',

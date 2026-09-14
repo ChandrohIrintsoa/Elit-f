@@ -1,5 +1,6 @@
 #include "DartSdk.h"
 #include "ElfHelper.h"
+#include <cstring>
 PRAGMA_WARNING(push, 0)
 #include <platform/elf.h>
 #if defined(DART_TARGET_OS_MACOS)

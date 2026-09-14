@@ -1,5 +1,6 @@
 #include "DartSdk.h"
 #include "Util.h"
+#include <cstring>
 #include <sstream>
 #include <iomanip>
 

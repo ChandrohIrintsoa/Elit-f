@@ -8,6 +8,8 @@ PRAGMA_WARNING(push, 0)
 PRAGMA_WARNING(pop)
 #include "Format.h"
 #include <iostream>
+#include <stdexcept>
+#include <cstring>
 
 DartApp::DartApp(const char* path) : ppool(NULL), nativeLib(0xdeadead), throwStubAddr(0)
 {

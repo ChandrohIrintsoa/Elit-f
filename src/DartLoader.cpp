@@ -1,5 +1,6 @@
 #include "DartSdk.h"
 #include "DartLoader.h"
+#include <cstring>
 #include <stdexcept>
 #include <cstdlib>
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "Disassembler.h"
+#include <cstring>
 
 constexpr arm64_reg ToCapstoneReg(dart::Register r)
 {

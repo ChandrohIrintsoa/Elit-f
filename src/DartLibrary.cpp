@@ -2,6 +2,7 @@
 #include "DartLibrary.h"
 #include "DartClass.h"
 #include <filesystem>
+#include <stdexcept>
 
 DartLibrary::DartLibrary(const dart::Library& lib) : ptr(lib.ptr()), topClass(NULL)
 {
