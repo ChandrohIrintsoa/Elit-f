@@ -147,7 +147,7 @@ class TarballFallbackTests(unittest.TestCase):
     def test_checkout_dart_falls_back_to_tarball_when_git_dies(self):
         clonedir = self.root / ('v' + self.info.version + self.info.variant_suffix)
 
-        def fake_tarball(info, cdir, log=None):
+        def fake_tarball(info, cdir, log=None, on_progress=None):
             # un fichier top-level serait supprimé par le nettoyage de
             # checkout_dart (comportement voulu) → marqueur dans runtime/
             os.makedirs(os.path.join(cdir, 'runtime'), exist_ok=True)
@@ -196,6 +196,7 @@ class CapturedBuildTests(unittest.TestCase):
         with patch.object(dfb, 'BUILD_DIR', str(self.root / 'build')), \
              patch.object(dfb, 'CMAKE_TEMPLATE_FILE', str(self.root / 'tpl')), \
              patch.object(dfb, 'CREATE_SRCLIST_FILE', str(self.root / 'srclist')), \
+             patch.object(dfb, '_run_ninja_build') as nj, \
              patch.object(dfb.subprocess, 'run') as sp:
             sp.return_value = _proc(0)
             # le template n'existe pas : cmake_dart écrit lui-même
@@ -204,14 +205,23 @@ class CapturedBuildTests(unittest.TestCase):
             (self.root / 'target').mkdir()
             with patch.object(dfb.shutil, 'copy2'):
                 dfb.cmake_dart(self.info, str(self.root / 'target'),
-                               log=messages.append)
+                               log=messages.append,
+                               on_progress=lambda d, t, p: None)
         self.assertTrue(messages)  # jalons émis via le panneau de logs
         for call in sp.call_args_list:
             self.assertTrue(call.kwargs.get('capture_output'),
                             'sans log fourni en UI, la sortie doit être capturée')
         descs = ' | '.join(messages)
         self.assertIn('CMake', descs)
-        self.assertIn('ninja', descs)
+        # ninja n'est plus capturé mais STREAMÉ (progression [N/M] réelle) :
+        # il ne doit jamais passer par subprocess.run brut, et reçoit log+progress
+        nj.assert_called_once()
+        self.assertEqual(nj.call_args.kwargs.get('log'), messages.append)
+        self.assertIsNotNone(nj.call_args.kwargs.get('on_progress'))
+        for call in sp.call_args_list:
+            self.assertFalse(isinstance(call.args[0], list) and
+                             'ninja' in call.args[0],
+                             'ninja ne doit pas être relancé via subprocess.run')
 
     def test_cmake_dart_without_log_keeps_direct_output(self):
         with patch.object(dfb, 'BUILD_DIR', str(self.root / 'build')), \

@@ -1,6 +1,7 @@
 import re
 import glob
 import mmap
+from collections import deque
 import os
 import shutil
 import stat
@@ -330,6 +331,146 @@ def _run_captured_checked(cmd, cwd=None, log=None, desc=''):
         raise RuntimeError(f"{desc or 'command'} could not start: {e}") from e
 
 
+NINJA_PROGRESS_RE = re.compile(r'^\s*\[\s*(\d+)\s*/\s*(\d+)\s*\]')
+
+
+def _parse_ninja_line(line):
+    """Extract (done, total) from a ninja progress line like `[12/345] Building…`."""
+    m = NINJA_PROGRESS_RE.match(line or '')
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def _read_mem_available():
+    """Likely-available RAM in bytes, or None when it cannot be determined."""
+    total = None
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            for line in f:
+                if line.startswith('MemAvailable:'):
+                    return int(line.split()[1]) * 1024
+                if line.startswith('MemTotal:'):
+                    total = int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        total = None
+    if total:
+        return total
+    try:
+        return os.sysconf('SC_PHYS_PAGES') * os.sysconf('SC_PAGE_SIZE')
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def safe_parallel_jobs(mem_bytes=None, cpu_count=None):
+    """Ninja parallelism that will not OOM-kill the device mid-build.
+
+    Heavy Dart VM translation units can eat ~2 GB each with clang -O2;
+    on a phone, ninja's default (-j<all cores>) gets the compiler killed
+    by the OOM killer and the build then looks frozen forever.
+    ELITF_NINJA_JOBS overrides everything.
+    """
+    env = os.getenv('ELITF_NINJA_JOBS', '').strip()
+    if env:
+        try:
+            j = int(env)
+            if j >= 1:
+                return j
+        except ValueError:
+            pass
+    if cpu_count is None:
+        cpu_count = os.cpu_count() or 4
+    if mem_bytes is None:
+        mem_bytes = _read_mem_available()
+    if not mem_bytes or mem_bytes <= 0:
+        return max(1, min(4, cpu_count))
+    jobs = int(mem_bytes // (2 * (1 << 30)))
+    return max(1, min(jobs, cpu_count, 16))
+
+
+def _run_streaming(cmd, cwd=None, log=None, on_progress=None, desc='',
+                   phase='compile', min_interval=8.0, tail_lines=80):
+    """Run a build command and stream its stdout line by line.
+
+    Unlike the fully-captured runs, ninja's `[N/M]` progress lines are parsed
+    as they arrive and forwarded to `on_progress(done, total, phase)`, so the
+    UI bar advances during a build that can last an hour on a phone. Nothing
+    is ever written raw to the tty (rich Live owns the screen): milestone
+    lines go through `log`, throttled to at most one every `min_interval`
+    seconds and 5% of progress. Failures raise RuntimeError with the output
+    tail so the actual error stays visible.
+    """
+    if desc and log:
+        log(desc)
+    collected = deque(maxlen=max(10, tail_lines))
+    last_emit = [-1e9]
+    last_milestone = [-1]
+    short_desc = (desc or 'Build').split('(')[0].strip(' …\u2026') or 'Build'
+    try:
+        proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True,
+                                errors='replace', bufsize=1)
+    except OSError as e:
+        raise RuntimeError(f"{desc or 'command'} could not start: {e}") from e
+    try:
+        for line in proc.stdout:
+            line = line.rstrip('\r\n')
+            if not line:
+                continue
+            collected.append(line)
+            parsed = _parse_ninja_line(line)
+            if parsed:
+                done, total = parsed
+                if on_progress:
+                    try:
+                        on_progress(done, total, phase)
+                    except Exception:
+                        pass
+                if log:
+                    pct = int(done * 100 / total) if total else 0
+                    milestone = pct // 5
+                    now = time.monotonic()
+                    if (milestone > last_milestone[0]
+                            and now - last_emit[0] >= min_interval):
+                        last_milestone[0] = milestone
+                        last_emit[0] = now
+                        log(f"{short_desc}: [{done}/{total}] ({pct}%)")
+        proc.wait()
+    finally:
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
+    if proc.returncode != 0:
+        detail = _tail('\n'.join(collected), 800)
+        raise RuntimeError(
+            f"{desc or 'command'} failed (exit {proc.returncode})"
+            + (f" — {detail}" if detail else ''))
+    return proc
+
+
+def _ninja_command():
+    """Ninja invocation bounded by device memory (safe_parallel_jobs)."""
+    return [NINJA_CMD, '-j', str(safe_parallel_jobs())]
+
+
+def _run_ninja_build(builddir, log=None, on_progress=None):
+    """Compile the Dart VM with memory-aware parallelism and live progress."""
+    jobs = safe_parallel_jobs()
+    cpu = os.cpu_count() or 4
+    if log:
+        if on_progress:
+            on_progress(0, 0, 'compile')
+        if jobs < cpu and not os.getenv('ELITF_NINJA_JOBS'):
+            _emit(log, f"Parallel build limited to -j{jobs} "
+                       f"(low device memory; set ELITF_NINJA_JOBS to override)")
+        return _run_streaming(_ninja_command(), cwd=builddir, log=log,
+                              on_progress=on_progress,
+                              desc='Compiling Dart VM (ninja, may take a while)…',
+                              phase='compile')
+    return subprocess.run(_ninja_command(), cwd=builddir, check=True)
+
+
 def _tail(text, limit=600):
     """Last `limit` chars of a command output, single line (for error messages)."""
     text = (text or '').strip()
@@ -396,17 +537,22 @@ def _git_clone_sparse(info, clonedir, log=None):
          attempts=4, delay=3.0, desc='git sparse-checkout', log=log)
 
 
-def _download_with_urllib(url, dest, log=None, attempts=8):
+def _download_with_urllib(url, dest, log=None, attempts=8,
+                          on_progress=None, min_interval=3.0):
     """Resumable single-stream download (Range), robust on flaky links.
 
     A single HTTP stream survives bad mobile networks far better than git's
     chatty fetch protocol; already-received bytes are kept in `<dest>.part`.
+    Milestones (`Downloaded 12.3 MB…`) are throttled so a slow link never
+    leaves the user staring at a frozen screen, and byte counts are forwarded
+    to `on_progress(received, total_or_0, 'download')` for the UI bar.
     """
     part = dest + '.part'
     last = None
     for attempt in range(1, max(1, attempts) + 1):
         try:
             start = os.path.getsize(part) if os.path.exists(part) else 0
+            received = start
             headers = {'User-Agent': 'Elit-f (dartvm_fetch_build)'}
             if start > 0:
                 headers['Range'] = f'bytes={int(start)}-'
@@ -415,12 +561,31 @@ def _download_with_urllib(url, dest, log=None, attempts=8):
                 code = getattr(resp, 'status', None) or resp.getcode() or 0
                 if start > 0 and code != 206 and log:
                     log('Server ignored resume request; restarting download…')
+                try:
+                    total = int(resp.headers.get('Content-Length', 0)) + (
+                        start if code == 206 else 0)
+                except (ValueError, TypeError, AttributeError):
+                    total = 0
+                last_log_bytes = received
+                last_log_time = time.monotonic()
                 with open(part, 'ab' if (start > 0 and code == 206) else 'wb') as f:
                     while True:
                         chunk = resp.read(256 * 1024)
                         if not chunk:
                             break
                         f.write(chunk)
+                        received += len(chunk)
+                        if on_progress:
+                            try:
+                                on_progress(received, total, 'download')
+                            except Exception:
+                                pass
+                        now = time.monotonic()
+                        if (log and received - last_log_bytes >= (1 << 20)
+                                and now - last_log_time >= min_interval):
+                            last_log_bytes = received
+                            last_log_time = now
+                            log(f"Downloaded {received / (1 << 20):.1f} MB…")
             os.replace(part, dest)
             return
         except (urllib.error.URLError, urllib.error.HTTPError, OSError, EOFError) as e:
@@ -450,12 +615,12 @@ def _download_with_curl(url, dest):
     return False
 
 
-def _download_tarball(info, dest, log=None):
+def _download_tarball(info, dest, log=None, on_progress=None):
     url = DART_TARBALL_URL.format(version=info.version)
     if log:
         log(f"Downloading Dart SDK {info.version} archive…")
     try:
-        _download_with_urllib(url, dest, log)
+        _download_with_urllib(url, dest, log, on_progress=on_progress)
     except (RuntimeError, OSError) as e:
         if log:
             log(f"Python download failed ({_tail(str(e), 160)}); trying curl…")
@@ -466,7 +631,7 @@ def _download_tarball(info, dest, log=None):
 _TARBALL_SUBDIRS = ('runtime', 'tools', 'third_party/double-conversion')
 
 
-def _tarball_checkout(info, clonedir, log=None):
+def _tarball_checkout(info, clonedir, log=None, on_progress=None):
     """Fallback without git: download the tag archive and extract only the
     directories Elit-f compiles against. The archive is cached, so a later
     re-run never downloads it twice."""
@@ -474,7 +639,7 @@ def _tarball_checkout(info, clonedir, log=None):
     os.makedirs(SDK_DIR, exist_ok=True)
     dest = os.path.join(SDK_DIR, f'dart-sdk-{info.version}.tar.gz')
     if not os.path.isfile(dest):
-        _download_tarball(info, dest, log)
+        _download_tarball(info, dest, log, on_progress=on_progress)
     if log:
         log("Extracting archive (runtime, tools, double-conversion)…")
     os.makedirs(clonedir, exist_ok=True)
@@ -496,6 +661,13 @@ def _tarball_checkout(info, clonedir, log=None):
             except TypeError:
                 tf.extract(member, clonedir)
             extracted += 1
+            if on_progress:
+                try:
+                    on_progress(extracted, 0, 'extract')
+                except Exception:
+                    pass
+            if log and extracted % 400 == 0:
+                log(f"Extracted {extracted} files…")
     if extracted == 0:
         raise RuntimeError("Dart SDK archive unreadable or empty: " + dest)
     if not os.path.isfile(os.path.join(clonedir, 'runtime', 'vm', 'version_in.cc')):
@@ -531,7 +703,12 @@ class DartLibInfo:
             self.variant_suffix += '_' + snapshot_hash
         self.lib_name = f'dartvm{version}_{os_name}_{arch}{self.variant_suffix}'
 
-def checkout_dart(info: DartLibInfo, log=None):
+def checkout_dart(info: DartLibInfo, log=None, on_progress=None):
+    if on_progress:
+        try:
+            on_progress(0, 0, 'clone')
+        except Exception:
+            pass
     clonedir = os.path.join(SDK_DIR, 'v' + info.version + info.variant_suffix)
 
     version_file = os.path.join(clonedir, 'runtime', 'vm', 'version.cc')
@@ -549,7 +726,7 @@ def checkout_dart(info: DartLibInfo, log=None):
             _emit(log, 'git sparse-checkout failed (' + _tail(str(git_err), 200) + ')')
             _emit(log, 'Falling back to direct archive download…')
             try:
-                _tarball_checkout(info, clonedir, log=log)
+                _tarball_checkout(info, clonedir, log=log, on_progress=on_progress)
             except Exception as tar_err:
                 raise RuntimeError(
                     f"Cannot fetch Dart SDK {info.version} sources.\n"
@@ -607,7 +784,7 @@ def checkout_dart(info: DartLibInfo, log=None):
 
     return clonedir
 
-def cmake_dart(info: DartLibInfo, target_dir: str, log=None):
+def cmake_dart(info: DartLibInfo, target_dir: str, log=None, on_progress=None):
 
     parts = info.version.split('.')
     if len(parts) < 2:
@@ -645,24 +822,34 @@ def cmake_dart(info: DartLibInfo, target_dir: str, log=None):
                  '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE']
 
     if log:
-        # Output captured so nothing is written to the tty while rich Live
-        # owns the screen (raw writes break cursor positioning and stack
-        # frames — the Termux flood). Failures keep the stderr tail.
+        # Output captured or streamed so nothing is written to the tty while
+        # rich Live owns the screen (raw writes break cursor positioning and
+        # stack frames — the Termux flood). The ninja build is STREAMED: its
+        # [N/M] lines feed on_progress so the UI bar moves during the compile.
+        if on_progress:
+            try:
+                on_progress(0, 1, 'configure')
+            except Exception:
+                pass
         _run_captured_checked(cmake_cmd, cwd=target_dir, log=log,
                               desc='Configuring Dart VM build (CMake)')
-        _run_captured_checked([NINJA_CMD], cwd=builddir, log=log,
-                              desc='Compiling Dart VM (ninja, may take a while)…')
+        _run_ninja_build(builddir, log=log, on_progress=on_progress)
+        if on_progress:
+            try:
+                on_progress(1, 1, 'install')
+            except Exception:
+                pass
         _run_captured_checked([CMAKE_CMD, '--install', '.'], cwd=builddir, log=log,
                               desc='Installing Dart VM library')
     else:
         subprocess.run(cmake_cmd, cwd=target_dir, check=True)
-        subprocess.run([NINJA_CMD], cwd=builddir, check=True)
+        subprocess.run(_ninja_command(), cwd=builddir, check=True)
         subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=True)
 
-def fetch_and_build(info: DartLibInfo, log=None):
+def fetch_and_build(info: DartLibInfo, log=None, on_progress=None):
     check_build_tools()
-    outdir = checkout_dart(info, log=log)
-    cmake_dart(info, outdir, log=log)
+    outdir = checkout_dart(info, log=log, on_progress=on_progress)
+    cmake_dart(info, outdir, log=log, on_progress=on_progress)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

@@ -22,6 +22,12 @@ python elitf.py --install-launcher
 ## Termux / Android — récupération du Dart SDK et affichage
 
 ```sh
+export ELITF_NINJA_JOBS=4   # forcer le parallélisme (défaut : auto selon RAM)
+```
+
+Miroirs (réseau opérateur bloquant GitHub) :
+
+```sh
 export ELITF_DART_SDK_GIT=https://miroir.example.net/dart-sdk.git
 export ELITF_DART_SDK_TARBALL='https://miroir.example.net/dart-sdk/{version}.tar.gz'
 ```

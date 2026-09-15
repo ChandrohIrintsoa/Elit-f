@@ -114,6 +114,10 @@ class LogManager:
         self.lock = threading.Lock()
         self.step_count = 0
         self.total_steps = 0
+        # Sous-progression d'une longue phase (fetch/build Dart VM) :
+        # fraction exprimée en unités de step, + libellé de phase courant.
+        self.sub_fraction = 0.0
+        self.sub_label = ''
 
     def add(self, msg, level="info"):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -136,10 +140,26 @@ class LogManager:
         with self.lock:
             self.logs.clear()
             self.step_count = 0
+            self.sub_fraction = 0.0
+            self.sub_label = ''
 
     def step(self, count=1):
         with self.lock:
             self.step_count += count
+
+    def set_sub_progress(self, fraction=None, label=''):
+        """Publie la progression fine d'une longue phase (0..n step-units).
+
+        `fraction=None` remet à zéro (phase terminée, les step() réels
+        prennent le relais). Thread-safe : appelé depuis le worker.
+        """
+        with self.lock:
+            self.sub_fraction = float(fraction) if fraction is not None else 0.0
+            self.sub_label = label or ''
+
+    def get_sub_progress(self):
+        with self.lock:
+            return (self.sub_fraction, self.sub_label)
 
     def set_total(self, total):
         with self.lock:
@@ -1301,6 +1321,55 @@ class ElitfUI:
         bar_w = max(6, min(30, avail - desc_w))
         return header_h, progress_h, logs_h, desc_w, bar_w
 
+    @staticmethod
+    def compact_progress_label(label, width):
+        """Raccourcit un libellé de barre en gardant le compteur visible.
+
+        Sur un écran Termux étroit, tronquer brutalement `label[:width]`
+        supprime la partie informative « [17/40] » ou « (12.3 Mo) ». On
+        raccourcit donc le préfixe et on conserve le suffixe entre crochets
+        ou parenthèses : « Compilation Dart VM… [17/40] » tient en 15 colonnes
+        sous la forme « Compil… [17/40] ».
+        """
+        label = str(label or '')
+        try:
+            width = int(width)
+        except (TypeError, ValueError):
+            width = 40
+        if width <= 0:
+            return ''
+        if len(label) <= width:
+            return label
+        m = re.search(r'\s((\[[^\]]+\])|(\([^)]+\)))\s*$', label)
+        suffix, prefix = '', label
+        if m:
+            suffix = m.group(1)
+            prefix = label[:m.start()].rstrip()
+        if suffix and width >= len(suffix) + 3:
+            keep = width - len(suffix) - 2  # '…' + espace
+            return prefix[:max(keep, 1)] + '… ' + suffix
+        return prefix[:max(width - 1, 1)] + '…'
+
+    @staticmethod
+    def _combined_completed(step_count, sub_fraction, steps, last=0.0):
+        """Barre = max(steps réels, sous-progression, dernier affiché).
+
+        Le max rend la barre monotone : la sous-progression d'une phase
+        longue ne peut pas faire reculer la barre quand la phase se termine
+        et rend la main aux step() réels ; elle est bornée par `steps`.
+        """
+        try:
+            steps = max(int(steps), 1)
+        except (TypeError, ValueError):
+            steps = 1
+        try:
+            sc = float(step_count or 0)
+        except (TypeError, ValueError):
+            sc = 0.0
+        frac = float(sub_fraction or 0.0)
+        prev = float(last or 0.0)
+        return min(max(sc, frac, prev), float(steps))
+
     def _run_live(self, title, steps, work_fn):
         from rich.table import Column
 
@@ -1377,12 +1446,21 @@ class ElitfUI:
             with Live(layout, console=self.console, refresh_per_second=4,
                       vertical_overflow="crop"):
                 task_id = progress.add_task("Initialisation...", total=steps)
+                last_completed = 0.0
                 while thread.is_alive():
-                    completed = min(self.log_mgr.step_count, steps)
-                    progress.update(task_id, completed=completed)
+                    frac, label = self.log_mgr.get_sub_progress()
+                    last_completed = self._combined_completed(
+                        self.log_mgr.step_count, frac, steps, last_completed)
+                    if label:
+                        progress.update(
+                            task_id,
+                            description=self.compact_progress_label(label,
+                                                                    desc_w))
+                    progress.update(task_id, completed=last_completed)
                     update_logs()
                     time.sleep(0.25)
-                progress.update(task_id, completed=steps)
+                progress.update(task_id, description="Terminé",
+                                completed=steps)
                 update_logs()
         finally:
             thread.join(timeout=10)

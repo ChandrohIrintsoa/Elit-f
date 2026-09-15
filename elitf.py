@@ -310,6 +310,66 @@ def get_dart_lib_info(libapp_path: str, libflutter_path: str, log_mgr: LogManage
     has_compressed_ptrs = 'compressed-pointers' in flags
     return dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs
 
+# Plage [lo, hi] de la barre globale associée à chaque phase du fetch/build
+# Dart VM (phase la plus longue de l'analyse : de quelques minutes sur PC
+# jusqu'à une heure sur mobile). Les fractions rendent la barre expressive
+# au lieu de rester à 0% pendant toute la compilation ninja.
+_DARTVM_PHASE_RANGE = {
+    'download': (0.00, 0.30),
+    'clone': (0.00, 0.20),
+    'extract': (0.30, 0.45),
+    'configure': (0.48, 0.52),
+    'compile': (0.52, 0.97),
+    'install': (0.97, 1.00),
+}
+_DARTVM_PHASE_LABELS_FR = {
+    'download': 'Téléchargement sources Dart…',
+    'clone': 'Clonage sources Dart…',
+    'extract': 'Extraction des sources…',
+    'configure': 'Configuration (CMake)…',
+    'compile': 'Compilation Dart VM…',
+    'install': 'Installation Dart VM…',
+}
+
+
+def _make_dartvm_progress(log_mgr, base, weight=2.9):
+    """Convertit on_progress(done, total, phase) du fetch/build Dart VM en
+    sous-progression de la barre rich (unités de step), avec libellés FR.
+
+    `base` = step_count au démarrage du fetch ; la phase ne peut donc jamais
+    faire reculer la barre (garde monotone côté UI en plus).
+    """
+    def handler(done, total, phase):
+        lo, hi = _DARTVM_PHASE_RANGE.get(phase, (0.0, 1.0))
+        try:
+            done = float(done or 0)
+            total = float(total or 0)
+        except (TypeError, ValueError):
+            done, total = 0.0, 0.0
+        if phase == 'compile':
+            ratio = (done / total) if total > 0 else 0.0
+            label = _DARTVM_PHASE_LABELS_FR['compile']
+            if total >= 1:
+                label = f"Compilation Dart VM… [{int(done)}/{int(total)}]"
+        elif phase == 'download':
+            ratio = (done / total) if total > 0 else min(done / (40 << 20), 1.0)
+            label = _DARTVM_PHASE_LABELS_FR['download']
+            if done >= (1 << 20):
+                label = (f"Téléchargement sources Dart… "
+                         f"({done / (1 << 20):.1f} Mo)")
+        elif phase == 'extract':
+            ratio = min(done / 3000.0, 1.0) if done > 0 else 0.0
+            label = _DARTVM_PHASE_LABELS_FR['extract']
+            if done > 0:
+                label = f"Extraction des sources… ({int(done)} fichiers)"
+        else:
+            ratio = 1.0 if done > 0 else 0.0
+            label = _DARTVM_PHASE_LABELS_FR.get(phase, 'Préparation…')
+        frac = base + (lo + (hi - lo) * ratio) * weight
+        log_mgr.set_sub_progress(frac, label)
+    return handler
+
+
 def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
     if not os.path.isfile(elitf_input.bin_file) or elitf_input.rebuild:
         libfile_variants = [
@@ -320,10 +380,19 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
         if dartlib_file is None:
             if log_mgr:
                 log_mgr.add(f"Fetching Dart VM {elitf_input.dart_info.version}...", "info")
+                if _is_termux():
+                    log_mgr.add(
+                        "Première compilation du Dart VM sur mobile : comptez "
+                        "20 à 60 min selon l'appareil (une seule fois ; les "
+                        "lancements suivants réutilisent le résultat).", "warn")
+                on_prog = _make_dartvm_progress(log_mgr, float(log_mgr.step_count))
+            else:
+                on_prog = None
             try:
                 from dartvm_fetch_build import fetch_and_build
                 fetch_and_build(elitf_input.dart_info,
-                                log=log_mgr.add if log_mgr else None)
+                                log=log_mgr.add if log_mgr else None,
+                                on_progress=on_prog)
             except FileNotFoundError as e:
                 missing = os.path.basename(str(getattr(e, 'filename', None) or ''))
                 hint = (
@@ -340,6 +409,7 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                     "Check network connectivity and that 'git', 'cmake' and 'ninja' are installed."
                 ) from e
             if log_mgr:
+                log_mgr.set_sub_progress(None)
                 log_mgr.add(f"Dart VM {elitf_input.dart_info.version} built successfully", "success")
                 log_mgr.step()
         elitf_input.rebuild = True
