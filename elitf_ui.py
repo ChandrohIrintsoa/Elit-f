@@ -360,10 +360,14 @@ class ElitfUI:
             menu_text = Text()
             menu_items = [
                 ("1", "Flutter/Dart AOT Analysis", "Analyse complète libapp.so + libflutter.so", "bright_cyan"),
-                ("2", "Radare2 - Analyse unifiée", "Sélection cibles + sous-menu r2 (a/aa/aaa/-w/wa/extraits/...)", "bright_green"),
+                ("2", "Radare2 - Console d'analyse",
+                 "Sélection cibles + Terminal r2/pptool, catalogue complet,"
+                 " presets, patching", "bright_green"),
                 ("3", "Analyser et générer les scripts IDA", "Analyse AOT avec exports IDA", "blue"),
                 ("4", "Analyser et générer les scripts Frida", "Analyse AOT avec exports Frida", "red"),
-                ("5", "Information binaire détaillée", "Afficher les infos détaillées des .so", "white"),
+                ("5", "Information binaire détaillée",
+                 "Infos détaillées des .so + changer les cibles / nettoyer"
+                 " les caches", "white"),
                 ("0", "Quitter", "", "red"),
             ]
             for num, label, desc, color in menu_items:
@@ -371,17 +375,17 @@ class ElitfUI:
                 menu_text.append(f"{label}\n", style="bold bright_white")
                 if desc:
                     menu_text.append(f"      {desc}\n", style="dim")
-            panel = Panel(menu_text, title=" Menu Principal ",
+            panel = Panel(menu_text, title=" 𝕸𝖊𝖓𝖚 𝕻𝖗𝖎𝖓𝖈𝖎𝖕𝖆𝖑 ",
                           border_style=Style(color="bright_green"),
                           box=rbox.DOUBLE, padding=(0, 1))
             self.console.print(panel)
         else:
-            print("\n  === Menu Principal ===")
+            print("\n  === 𝕸𝖊𝖓𝖚 𝕻𝖗𝖎𝖓𝖈𝖎𝖕𝖆𝖑 ===")
             print("  [1] Flutter/Dart AOT Analysis")
-            print("  [2] Radare2 - Analyse unifiee")
+            print("  [2] Radare2 - Console d'analyse (terminal, catalogue, presets)")
             print("  [3] Analyser et generer les scripts IDA")
             print("  [4] Analyser et generer les scripts Frida")
-            print("  [5] Information binaire detaillee")
+            print("  [5] Information binaire detaillee (+ cibles / nettoyage)")
             print("  [0] Quitter")
 
     def get_choice(self):
@@ -490,7 +494,7 @@ class ElitfUI:
             other_items = [
                 ("t", "Personnalisé", "Choisir librement l'analyse + les blocs d'extraction", "bright_cyan"),
                 ("u", "Générer scripts sans exécuter", "Créer les .r2 + batch .sh uniquement", "bright_magenta"),
-                ("0", "Retour au menu principal", "", "red"),
+                ("0", "Retour au menu", "", "red"),
             ]
             for num, label, desc, color in other_items:
                 other_text.append(f"  [{num}] ", style=f"bold {color}")
@@ -537,7 +541,7 @@ class ElitfUI:
             print("  === [E] Autres ===")
             print("  [t] Personnalise (choix libre analyse + extraction)")
             print("  [u] Generer scripts sans executer")
-            print("  [0] Retour au menu principal")
+            print("  [0] Retour au menu")
 
     def get_r2_choice(self):
         _PRESET_MAP = {
@@ -729,19 +733,431 @@ class ElitfUI:
             return "full"
         return choice
 
-    def _prompt_text(self, prompt_str, default=""):
+    def _prompt_text(self, prompt_str, default="", show_default=True):
         if self.console:
             try:
                 return Prompt.ask(
                     f"  [bold bright_cyan]{prompt_str}[/]",
-                    default=default, console=self.console)
+                    default=default, console=self.console,
+                    show_default=show_default)
             except (KeyboardInterrupt, EOFError):
                 return default
         else:
+            suffix = f" [{default}]" if (show_default and default) else ""
             try:
-                return input(f"\n  {prompt_str} [{default}]: ") or default
+                return input(f"\n  {prompt_str}{suffix}: ") or default
             except (KeyboardInterrupt, EOFError):
                 return default
+
+    def print_raw(self, text):
+
+        if self.console:
+            from rich.text import Text as _RawText
+            self.console.print(_RawText(text))
+        else:
+            print(text)
+
+    def r2_readline(self, prompt="r2> "):
+
+        if self.console:
+            try:
+                return self.console.input(
+                    f"  [bold bright_green]{prompt}[/] ")
+            except (KeyboardInterrupt, EOFError):
+                return None
+        else:
+            try:
+                return input(f"\n  {prompt}")
+            except (KeyboardInterrupt, EOFError):
+                return None
+
+    def confirm(self, question, default=False):
+
+        if self.console:
+            try:
+                raw = Prompt.ask(f"  [bold bright_yellow]{question}[/]",
+                                 choices=("o", "n"),
+                                 default="o" if default else "n",
+                                 console=self.console, show_choices=True)
+                return raw.strip().lower() == "o"
+            except (KeyboardInterrupt, EOFError):
+                return default
+        else:
+            hint = "O/n" if default else "o/N"
+            try:
+                raw = input(f"\n  {question} [{hint}]: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                return default
+            if not raw:
+                return default
+            return raw in ("o", "oui", "y", "yes")
+
+
+
+    def display_r2_console_menu(self, session=None):
+        r2_missing = session is not None and not session.r2_bin
+        pptool_path = getattr(session, 'pptool_bin', None) if session else None
+        pptool_status = ("disponible" if pptool_path else "non installé") \
+            if session else "—"
+        if self.console:
+            from rich.text import Text as _Text
+            from rich.panel import Panel as _Panel
+            self.console.print()
+            text = _Text()
+            items = [
+                ("1", "Terminal r2",
+                 "Tapez vos commandes r2 librement (et pptool) sur les cibles"
+                 " — ex: afl, px 64 @ 0x1000, pdf @ sym.main", "bright_green"),
+                ("2", "Catalogue des commandes r2",
+                 "Toutes les options r2 par catégories : analyse, info,"
+                 " impression, recherche, xrefs, écriture, config…", "bright_cyan"),
+                ("3", "Presets d'analyse",
+                 "full / standard / quick / minimal / audit sécurité", "bright_yellow"),
+                ("4", "Analyse personnalisée",
+                 "Choisir le niveau d'analyse + les blocs d'extraction", "bright_magenta"),
+                ("5", "Patching (mode écriture r2 -w)",
+                 "wa (assembleur) / wx (hex) / w (string) — backup .elitf.bak", "bright_red"),
+                ("6", "Générer les scripts sans exécuter",
+                 "Créer les .r2 + batch .sh uniquement", "blue"),
+                ("0", "Retour au menu", "", "red"),
+            ]
+            for num, label, desc, color in items:
+                text.append(f"  [{num}] ", style=f"bold {color}")
+                text.append(f"{label}\n", style="bold bright_white")
+                if desc:
+                    text.append(f"        {desc}\n", style="dim")
+            if r2_missing:
+                text.append("\n  [!] r2 introuvable — le terminal et le"
+                            " catalogue nécessitent radare2"
+                            " (Termux: pkg install radare2)\n", style="bold red")
+            text.append(f"\n  pptool: {pptool_status}", style="dim")
+            if pptool_path:
+                text.append(f"  ({pptool_path})", style="dim")
+            text.append("\n", style="dim")
+            self.console.print(_Panel(
+                text, title=" Console r2 ",
+                border_style=Style(color="bright_green"), box=rbox.DOUBLE,
+                padding=(0, 1)))
+        else:
+            print("\n  === Console r2 ===")
+            print("  [1] Terminal r2 (+ pptool)")
+            print("  [2] Catalogue des commandes r2 (toutes les options)")
+            print("  [3] Presets d'analyse")
+            print("  [4] Analyse personnalisee")
+            print("  [5] Patching (mode ecriture r2 -w)")
+            print("  [6] Generer les scripts sans executer")
+            print("  [0] Retour au menu")
+            if r2_missing:
+                print("  [!] r2 introuvable (pkg install radare2)")
+            print(f"  pptool: {pptool_status}")
+
+    def get_r2_console_choice(self, session=None):
+        self.display_r2_console_menu(session)
+        if self.console:
+            try:
+                raw = Prompt.ask("  [bold bright_green]Console r2[/]",
+                                 default="1", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return "back"
+        else:
+            try:
+                raw = input("\n  Console r2 [1]: ") or "1"
+            except (KeyboardInterrupt, EOFError):
+                return "back"
+        raw = raw.strip().lower()
+        mapping = {
+            "1": "terminal", "2": "catalog",
+            "3": "preset", "4": "custom",
+            "5": "write", "6": "generate_only", "0": "back",
+        }
+        if raw in mapping:
+            return self._resolve_console_action(mapping[raw])
+        self._print("[bold yellow]Choix invalide.[/]" if self.console
+                    else "Choix invalide.")
+        return None
+
+    def _resolve_console_action(self, action):
+ 
+        if action == "preset":
+            presets = [
+                ("1", "full", "Analyse complète (aaa + toute extraction)"),
+                ("2", "standard", "Analyse standard (aaa + extraction courante)"),
+                ("3", "quick", "Analyse rapide (aa + extraction basique)"),
+                ("4", "minimal", "Analyse minimale (a + fonctions)"),
+                ("5", "security_audit", "Audit sécurité complet"),
+            ]
+            if self.console:
+                from rich.text import Text as _Text
+                from rich.panel import Panel as _Panel
+                text = _Text()
+                for num, key, label in presets:
+                    text.append(f"  [{num}] ", style="bold bright_yellow")
+                    text.append(f"{label}\n", style="bright_white")
+                self.console.print(_Panel(
+                    text, title=" Preset d'analyse ",
+                    border_style=Style(color="bright_yellow"),
+                    box=rbox.ROUNDED, padding=(0, 1)))
+            else:
+                print("\n  === Preset d'analyse ===")
+                for num, _key, label in presets:
+                    print(f"  [{num}] {label}")
+            try:
+                raw = self._prompt_text("Preset", default="2")
+            except (KeyboardInterrupt, EOFError):
+                return None
+            pmap = {n: k for n, k, _ in presets}
+            return pmap.get(raw.strip(), None)
+        if action == "write":
+            writes = [("1", "write_wa", "wa — Écrire des instructions assembleur"),
+                      ("2", "write_wx", "wx — Écrire des octets en hexadécimal"),
+                      ("3", "write_w", "w — Écrire une chaîne de caractères")]
+            if self.console:
+                from rich.text import Text as _Text
+                from rich.panel import Panel as _Panel
+                text = _Text()
+                for num, _key, label in writes:
+                    text.append(f"  [{num}] ", style="bold bright_red")
+                    text.append(f"{label}\n", style="bright_white")
+                self.console.print(_Panel(
+                    text, title=" Mode écriture r2 -w ",
+                    border_style=Style(color="red"), box=rbox.ROUNDED,
+                    padding=(0, 1)))
+            else:
+                print("\n  === Mode ecriture r2 -w ===")
+                for num, _key, label in writes:
+                    print(f"  [{num}] {label}")
+            try:
+                raw = self._prompt_text("Commande d'écriture", default="1")
+            except (KeyboardInterrupt, EOFError):
+                return None
+            wmap = {n: k for n, k, _ in writes}
+            return wmap.get(raw.strip(), None)
+        return action
+
+    # -- Catalogue des commandes r2 ------------------------------------------
+
+    def display_r2_catalog(self):
+        from elitf_r2 import R2_TERMINAL_CATALOG
+        if self.console:
+            from rich.text import Text as _Text
+            from rich.panel import Panel as _Panel
+            self.console.print()
+            text = _Text()
+            keys = list(R2_TERMINAL_CATALOG)
+            for i, key in enumerate(keys, 1):
+                cat = R2_TERMINAL_CATALOG[key]
+                text.append(f"  [{i}] ", style="bold bright_cyan")
+                text.append(f"{cat['title']}\n", style="bold bright_white")
+                text.append(f"        {len(cat['commands'])} commandes\n",
+                            style="dim")
+            text.append("\n  [0] Retour\n", style="bold red")
+            self.console.print(_Panel(
+                text, title=" Catalogue r2 — catégories ",
+                border_style=Style(color="bright_cyan"), box=rbox.DOUBLE,
+                padding=(0, 1)))
+        else:
+            print("\n  === Catalogue r2 - categories ===")
+            for i, key in enumerate(list(R2_TERMINAL_CATALOG), 1):
+                print(f"  [{i}] {R2_TERMINAL_CATALOG[key]['title']}")
+            print("  [0] Retour")
+
+    def get_r2_catalog_category(self):
+        from elitf_r2 import R2_TERMINAL_CATALOG
+        self.display_r2_catalog()
+        keys = list(R2_TERMINAL_CATALOG)
+        if self.console:
+            try:
+                raw = Prompt.ask("  [bold bright_green]Catégorie[/] (ex: 1"
+                                 " ou 1,3 pour plusieurs)",
+                                 default="", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return None
+        else:
+            try:
+                raw = input("\n  Categorie [0]: ") or "0"
+            except (KeyboardInterrupt, EOFError):
+                return None
+        raw = raw.strip()
+        if raw in ("0", "", "b", "back"):
+            return "back"
+        if raw.isdigit() and 1 <= int(raw) <= len(keys):
+            return keys[int(raw) - 1]
+        self._print("[bold yellow]Choix invalide.[/]" if self.console
+                    else "Choix invalide.")
+        return None
+
+    def display_r2_catalog_commands(self, cat_key):
+        from elitf_r2 import R2_TERMINAL_CATALOG
+        cat = R2_TERMINAL_CATALOG.get(cat_key)
+        if not cat:
+            return
+        if self.console:
+            from rich.text import Text as _Text
+            from rich.panel import Panel as _Panel
+            self.console.print()
+            text = _Text()
+            for i, entry in enumerate(cat['commands'], 1):
+                label = entry.get('raw') or entry.get('cmd', '')
+                text.append(f"  [{i}] ", style="bold bright_yellow")
+                text.append(f"{label}\n", style="bold bright_white")
+                text.append(f"        {entry['desc']}\n", style="dim")
+            text.append("\n  [0] Retour aux catégories\n", style="bold red")
+            self.console.print(_Panel(
+                text, title=f" Catalogue r2 — {cat['title']} ",
+                border_style=Style(color="bright_yellow"), box=rbox.ROUNDED,
+                padding=(0, 1)))
+        else:
+            print(f"\n  === Catalogue r2 - {cat['title']} ===")
+            for i, entry in enumerate(cat['commands'], 1):
+                label = entry.get('raw') or entry.get('cmd', '')
+                print(f"  [{i}] {label} — {entry['desc']}")
+            print("  [0] Retour aux categories")
+
+    def get_r2_catalog_command(self, cat_key):
+        from elitf_r2 import R2_TERMINAL_CATALOG
+        cat = R2_TERMINAL_CATALOG.get(cat_key)
+        if not cat:
+            return None
+        self.display_r2_catalog_commands(cat_key)
+        if self.console:
+            try:
+                raw = Prompt.ask("  [bold bright_green]Commande[/] (numéro)",
+                                 default="", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return None
+        else:
+            try:
+                raw = input("\n  Commande [0]: ") or "0"
+            except (KeyboardInterrupt, EOFError):
+                return None
+        raw = raw.strip()
+        if raw in ("0", "", "b", "back"):
+            return "back"
+        if raw.isdigit() and 1 <= int(raw) <= len(cat['commands']):
+            return cat['commands'][int(raw) - 1]
+        self._print("[bold yellow]Choix invalide.[/]" if self.console
+                    else "Choix invalide.")
+        return None
+
+    def prompt_r2_command_args(self, entry):
+
+        args = entry.get('args') or []
+        if not args:
+            return []
+        values = []
+        label = entry.get('raw') or entry.get('cmd', '')
+        self._print(f"[bold bright_cyan]{label}[/] — {entry['desc']}"
+                    if self.console else f"{label} — {entry['desc']}")
+        for _key, prompt, default in args:
+            try:
+                val = self._prompt_text(prompt, default=default)
+            except (KeyboardInterrupt, EOFError):
+                return None
+            values.append(val.strip() if val else "")
+        return values
+
+
+
+    def display_info_menu(self):
+        if self.console:
+            from rich.text import Text as _Text
+            from rich.panel import Panel as _Panel
+            self.console.print()
+            text = _Text()
+            items = [
+                ("1", "Afficher les infos détaillées des .so",
+                 "readelf -h -S -l sur chaque cible → binary_info.txt", "bright_cyan"),
+                ("2", "Changer les cibles à traiter",
+                 "Nouveau répertoire / APK + sélection des .so", "bright_yellow"),
+                ("3", "Supprimer les dossiers compilés et les caches",
+                 "build/, bin/, packages/, out/inputs, out/r2_output,"
+                 " __pycache__", "bright_red"),
+                ("0", "Retour au menu", "", "red"),
+            ]
+            for num, label, desc, color in items:
+                text.append(f"  [{num}] ", style=f"bold {color}")
+                text.append(f"{label}\n", style="bold bright_white")
+                if desc:
+                    text.append(f"        {desc}\n", style="dim")
+            self.console.print(_Panel(
+                text, title=" Information binaire détaillée ",
+                border_style=Style(color="bright_white"), box=rbox.DOUBLE,
+                padding=(0, 1)))
+        else:
+            print("\n  === Information binaire detaillee ===")
+            print("  [1] Afficher les infos detaillees des .so")
+            print("  [2] Changer les cibles a traiter")
+            print("  [3] Supprimer les dossiers compiles et les caches")
+            print("  [0] Retour au menu")
+
+    def get_info_menu_choice(self):
+        self.display_info_menu()
+        if self.console:
+            try:
+                raw = Prompt.ask("  [bold bright_green]Info binaire[/]",
+                                 default="1", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return "back"
+        else:
+            try:
+                raw = input("\n  Info binaire [1]: ") or "1"
+            except (KeyboardInterrupt, EOFError):
+                return "back"
+        mapping = {"1": "display", "2": "change_targets",
+                   "3": "cleanup", "0": "back"}
+        choice = mapping.get(raw.strip(), None)
+        if choice is None:
+            self._print("[bold yellow]Choix invalide.[/]" if self.console
+                        else "Choix invalide.")
+        return choice
+
+    def display_cleanup_table(self, items):
+        cols = [("#", "bright_red"), ("Type", "bright_cyan"),
+                ("Dossier", "bright_white"), ("Taille", "bright_green"),
+                ("Chemin", "dim")]
+        rows = [(str(i), it['kind'], it['label'],
+                 self._format_size(it['size']), it['path'])
+                for i, it in enumerate(items, 1)]
+        t = self._table(" Dossiers compilés / caches détectés ", cols, rows)
+        if t:
+            self.console.print(t)
+        else:
+            for i, it in enumerate(items, 1):
+                print(f"  {i}. [{it['kind']}] {it['label']}"
+                      f" ({self._format_size(it['size'])}) {it['path']}")
+
+    def get_cleanup_selection(self, items):
+        """Sélection des dossiers à supprimer. Retourne une liste d'indices
+        (0-based) ou None si annulé."""
+        if not items:
+            self._print("[bright_green]Rien à nettoyer.[/]" if self.console
+                        else "Rien a nettoyer.")
+            return None
+        self.display_cleanup_table(items)
+        if self.console:
+            self.console.print("\n  [dim]Numéros séparés par des virgules"
+                               " (ex: 1,3) ou 'all'[/]")
+            try:
+                raw = Prompt.ask("  [bold bright_green]Supprimer[/]",
+                                 default="", console=self.console)
+            except (KeyboardInterrupt, EOFError):
+                return None
+        else:
+            try:
+                raw = input("\n  Supprimer (ex: 1,3 / all / vide=annuler): ")
+            except (KeyboardInterrupt, EOFError):
+                return None
+        raw = raw.strip().lower()
+        if not raw:
+            return None
+        if raw == "all":
+            return list(range(len(items)))
+        picks = []
+        for part in raw.split(","):
+            part = part.strip()
+            if part.isdigit() and 1 <= int(part) <= len(items):
+                picks.append(int(part) - 1)
+        return sorted(set(picks)) or None
 
     def get_target_selection(self):
         if not self.detected_so:

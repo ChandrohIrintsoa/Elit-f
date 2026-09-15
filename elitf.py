@@ -12,7 +12,7 @@ import tempfile
 import zipfile
 
 from dartvm_fetch_build import DartLibInfo, resolve_build_tools, ensure_native_deps
-from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH
+from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH, _is_termux
 from elitf_r2 import display_binary_info, r2_unified_analysis, run_r2_custom, R2_PRESETS
 
 _TOOLS = resolve_build_tools()
@@ -434,6 +434,171 @@ def prepare_so_targets(indir, outdir, ui):
         ui.detect_so_files(indir)
     return ui.detected_so
 
+def filter_selected_targets(ui, selected):
+    """Applique une sélection d'indices aux cibles détectées (option 5)."""
+    if selected:
+        ui.detected_so = [ui.detected_so[i] for i in selected
+                          if 0 <= i < len(ui.detected_so)]
+    return ui.detected_so
+
+
+_CLEANUP_LABELS = {
+    'build': 'Compilation C++ (cmake/ninja)',
+    'bin': 'Binaires Elit-f compilés',
+    'packages': 'Cache SDK Dart VM (headers + libs)',
+    'inputs': "Cache d'extraction APK/zip",
+    'r2_output': 'Sorties r2 générées',
+    'pycache': 'Cache Python',
+}
+
+
+def _dir_size(path):
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+def find_cleanup_targets(project_dir, outdir):
+    """Détecte les dossiers compilés et caches supprimables.
+
+    Retourne une liste de dicts {kind, label, path, size} existants.
+    """
+    items = []
+    out_real = os.path.realpath(outdir) if outdir else ''
+    fixed = [
+        ('build', os.path.join(project_dir, 'build')),
+        ('bin', os.path.join(project_dir, 'bin')),
+        ('packages', os.path.join(project_dir, 'packages')),
+        ('inputs', os.path.join(outdir, 'inputs') if outdir else ''),
+        ('r2_output', os.path.join(outdir, 'r2_output') if outdir else ''),
+    ]
+    for kind, path in fixed:
+        if path and os.path.isdir(path):
+            items.append({'kind': kind, 'label': _CLEANUP_LABELS[kind],
+                          'path': os.path.abspath(path),
+                          'size': _dir_size(path)})
+    if not os.path.isdir(project_dir):
+        return items
+    for root, dirs, _files in os.walk(project_dir):
+        if out_real and os.path.realpath(root) == out_real:
+            dirs[:] = []
+            continue
+        if '__pycache__' in dirs:
+            pyc = os.path.join(root, '__pycache__')
+            items.append({'kind': 'pycache', 'label': _CLEANUP_LABELS['pycache'],
+                          'path': os.path.abspath(pyc), 'size': _dir_size(pyc)})
+            dirs.remove('__pycache__')
+    return items
+
+
+def perform_cleanup(project_dir, outdir, items, picks, log_mgr=None):
+    """Supprime les dossiers sélectionnés (garde-fou: uniquement sous
+    project_dir ou outdir, jamais les racines elles-mêmes)."""
+    project_real = os.path.realpath(project_dir)
+    out_real = os.path.realpath(outdir) if outdir else None
+    allowed = [project_real + os.sep]
+    if out_real:
+        allowed.append(out_real + os.sep)
+    deleted, freed = [], 0
+    for idx in picks:
+        item = items[idx]
+        path_real = os.path.realpath(item['path'])
+        forbidden_roots = {project_real, out_real}
+        if path_real in forbidden_roots \
+                or not any(path_real.startswith(root) for root in allowed):
+            raise ValueError(
+                f"Chemin refusé (hors zone autorisée): {item['path']}")
+        if not os.path.isdir(path_real):
+            continue
+        freed += item.get('size', 0) or _dir_size(path_real)
+        shutil.rmtree(path_real)
+        deleted.append(item['path'])
+        if log_mgr:
+            log_mgr.add(f"Supprimé: {item['path']}", 'info')
+    return deleted, freed
+
+
+# ---------------------------------------------------------------------------
+# Lanceur Termux : taper 'Elit-f' directement dans le terminal
+# ---------------------------------------------------------------------------
+
+LAUNCHER_NAMES = ('Elit-f', 'elitf')
+
+LAUNCHER_TEMPLATE = ("""#!/bin/sh
+# Lanceur Elit-f — généré par install_launcher
+cd "{project_dir}" || exit 1
+if command -v python >/dev/null 2>&1; then
+    exec python elitf.py "$@"
+fi
+exec python3 elitf.py "$@"
+""")
+
+
+def _default_launcher_bin_dir():
+    prefix = os.environ.get('PREFIX', '')
+    if 'com.termux' in prefix or os.path.isdir('/data/data/com.termux'):
+        prefix = prefix or '/data/data/com.termux/files/usr'
+        return os.path.join(prefix, 'bin')
+    return os.path.join(os.path.expanduser('~'), '.local', 'bin')
+
+
+def install_launcher(project_dir=None, bin_dir=None):
+    """Installe les lanceurs 'Elit-f' et 'elitf' (idempotent)."""
+    project_dir = os.path.abspath(project_dir or SCRIPT_DIR)
+    bin_dir = bin_dir or _default_launcher_bin_dir()
+    os.makedirs(bin_dir, exist_ok=True)
+    installed = []
+    for name in LAUNCHER_NAMES:
+        path = os.path.join(bin_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(LAUNCHER_TEMPLATE.format(project_dir=project_dir))
+        os.chmod(path, 0o755)
+        installed.append(path)
+    return installed
+
+
+def launcher_installed(bin_dir=None):
+    bin_dir = bin_dir or _default_launcher_bin_dir()
+    return os.path.isfile(os.path.join(bin_dir, 'Elit-f'))
+
+
+def offer_launcher_install(ui):
+    """Propose l'installation du lanceur au premier lancement sur Termux."""
+    if not _is_termux() or launcher_installed():
+        return
+    marker = os.path.join(SCRIPT_DIR, '.elitf_no_launcher')
+    if os.path.exists(marker):
+        return
+    try:
+        if not sys.stdout.isatty():
+            return
+    except (AttributeError, ValueError, OSError):
+        return
+    ui._print("[bright_cyan]Astuce Termux : lancez Elit-f directement avec la"
+              " commande 'Elit-f'.[/]" if ui.console
+              else "Astuce Termux : lancez Elit-f directement avec la commande 'Elit-f'.")
+    if ui.confirm("Installer le lanceur maintenant ?", default=True):
+        try:
+            paths = install_launcher()
+            ui._print(f"[bright_green]Lanceur installé : {', '.join(paths)}[/]"
+                      if ui.console else f"Lanceur installe : {', '.join(paths)}")
+            ui._print("Tapez 'Elit-f' (ou 'elitf') pour lancer l'outil."
+                      " Si la commande est introuvable, ouvrez un nouveau shell.")
+        except OSError as e:
+            ui._print(f"Installation du lanceur impossible: {e}")
+    else:
+        try:
+            with open(marker, 'w', encoding='utf-8') as f:
+                f.write('installation refusee par l utilisateur\n')
+        except OSError:
+            pass
+
+
 def run_flutter_analysis(indir, outdir, rebuild, no_analysis, ida_fcn, ui, log_mgr,
                          vs_sln=False):
     if os.path.isfile(indir) and zipfile.is_zipfile(indir):
@@ -532,6 +697,7 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
     from rich.panel import Panel as _Panel
     from rich.prompt import Prompt as _Prompt
 
+    offer_launcher_install(ui)
     ui.display_logo()
     if ui.console:
         ui.console.print(_Rule("[dim]Configuration[/]", style=_Style(dim=True)))
@@ -607,6 +773,7 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             print("  macOS : brew install git cmake ninja llvm\n")
 
     while True:
+        indir = ui.indir or indir
         ui._clear()
         ui.display_logo()
         ui.display_metadata()
@@ -664,18 +831,66 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
                           else "Aucun fichier .so detecte.")
                 continue
             os.makedirs(outdir, exist_ok=True)
-            ui.log_mgr.clear()
-            def work(lm):
-                display_binary_info(ui.detected_so, outdir, lm)
-            try:
-                ui.run_with_live_display("Information binaire",
-                                         len(ui.detected_so) * 2, work)
-                if ui.console:
-                    ui.console.print(_Panel(
-                        "[bright_green]Information binaire affichée.[/]",
-                        border_style=_Style(color="bright_green")))
-            except Exception as e:
-                ui._print_error(e)
+            info_action = ui.get_info_menu_choice()
+            if info_action in ("back", None):
+                continue
+            if info_action == "display":
+                ui.log_mgr.clear()
+                def work(lm):
+                    display_binary_info(ui.detected_so, outdir, lm)
+                try:
+                    ui.run_with_live_display("Information binaire",
+                                             len(ui.detected_so) * 2, work)
+                    if ui.console:
+                        ui.console.print(_Panel(
+                            "[bright_green]Information binaire affichée.[/]",
+                            border_style=_Style(color="bright_green")))
+                except Exception as e:
+                    ui._print_error(e)
+            elif info_action == "change_targets":
+                new_indir = ui._prompt_text("Nouveau répertoire cible / APK",
+                                            default=ui.indir or indir)
+                new_indir = os.path.expanduser((new_indir or "").strip())
+                if not new_indir:
+                    continue
+                previous = ui.detected_so
+                try:
+                    targets = prepare_so_targets(new_indir, outdir, ui)
+                except Exception as e:
+                    ui._print_error(e)
+                    continue
+                ui.indir = new_indir
+                if not targets:
+                    ui._print("[bold yellow]Aucun .so trouvé — anciennes cibles"
+                              " conservées.[/]" if ui.console
+                              else "Aucun .so trouve — anciennes cibles conservees.")
+                    ui.detected_so = previous
+                    continue
+                selected = ui.get_target_selection()
+                if selected:
+                    filter_selected_targets(ui, selected)
+                    ui._print(f"[bright_green]{len(ui.detected_so)} cible(s)"
+                              " sélectionnée(s).[/]" if ui.console
+                              else f"{len(ui.detected_so)} cible(s) selectionnee(s).")
+            elif info_action == "cleanup":
+                items = find_cleanup_targets(SCRIPT_DIR, outdir)
+                picks = ui.get_cleanup_selection(items)
+                if not picks:
+                    continue
+                if not ui.confirm(f"Confirmer la suppression de {len(picks)}"
+                                  " dossier(s) ?", default=False):
+                    continue
+                try:
+                    deleted, freed = perform_cleanup(SCRIPT_DIR, outdir,
+                                                     items, picks)
+                except (ValueError, OSError) as e:
+                    ui._print_error(e)
+                    continue
+                ui._print(f"[bright_green]{len(deleted)} dossier(s) supprimé(s)"
+                          f" — {ui._format_size(freed)} libérés.[/]"
+                          if ui.console
+                          else f"{len(deleted)} dossier(s) supprime(s)"
+                               f" — {freed} octets liberes.")
 
         else:
             ui._print("[bold yellow]Option invalide.[/]" if ui.console else "Option invalide.")
@@ -731,6 +946,9 @@ def main():
                              '(run from a Visual Studio Developer console)')
     parser.add_argument('--nu', action='store_false', default=True,
                         help='Do not check for updates')
+    parser.add_argument('--install-launcher', action='store_true', default=False,
+                        help="Installer les lanceurs 'Elit-f'/'elitf' (Termux:"
+                             " lancement direct via la commande 'Elit-f')")
     parser.add_argument('--action', choices=('flutter', 'r2', 'info'), default='flutter')
     parser.add_argument('--r2-preset', choices=tuple(R2_PRESETS), default='standard')
     parser.add_argument('--generate-only', action='store_true')
@@ -743,6 +961,19 @@ def main():
 
     if args.nu:
         check_for_updates()
+
+    if args.install_launcher:
+        try:
+            paths = install_launcher(project_dir=SCRIPT_DIR)
+        except OSError as e:
+            print(f'ERREUR: installation du lanceur impossible: {e}',
+                  file=sys.stderr)
+            return 1
+        for p in paths:
+            print(f"Installé: {p}")
+        print("Lancez l'outil en tapant: Elit-f   (ou 'elitf')")
+        print("Si la commande est introuvable, ouvrez un nouveau shell Termux.")
+        return 0
 
     if args.action != 'flutter':
         if not args.indir:

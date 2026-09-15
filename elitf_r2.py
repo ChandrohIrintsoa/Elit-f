@@ -442,12 +442,7 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
     return generated
 
 def _ensure_backup(so_path: str) -> str:
-    """Crée une copie <path>.elitf.bak à la première patch uniquement.
 
-    Si le backup existe déjà (patch répété sur le même fichier), il est
-    conservé tel quel : il représente toujours la version pristine,
-    jamais une version déjà patchée.
-    """
     backup = so_path + '.elitf.bak'
     if os.path.exists(backup):
         return backup
@@ -630,7 +625,18 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
         log_mgr.add(f"Cibles sélectionnées: {len(targets)} fichier(s) .so", "info")
 
     if ui is not None:
-        choice = ui.get_r2_choice()
+        session = R2Session(targets, outdir, log_mgr, ui)
+        while True:
+            choice = ui.get_r2_console_choice(session)
+            if choice in ("back", None):
+                return None
+            if choice == "terminal":
+                session.terminal()
+                continue
+            if choice == "catalog":
+                session.catalog()
+                continue
+            break
     else:
 
         choice = "full"
@@ -678,25 +684,7 @@ def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
         return _r2_write_mode(targets, outdir, log_mgr, ui, "w")
 
     if choice == "generate_only":
-        if ui is not None:
-            gen_choice = ui.get_r2_generate_choice()
-            if gen_choice is None:
-                return None
-        else:
-            gen_choice = "full"
-
-        if gen_choice in R2_PRESETS:
-            preset = R2_PRESETS[gen_choice]
-            return run_r2_custom(
-                targets, outdir,
-                analysis_key=preset["analysis_key"],
-                extraction_keys=preset["extraction_keys"],
-                log_mgr=log_mgr,
-                use_write=preset.get("use_write", False),
-                execute=False,
-            )
-        else:
-            return generate_r2_scripts(targets, outdir, log_mgr)
+        return generate_r2_scripts(targets, outdir, log_mgr)
 
     if choice == "custom":
         return _r2_custom_mode(targets, outdir, log_mgr, ui)
@@ -900,3 +888,525 @@ def display_binary_info(so_list, outdir, log_mgr=None):
         raise RuntimeError(f"readelf failed for {len(failures)} target(s); see {info_path}")
     if log_mgr:
         log_mgr.add(f"Binary info written to {info_path}", "success")
+
+
+
+
+R2_ANALYSIS_COMMANDS = {
+    "a", "aa", "aaa", "aaaa", "af", "aar", "aac", "aae", "aas", "aat",
+    "aap", "aau", "aao", "aav", "aaft", "afr", "ad",
+}
+
+R2_HEADER_LINES = ["e scr.color=0", "e scr.utf8=0", "e bin.cache=true"]
+
+R2_OUTPUT_LIMIT = 100_000
+
+PPTOOL_HINT = (
+    "pptool introuvable. PPTool est un outil Python de la communauté "
+    "Termux/Flutter qui localise les adresses de chargement des objets Dart "
+    "dans libapp.so. Installez-le puis relancez, ou pointez la variable "
+    "d'environnement ELITF_PPTOOL vers le binaire/le script pptool."
+)
+
+
+def _find_pptool():
+
+    env_path = os.getenv('ELITF_PPTOOL', '')
+    if env_path and os.path.isfile(env_path):
+        return env_path
+    for candidate in ('pptool', 'pptool.py'):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    project_dir = os.path.dirname(os.path.abspath(__file__))
+    for rel in ('bin/pptool', 'bin/pptool.py', 'pptool.py', 'pptool/pptool.py'):
+        candidate = os.path.join(project_dir, rel)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _cat(cmd, desc, args=None, raw=None, write=False):
+    entry = {"cmd": cmd, "desc": desc}
+    if args:
+        entry["args"] = args
+    if raw is not None:
+        entry["raw"] = raw
+    if write:
+        entry["write"] = True
+    return entry
+
+
+R2_TERMINAL_CATALOG = {
+    "analyse": {
+        "title": "Analyse (a)",
+        "commands": [
+            _cat("a", "Analyse minimale"),
+            _cat("aa", "Analyse de base (références, strings, fonctions)"),
+            _cat("aaa", "Analyse avancée (recommandée avant pdf/axt)"),
+            _cat("aaaa", "Analyse expérimentale — très longue"),
+            _cat("af", "Analyser la fonction à l'adresse",
+                 [("addr", "Adresse (ex: 0x1000, sym.imp.printf)", "")]),
+            _cat("afl", "Lister les fonctions analysées"),
+            _cat("aflj", "Lister les fonctions en JSON"),
+            _cat("afta", "Récupérer les types de toutes les fonctions"),
+            _cat("ab", "Infos de bloc de base à l'adresse",
+                 [("addr", "Adresse", "")]),
+            _cat("afi", "Infos sur la fonction à l'adresse",
+                 [("addr", "Adresse", "")]),
+            _cat("agf", "Graphe ASCII de la fonction à l'adresse",
+                 [("addr", "Adresse", "")]),
+        ],
+    },
+    "info": {
+        "title": "Informations binaires (i)",
+        "commands": [
+            _cat("iI", "Infos du binaire (arch, bits, compilateur, OS)"),
+            _cat("iS", "Sections (adresses, tailles, permissions)"),
+            _cat("iSS", "Segments en détail"),
+            _cat("iH", "En-têtes ELF en détail"),
+            _cat("ie", "Point d'entrée"),
+            _cat("ii", "Imports"),
+            _cat("iE", "Exports"),
+            _cat("is", "Symboles"),
+            _cat("ir", "Réallocations"),
+            _cat("iz", "Strings de la section données"),
+            _cat("izz", "Strings de tout le binaire"),
+            _cat("ic", "Classes (C++ / Obj-C)"),
+            _cat("icj", "Classes en JSON"),
+            _cat("im", "Carte mémoire (main/stack/heap)"),
+            _cat("il", "Bibliothèques liées"),
+            _cat("iM", "Adresse de main"),
+            _cat("ia", "Infos sur l'architecture"),
+            _cat("ib", "Bords/limites du binaire"),
+        ],
+    },
+    "print": {
+        "title": "Impression / Visualisation (p)",
+        "commands": [
+            _cat("pd", "Désassembler N instructions à l'adresse",
+                 [("count", "Nombre d'instructions (défaut 20)", "20"),
+                  ("addr", "Adresse", "")]),
+            _cat("pdf", "Désassembler la fonction à l'adresse (aaa conseillé)",
+                 [("addr", "Adresse ou symbole", "")]),
+            _cat("pdr", "Désassemblage récursif à l'adresse",
+                 [("addr", "Adresse", "")]),
+            _cat("px", "Hexdump de N octets à l'adresse",
+                 [("count", "Nombre d'octets (défaut 64)", "64"),
+                  ("addr", "Adresse", "")]),
+            _cat("pxr", "Hexdump avec annotations (pointeurs, strings)",
+                 [("count", "Nombre d'octets", "64"), ("addr", "Adresse", "")]),
+            _cat("pxw", "Hexdump en mots 32 bits",
+                 [("count", "Nombre d'octets", "64"), ("addr", "Adresse", "")]),
+            _cat("pxa", "Hexdump annoté (désassemblage des valeurs)",
+                 [("addr", "Adresse", "")]),
+            _cat("ps", "String à l'adresse", [("addr", "Adresse", "")]),
+            _cat("psz", "String terminée par \\0 à l'adresse",
+                 [("addr", "Adresse", "")]),
+            _cat("p8", "Octets bruts (hex) à l'adresse",
+                 [("count", "Nombre d'octets", "64"), ("addr", "Adresse", "")]),
+        ],
+    },
+    "search": {
+        "title": "Recherche (/)",
+        "commands": [
+            _cat("/", "Rechercher une chaîne de caractères",
+                 [("value", "Texte à chercher", "")]),
+            _cat("/w", "Rechercher une chaîne UTF-16 (wide)",
+                 [("value", "Texte à chercher", "")]),
+            _cat("/x", "Rechercher des octets en hexadécimal",
+                 [("value", "Octets hex (ex: ff4889e7)", "")]),
+            _cat("/c", "Rechercher un code / une instruction asm",
+                 [("value", "Instruction (ex: bl sym.imp.printf)", "")]),
+            _cat("/r", "Rechercher des gadgets ROP"),
+            _cat("/C", "Rechercher des matériaux crypto connus (AES/RSA/SHA)"),
+            _cat("", "Filtrer les strings par motif",
+                 [("motif", "Motif (ex: password, token, api)", "")],
+                 raw="izz~{0}"),
+        ],
+    },
+    "xrefs": {
+        "title": "Cross-références (ax)",
+        "commands": [
+            _cat("axt", "Xrefs VERS l'adresse (qui l'appelle)",
+                 [("addr", "Adresse ou symbole", "")]),
+            _cat("axf", "Xrefs DEPUIS l'adresse (ce qu'elle appelle)",
+                 [("addr", "Adresse ou symbole", "")]),
+            _cat("axl", "Lister toutes les xrefs connues"),
+            _cat("", "Xrefs vers tous les imports",
+                 raw="axt @@ sym.imp.*"),
+        ],
+    },
+    "write": {
+        "title": "Écriture / Patching (r2 -w)",
+        "commands": [
+            _cat("wa", "Écrire des instructions assembleur à une adresse",
+                 [("value", "Instructions asm (ex: mov r0, 0; bx lr)", ""),
+                  ("addr", "Adresse", "")], write=True),
+            _cat("wx", "Écrire des octets en hexadécimal à une adresse",
+                 [("value", "Octets hex (ex: 00bf00bf)", ""),
+                  ("addr", "Adresse", "")], write=True),
+            _cat("w", "Écrire une chaîne de caractères à une adresse",
+                 [("value", "Chaîne à écrire", ""),
+                  ("addr", "Adresse", "")], write=True),
+        ],
+    },
+    "config": {
+        "title": "Configuration session (e)",
+        "commands": [
+            _cat("e asm.bytes", "Afficher les octets en désassemblage (true/false)",
+                 [("value", "valeur (true/false)", "true")]),
+            _cat("e asm.lines", "Afficher les lignes de flux (true/false)",
+                 [("value", "valeur (true/false)", "true")]),
+            _cat("e asm.offset", "Afficher les adresses (true/false)",
+                 [("value", "valeur (true/false)", "true")]),
+            _cat("e anal.depth", "Profondeur maximale de l'analyse",
+                 [("value", "profondeur (nombre)", "4")]),
+            _cat("e scr.color", "Couleurs r2 (0 = désactivé)",
+                 [("value", "valeur (0/1/2/3)", "0")]),
+        ],
+    },
+    "system": {
+        "title": "Système / Divers (?)",
+        "commands": [
+            _cat("?", "Aide générale r2 (lister les commandes)"),
+            _cat("?v", "Évaluer une expression arithmétique",
+                 [("value", "Expression (ex: 0x1000+0x20)", "")]),
+        ],
+    },
+}
+
+
+def _compose_r2_command(entry, values):
+
+    raw = entry.get('raw')
+    if raw is not None:
+        out = raw
+        for i, v in enumerate(values):
+            out = out.replace('{' + str(i) + '}', v or '')
+        return out
+    parts = [entry['cmd']]
+    tail = []
+    args = entry.get('args') or []
+    for (key, _prompt, _default), v in zip(args, values):
+        v = (v or '').strip()
+        if not v:
+            continue
+        if key == 'addr':
+            tail.append('@ ' + v)
+        else:
+            parts.append(v)
+    return ' '.join(parts + tail)
+
+
+class R2Session:
+
+
+    def __init__(self, so_list, outdir, log_mgr=None, ui=None):
+        if ui is None:
+            raise ValueError('R2Session requires a ui (interactive console)')
+        self.targets = _targets(so_list)
+        if not self.targets:
+            raise ValueError('No .so targets for r2 console')
+        self.outdir = os.path.abspath(outdir)
+        self.log_mgr = log_mgr
+        self.ui = ui
+        self.r2_bin = _find_r2()
+        self.pptool_bin = _find_pptool()
+        self.active = 0
+        self.env_cmds = []
+        self.analysis_cmds = []
+        self.anal_replay = True
+        self.rw = False
+
+    # -- cibles -------------------------------------------------------------
+
+    @property
+    def active_target(self):
+        return self.targets[self.active]
+
+    def _switch(self, idx):
+        self.active = idx
+        if self.rw:
+            self._backup_active()
+
+    def use(self, ref):
+        ref = (ref or '').strip()
+        if ref.isdigit():
+            idx = int(ref) - 1
+            if 0 <= idx < len(self.targets):
+                self._switch(idx)
+                return True
+            return False
+        for i, t in enumerate(self.targets):
+            if ref.lower() in t['name'].lower():
+                self._switch(i)
+                return True
+        return False
+
+    # -- exécution ----------------------------------------------------------
+
+    def _backup_active(self):
+        backup = _ensure_backup(self.active_target['path'])
+        if self.log_mgr:
+            self.log_mgr.add(f"Backup r2 -w: {backup}", "debug")
+
+    def _script_parts(self, cmd):
+        tokens = cmd.split()
+        first = tokens[0] if tokens else ''
+        parts = list(R2_HEADER_LINES) + list(self.env_cmds)
+        if (self.anal_replay and self.analysis_cmds
+                and first not in R2_ANALYSIS_COMMANDS):
+            parts.extend(self.analysis_cmds)
+        parts.append(cmd)
+        return parts
+
+    def run_r2(self, cmd):
+        if not self.r2_bin:
+            return 127, '', ('r2 introuvable — installez radare2 '
+                             '(Termux: pkg install radare2)')
+        try:
+            timeout = _timeout()
+        except ValueError:
+            timeout = 600
+        if self.rw:
+            self._backup_active()
+        argv = [self.r2_bin] + (['-w'] if self.rw else []) + ['-q', '-N']
+        for part in self._script_parts(cmd):
+            argv += ['-c', part]
+        argv.append(self.active_target['path'])
+        try:
+            result = subprocess.run(
+                argv, capture_output=True, text=True, errors='replace',
+                timeout=timeout, stdin=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            return 124, '', f'timeout r2 (>{timeout}s) — ajustez R2_TIMEOUT'
+        except (OSError, subprocess.SubprocessError) as exc:
+            return 1, '', str(exc)
+        tokens = cmd.split()
+        first = tokens[0] if tokens else ''
+        if result.returncode == 0 and first in R2_ANALYSIS_COMMANDS \
+                and cmd not in self.analysis_cmds:
+            self.analysis_cmds.append(cmd)
+        return result.returncode, result.stdout or '', result.stderr or ''
+
+    def _expand_placeholders(self, arg):
+        t = self.active_target
+        return (arg.replace('{so}', t['path'])
+                   .replace('{libapp}', t['path'])
+                   .replace('{name}', t['name'])
+                   .replace('{outdir}', self.outdir))
+
+    def run_pptool(self, argstr):
+        if not self.pptool_bin:
+            return False, PPTOOL_HINT
+        try:
+            args = shlex.split(argstr or '')
+        except ValueError:
+            return False, 'Arguments pptool invalides (guillemets non fermés ?)'
+        args = [self._expand_placeholders(a) for a in args]
+        try:
+            timeout = _timeout()
+        except ValueError:
+            timeout = 600
+        try:
+            result = subprocess.run(
+                [self.pptool_bin] + args, capture_output=True, text=True,
+                errors='replace', timeout=timeout, stdin=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            return False, f'timeout pptool (>{timeout}s)'
+        except (OSError, subprocess.SubprocessError) as exc:
+            return False, str(exc)
+        text = (result.stdout or '')
+        if result.stderr and result.stderr.strip():
+            text += ('\n' if text else '') + result.stderr
+        return result.returncode == 0, text.strip()
+
+    # -- affichage ----------------------------------------------------------
+
+    def _emit(self, text):
+
+        if hasattr(self.ui, 'print_raw'):
+            self.ui.print_raw(text)
+        else:
+            self.ui._print(text)
+
+    def _show_output(self, text, ok=True):
+        text = (text or '').rstrip()
+        if len(text) > R2_OUTPUT_LIMIT:
+            text = (text[:R2_OUTPUT_LIMIT] +
+                    f"\n… [sortie tronquée à {R2_OUTPUT_LIMIT} caractères]")
+        if text:
+            self._emit(text)
+        if not ok:
+            self.ui._print("[bold red]✗ échec de la commande[/]" if self.ui.console
+                           else "✗ échec de la commande")
+
+    def _print_help(self):
+        p = self.ui._print
+        p("[bold bright_cyan]Mini terminal r2 — commandes[/]"
+          if self.ui.console else "Mini terminal r2 — commandes")
+        p("  <cmd r2>          Exécuter une commande r2 sur la cible active")
+        p("                    ex: afl, px 64 @ 0x1000, pdf @ sym.main, izz~password")
+        p("  pptool <args>     Exécuter pptool — placeholders: {so} {libapp} {name} {outdir}")
+        p("  !targets          Lister les cibles de la session")
+        p("  !use <n|nom>      Changer de cible active")
+        p("  !anal on|off      Replay automatique de la dernière analyse (aaa) avant chaque commande")
+        p("  !rw on|off        Mode écriture r2 -w (backup .elitf.bak automatique)")
+        p("  !set / !unset     Config session appliquée à chaque commande — ex: !set e asm.bytes=true")
+        p("  !lib              Chemin de la cible active")
+        p("  !pptool           État pptool / exécuter avec !pptool <args>")
+        p("  q | quit | exit   Quitter le terminal")
+        p("Astuce: chaque commande part d'une session r2 fraîche — lancez l'analyse (aaa) ou"
+          " activez !anal avant pdf/axt. Redirection possible: afl > fonctions.txt")
+
+    # -- builtins -----------------------------------------------------------
+
+    def handle_builtin(self, line):
+        """Traite une ligne builtin (!…/q/quit/exit/'').
+
+        Retourne 'quit', 'handled', ou None si la ligne n'est pas un builtin.
+        """
+        line = line.strip()
+        if line in ('q', 'quit', 'exit', '!q'):
+            return 'quit'
+        if not line:
+            return 'handled'
+        if not line.startswith('!'):
+            return None
+        parts = line[1:].split(None, 1)
+        name = parts[0].lower()
+        rest = parts[1].strip() if len(parts) > 1 else ''
+        if name == 'help':
+            self._print_help()
+        elif name == 'targets':
+            for i, t in enumerate(self.targets, 1):
+                mark = '*' if i - 1 == self.active else ' '
+                self.ui._print(f" {mark} [{i}] {t['name']}  —  {t['path']}")
+        elif name == 'use':
+            if not self.use(rest):
+                self.ui._print(f"[!] Cible inconnue: {rest!r} (!targets pour la liste)")
+        elif name == 'lib':
+            self.ui._print(self.active_target['path'])
+        elif name == 'anal':
+            if rest.lower() in ('on', 'off'):
+                self.anal_replay = rest.lower() == 'on'
+            last = self.analysis_cmds or 'aucune'
+            self.ui._print(f"Replay de l'analyse: {'ON' if self.anal_replay else 'OFF'}"
+                           f" (dernière: {last})")
+        elif name == 'set':
+            if rest and rest not in self.env_cmds:
+                self.env_cmds.append(rest)
+            self.ui._print(f"Config session: {self.env_cmds or 'vide'}"
+                           "  (!set e var=valeur)")
+        elif name == 'unset':
+            if rest in self.env_cmds:
+                self.env_cmds.remove(rest)
+            self.ui._print(f"Config session: {self.env_cmds or 'vide'}")
+        elif name == 'rw':
+            if rest.lower() == 'on':
+                self.rw = True
+                self._backup_active()
+            elif rest.lower() == 'off':
+                self.rw = False
+            state = 'ON (backup .elitf.bak actif)' if self.rw else 'OFF'
+            self.ui._print(f"Mode écriture r2 -w: {state}")
+        elif name == 'pptool':
+            if not rest:
+                if self.pptool_bin:
+                    self.ui._print(f"pptool disponible: {self.pptool_bin}")
+                    self.ui._print("Placeholders: {so} {libapp} {name} {outdir}"
+                                   " — ex: pptool -f {so}")
+                else:
+                    self.ui._print(PPTOOL_HINT)
+            else:
+                ok, text = self.run_pptool(rest)
+                self._show_output(text, ok)
+        else:
+            self.ui._print(f"builtin inconnu: !{name} — !help pour l'aide")
+        return 'handled'
+
+
+
+    def terminal(self):
+
+        ui = self.ui
+        if not self.r2_bin:
+            ui._print("[bold red]r2 introuvable — le mini terminal nécessite radare2"
+                      " (Termux: pkg install radare2)[/]" if ui.console
+                      else "r2 introuvable — le mini terminal nécessite radare2"
+                           " (Termux: pkg install radare2)")
+            return None
+        pptool_state = 'disponible' if self.pptool_bin else 'non installé (!pptool)'
+        ui._print(f"[bold bright_cyan]Terminal r2[/] — cible: [bold]"
+                  f"{self.active_target['name']}[/] — pptool: {pptool_state}"
+                  if ui.console
+                  else f"Terminal r2 — cible: {self.active_target['name']}"
+                       f" — pptool: {pptool_state}")
+        ui._print("[dim]!help pour l'aide — q pour quitter[/]" if ui.console
+                  else "!help pour l'aide — q pour quitter")
+        while True:
+            try:
+                line = ui.r2_readline(f"r2({self.active_target['name']})> ")
+            except (KeyboardInterrupt, EOFError):
+                break
+            if line is None:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            action = self.handle_builtin(line)
+            if action == 'quit':
+                break
+            if action == 'handled':
+                continue
+            if line == 'pptool' or line.startswith('pptool '):
+                ok, text = self.run_pptool(line[len('pptool'):].strip())
+                self._show_output(text, ok)
+                continue
+            rc, out, err = self.run_r2(line)
+            self._show_output(out, rc == 0)
+            if rc != 0 and err.strip():
+                self._emit('[stderr] ' + err.strip())
+        return None
+
+    def _ensure_write_mode(self):
+        if self.rw:
+            return True
+        if not self.ui.confirm(
+                "Le patching nécessite r2 -w. Activer le mode écriture"
+                " (backup .elitf.bak automatique) ?", default=False):
+            return False
+        self.rw = True
+        self._backup_active()
+        return True
+
+    def catalog(self):
+
+        ui = self.ui
+        if not self.r2_bin:
+            ui._print("[bold red]r2 introuvable — le catalogue nécessite radare2"
+                      " (Termux: pkg install radare2)[/]" if ui.console
+                      else "r2 introuvable — le catalogue nécessite radare2"
+                           " (Termux: pkg install radare2)")
+            return None
+        while True:
+            cat_key = ui.get_r2_catalog_category()
+            if cat_key in (None, 'back'):
+                return None
+            while True:
+                entry = ui.get_r2_catalog_command(cat_key)
+                if entry in (None, 'back'):
+                    break
+                values = ui.prompt_r2_command_args(entry)
+                if values is None:
+                    continue
+                if entry.get('write') and not self._ensure_write_mode():
+                    continue
+                cmd = _compose_r2_command(entry, values)
+                ui._print(f"[bold bright_cyan]r2>[/] {cmd}" if ui.console
+                          else f"r2> {cmd}")
+                rc, out, err = self.run_r2(cmd)
+                self._show_output(out, rc == 0)
+                if rc != 0 and err.strip():
+                    self._emit('[stderr] ' + err.strip())

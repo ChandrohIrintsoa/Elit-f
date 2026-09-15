@@ -1,14 +1,4 @@
-"""Tests de régression pour les correctifs Elit-f (cycle TDD).
 
-Couvre :
-1. errors='replace' sur toutes les captures subprocess text=True (elitf.py)
-   — évite UnicodeDecodeError sur les symboles non-UTF8 émis par le moteur C++.
-2. Réutilisation du backup .elitf.bak existant en mode écriture r2 (elitf_r2.py)
-   — un 2e patch sur le même .so ne doit pas échouer sur FileExistsError.
-3. Acceptation d'un fichier .so seul par prepare_so_targets (elitf.py).
-4. Idempotence de l'extraction zip dans prepare_so_targets (perf).
-5. Quoting des chemins dans les args débogueur VS (cmake_vs_sln).
-"""
 import os
 from pathlib import Path
 import subprocess
