@@ -382,9 +382,7 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                 log_mgr.add(f"Fetching Dart VM {elitf_input.dart_info.version}...", "info")
                 if _is_termux():
                     log_mgr.add(
-                        "Première compilation du Dart VM sur mobile : comptez "
-                        "20 à 60 min selon l'appareil (une seule fois ; les "
-                        "lancements suivants réutilisent le résultat).", "warn")
+                        "Le premier compilation prend quelques temps.", "warn")
                 on_prog = _make_dartvm_progress(log_mgr, float(log_mgr.step_count))
             else:
                 on_prog = None
