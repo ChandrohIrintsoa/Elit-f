@@ -441,6 +441,20 @@ def generate_r2_scripts(so_list, outdir, log_mgr=None):
         log_mgr.add(f"Generated batch script: r2_analyze_all.sh ({len(generated)} .so)", "success")
     return generated
 
+def _ensure_backup(so_path: str) -> str:
+    """Crée une copie <path>.elitf.bak à la première patch uniquement.
+
+    Si le backup existe déjà (patch répété sur le même fichier), il est
+    conservé tel quel : il représente toujours la version pristine,
+    jamais une version déjà patchée.
+    """
+    backup = so_path + '.elitf.bak'
+    if os.path.exists(backup):
+        return backup
+    with open(so_path, 'rb') as source, open(backup, 'xb') as saved:
+        shutil.copyfileobj(source, saved)
+    return backup
+
 def _run_single_r2(r2_bin, script_path, so_path, timeout, log_mgr, so_name, use_write=False):
     try:
         cmd = [r2_bin]
@@ -771,9 +785,9 @@ def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
                 log_mgr.add(f"Patch script: {so['name']} ({write_cmd} @ {addr})", "info")
 
             try:
-                backup = so["path"] + ".elitf.bak"
-                with open(so["path"], "rb") as source, open(backup, "xb") as saved:
-                    shutil.copyfileobj(source, saved)
+                backup = _ensure_backup(so["path"])
+                if log_mgr:
+                    log_mgr.add(f"Backup disponible: {backup}", "debug")
                 result = subprocess.run(
                     [r2_bin, "-w", "-q", "-i", script_path, so["path"]],
                     capture_output=True, text=True, errors='replace', timeout=timeout,

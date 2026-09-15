@@ -4,7 +4,6 @@ import glob
 import mmap
 import os
 import platform
-import re
 import shlex
 import shutil
 import subprocess
@@ -132,7 +131,6 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
     major, _ = _parse_major_minor(dart_version)
     if major >= 3 and _search_in_file(os.path.join(vm_path, 'class_id.h'), b'V(RecordType)'):
         macros.append('-DHAS_RECORD_TYPE=1')
-
     if _search_in_file(os.path.join(vm_path, 'class_table.h'), b'class SharedClassTable {'):
         macros.append('-DHAS_SHARED_CLASS_TABLE=1')
 
@@ -151,7 +149,6 @@ def find_compat_macro(dart_version: str, no_analysis: bool, ida_fcn: bool = Fals
         macros.append('-DBLUTTER_DART_SINGLE_SNAPSHOT=1')
 
 
-    major, minor = _parse_major_minor(dart_version)
     if _search_in_file(os.path.join(vm_path, 'thread.h'), b'old_marking_stack_block'):
         macros.append('-DOLD_MARKING_STACK_BLOCK=1')
 
@@ -229,7 +226,7 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
         log_mgr.add("Running cmake configure...", "info")
     try:
         proc = subprocess.run(cmd, cwd=SCRIPT_DIR, check=False, stdin=subprocess.DEVNULL,
-                              env=my_env, capture_output=True, text=True)
+                              env=my_env, capture_output=True, text=True, errors='replace')
     except FileNotFoundError:
         raise RuntimeError(
             f"cmake binary not found ('{CMAKE_CMD}'). Install cmake or set CMAKE env var.")
@@ -245,7 +242,8 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
         log_mgr.step()
     try:
         proc = subprocess.run([NINJA_CMD], cwd=builddir, check=False,
-                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              errors='replace')
     except FileNotFoundError:
         raise RuntimeError(
             f"ninja binary not found ('{NINJA_CMD}'). Install ninja or set NINJA env var.")
@@ -261,7 +259,8 @@ def cmake_elitf(elitf_input: ElitfInput, log_mgr: LogManager = None):
         log_mgr.step()
     try:
         proc = subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=False,
-                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              errors='replace')
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"cmake install failed (exit {e.returncode})") from e
     if proc.returncode != 0:
@@ -280,7 +279,7 @@ def cmake_vs_sln(elitf_input: ElitfInput, log_mgr: LogManager = None):
     if log_mgr:
         log_mgr.add("Generating Visual Studio solution...", "info")
     dbg_output_path = os.path.abspath(os.path.join(elitf_input.outdir, 'out'))
-    dbg_cmd_args = f'-i {elitf_input.libapp_path} -o {dbg_output_path}'
+    dbg_cmd_args = f'-i "{elitf_input.libapp_path}" -o "{dbg_output_path}"'
     vscmd_ver = os.getenv('VSCMD_VER')
     if vscmd_ver is None:
         raise RuntimeError('Need to run Elit-f in a Visual Studio Developer console')
@@ -361,7 +360,7 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
         log_mgr.step()
         result = subprocess.run(
             [elitf_input.bin_file, '-i', elitf_input.libapp_path, '-o', elitf_input.outdir],
-            capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            capture_output=True, text=True, errors='replace', stdin=subprocess.DEVNULL)
         if result.stdout:
             for line in result.stdout.strip().split("\n"):
                 if not line.strip():
@@ -411,11 +410,26 @@ def prepare_so_targets(indir, outdir, ui):
                 hasher.update(chunk)
         digest = hasher.hexdigest()[:16]
         target_dir = os.path.abspath(os.path.join(outdir, 'inputs', digest))
-        with zipfile.ZipFile(indir) as archive:
-            for member in archive.namelist():
-                if member.startswith('lib/') and member.endswith('.so'):
-                    _safe_zip_extract(archive, member, target_dir)
+        has_extracted = False
+        if os.path.isdir(target_dir):
+            for _root, _dirs, files in os.walk(target_dir):
+                if any(f.endswith('.so') for f in files):
+                    has_extracted = True
+                    break
+        if not has_extracted:
+            with zipfile.ZipFile(indir) as archive:
+                for member in archive.namelist():
+                    if member.startswith('lib/') and member.endswith('.so'):
+                        _safe_zip_extract(archive, member, target_dir)
         ui.detect_so_files(target_dir)
+    elif os.path.isfile(indir):
+        # Un fichier .so seul est une cible valide pour --action r2/info
+        try:
+            size = os.path.getsize(indir)
+        except OSError as e:
+            raise ValueError(f'Cannot access input file: {indir}') from e
+        ui.detected_so = [{"path": os.path.abspath(indir),
+                           "name": os.path.basename(indir), "size": size}]
     else:
         ui.detect_so_files(indir)
     return ui.detected_so
@@ -465,7 +479,7 @@ def critical_dependencies_missing(missing):
 
 def run_command(command):
     result = subprocess.run(shlex.split(command) if isinstance(command, str) else command,
-                            cwd=SCRIPT_DIR, capture_output=True, text=True,
+                            cwd=SCRIPT_DIR, capture_output=True, text=True, errors='replace',
                             timeout=30, check=True, stdin=subprocess.DEVNULL)
     return result.stdout
 
@@ -536,6 +550,7 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
         ui._print("[bold red]Aucun répertoire spécifié.[/]" if ui.console
                   else "Aucun repertoire specifie.")
         return
+    indir = os.path.expanduser(indir)
     if ui.console:
         ui.console.print()
         try:
@@ -552,7 +567,8 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
         except (KeyboardInterrupt, EOFError):
             return
     ui.indir = indir
-    ui.outdir = outdir
+    ui.outdir = os.path.expanduser(outdir)
+    outdir = ui.outdir
 
     is_apk = os.path.isfile(indir) and zipfile.is_zipfile(indir)
     if is_apk:

@@ -96,7 +96,7 @@ def build_logo(author: str, platform_name: str, date_str: str, offset: int = 0) 
 def logo_plain_text(author: str, platform_name: str, date_str: str) -> str:
     lines = list(ASCII_LINES)
     lines.append("")
-    lines.append(f"  E L I T - F   (Flutter/Dart AOT Reversing Engine)")
+    lines.append("  E L I T - F   (Flutter/Dart AOT Reversing Engine)")
     lines.append(f"  ◈ Auteur    : {author}")
     lines.append(f"  ◈ Plateforme: {platform_name}")
     lines.append(f"  ◈ Date      : {date_str}")
@@ -367,7 +367,7 @@ class ElitfUI:
                 ("0", "Quitter", "", "red"),
             ]
             for num, label, desc, color in menu_items:
-                menu_text.append(f"  [" + num + "] ", style=f"bold {color}")
+                menu_text.append("  [" + num + "] ", style=f"bold {color}")
                 menu_text.append(f"{label}\n", style="bold bright_white")
                 if desc:
                     menu_text.append(f"      {desc}\n", style="dim")
