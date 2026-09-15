@@ -150,6 +150,10 @@ class LogManager:
         lines = []
         with self.lock:
             entries = list(self.logs)
+        # Le panneau "Opérations en direct" est borné en hauteur (~16 lignes)
+        # et rich rogne par le BAS : sans cette limite, les messages récents
+        # (ex. tentatives git) restent invisibles sous la ligne de flottaison.
+        entries = entries[-16:]
         for ts, msg, level in entries:
             if level == "error":
                 lines.append(RichText(f"  [{ts}] ", style="dim") + RichText(f"✗ {msg}", style="bold red"))
@@ -1274,14 +1278,50 @@ class ElitfUI:
             raise error_holder[0]
         return result[0]
 
+    @staticmethod
+    def _live_layout_sizes(width, height):
+        """Dimensionne le Live pour tenir dans la taille réelle du terminal.
+
+        Un layout plus haut (ou plus large) que l'écran ne peut pas être effacé
+        par rich : chaque frame se réimprime et inonde l'affichage (bug observé
+        sur Termux, notamment avec une police agrandie ou en mode portrait).
+        On réduit donc le panneau de logs et les colonnes de progression pour
+        que le total reste inférieur à la hauteur de l'écran.
+        """
+        try:
+            width = max(int(width or 0), 20)
+            height = max(int(height or 0), 10)
+        except (TypeError, ValueError):
+            width, height = 80, 24
+        header_h, progress_h = 3, 5
+        logs_h = max(4, min(18, height - header_h - progress_h - 2))
+        fixed_w = 22  # spinner + pourcentage + temps + séparateurs
+        avail = max(width - fixed_w, 14)
+        desc_w = max(8, min(40, int(avail * 0.45)))
+        bar_w = max(6, min(30, avail - desc_w))
+        return header_h, progress_h, logs_h, desc_w, bar_w
+
     def _run_live(self, title, steps, work_fn):
         from rich.table import Column
+
+        if not getattr(self.console, 'is_terminal', False):
+            # Hors TTY (TERM=dumb, sortie redirigée), rich Live imprime chaque
+            # frame en statique → inondation de l'écran. Le mode plain,
+            # qui n'imprime les logs qu'une seule fois, est le bon choix ici.
+            return self._run_plain(title, steps, work_fn, stream_logs=True)
+
+        try:
+            w, h = self.console.size.width, self.console.size.height
+        except Exception:
+            w, h = 80, 24
+        header_h, progress_h, logs_h, desc_w, bar_w = \
+            self._live_layout_sizes(w, h)
 
         progress = Progress(
             SpinnerColumn(spinner_name="dots", style="bright_cyan"),
             TextColumn("[bold bright_white]{task.description}[/]",
-                       table_column=Column(width=40, no_wrap=False)),
-            BarColumn(bar_width=30, style=Style(dim=True),
+                       table_column=Column(width=desc_w, no_wrap=False)),
+            BarColumn(bar_width=bar_w, style=Style(dim=True),
                       complete_style=Style(color="bright_cyan"),
                       finished_style=Style(color="bright_green")),
             TaskProgressColumn(style=Style(color="bright_white"), table_column=Column(width=6)),
@@ -1292,16 +1332,16 @@ class ElitfUI:
         log_panel_content = Text.from_markup("  [dim]En attente...[/]")
         log_panel = Panel(log_panel_content, title=" Opérations en direct ",
                           border_style=Style(color="bright_yellow"),
-                          box=rbox.ROUNDED, padding=(0, 0), height=18)
+                          box=rbox.ROUNDED, padding=(0, 0), height=logs_h)
 
         header_panel = Panel(Text.from_markup(f"[bold bright_cyan]◆[/] [bold bright_white]{title}[/]", justify="center"),
                              border_style=Style(color="bright_cyan"), box=rbox.ROUNDED)
 
         layout = Layout()
         layout.split_column(
-            Layout(name="header", size=3),
-            Layout(name="progress", size=5),
-            Layout(name="logs", ratio=1),
+            Layout(name="header", size=header_h),
+            Layout(name="progress", size=progress_h),
+            Layout(name="logs", size=logs_h),
         )
         layout["header"].update(header_panel)
         layout["progress"].update(progress)
@@ -1317,7 +1357,7 @@ class ElitfUI:
             new_content = self.log_mgr.get_rich_text()
             new_panel = Panel(new_content, title=" Opérations en direct ",
                               border_style=Style(color="bright_yellow"),
-                              box=rbox.ROUNDED, padding=(0, 0), height=18)
+                              box=rbox.ROUNDED, padding=(0, 0), height=logs_h)
             layout["logs"].update(new_panel)
 
         def worker():
@@ -1331,7 +1371,11 @@ class ElitfUI:
         thread.start()
 
         try:
-            with Live(layout, console=self.console, refresh_per_second=4):
+            # vertical_overflow="crop" : garde-fou supplémentaire — si la
+            # taille réelle du terminal est mal détectée, la frame est tronquée
+            # au lieu de déborder et de réimprimer le bandeau à l'infini.
+            with Live(layout, console=self.console, refresh_per_second=4,
+                      vertical_overflow="crop"):
                 task_id = progress.add_task("Initialisation...", total=steps)
                 while thread.is_alive():
                     completed = min(self.log_mgr.step_count, steps)

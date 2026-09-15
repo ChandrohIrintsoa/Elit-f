@@ -6,6 +6,10 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
+import time
+import urllib.error
+import urllib.request
 
 GIT_CMD = os.getenv('GIT', 'git')
 CMAKE_CMD = os.getenv('CMAKE', 'cmake')
@@ -272,7 +276,231 @@ MAKE_VERSION_FILE = os.path.join(SCRIPT_DIR, 'scripts', 'dartvm_make_version.py'
 SDK_DIR = os.path.join(SCRIPT_DIR, 'dartsdk')
 BUILD_DIR = os.path.join(SCRIPT_DIR, 'build')
 
-DART_GIT_URL = 'https://github.com/dart-lang/sdk.git'
+# Overridable for censored/slow networks (e.g. set them to a mirror that
+# works from your carrier):
+#   export ELITF_DART_SDK_GIT=https://git.example.com/mirror/dart-sdk.git
+#   export ELITF_DART_SDK_TARBALL=https://mirror.example.net/dart-sdk/{version}.tar.gz
+DART_GIT_URL = (os.getenv('ELITF_DART_SDK_GIT')
+                or 'https://github.com/dart-lang/sdk.git')
+DART_TARBALL_URL = (os.getenv('ELITF_DART_SDK_TARBALL')
+                    or 'https://github.com/dart-lang/sdk/archive/refs/tags/{version}.tar.gz')
+
+# Only these paths are needed to build the Dart VM static library.
+SPARSE_PATHS = ('runtime', 'tools', 'third_party/double-conversion')
+
+
+def _emit(log, msg):
+    """Route a status line through the UI log panel when available, else print.
+
+    Printing raw text while rich Live redraws breaks the cursor positioning
+    and stacks frames on screen (the Termux flood) — so when embedded in the
+    UI, every message must go through the captured log panel instead.
+    """
+    if log:
+        log(msg)
+    else:
+        print(msg)
+
+
+def _run_captured(cmd, cwd=None, check=True, log=None, desc=''):
+    """Run a build command with captured output (safe inside rich Live).
+
+    Only used when a log callback is provided (embedded UI). Fails with the
+    stderr tail in the raised error so the cause stays visible.
+    """
+    if desc and log:
+        log(desc)
+    try:
+        proc = subprocess.run(cmd, cwd=cwd, check=check,
+                              capture_output=True, text=True, errors='replace')
+    except (subprocess.CalledProcessError, OSError):
+        raise
+    return proc
+
+
+def _run_captured_checked(cmd, cwd=None, log=None, desc=''):
+    try:
+        return _run_captured(cmd, cwd=cwd, check=True, log=log, desc=desc)
+    except subprocess.CalledProcessError as e:
+        detail = _tail(e.stderr) or _tail(e.stdout)
+        raise RuntimeError(
+            f"{desc or 'command'} failed (exit {e.returncode})"
+            + (f" — {detail}" if detail else '')) from e
+    except OSError as e:
+        raise RuntimeError(f"{desc or 'command'} could not start: {e}") from e
+
+
+def _tail(text, limit=600):
+    """Last `limit` chars of a command output, single line (for error messages)."""
+    text = (text or '').strip()
+    if not text:
+        return ''
+    if len(text) > limit:
+        text = '… ' + text[-limit:]
+    return text.replace('\n', ' | ')
+
+
+def _git(args, cwd=None, attempts=3, delay=2.0, desc='git', log=None):
+    """Run git with captured output and automatic retries.
+
+    On unstable mobile networks (Termux), commands that download data often
+    fail once and succeed on retry. Blobs already fetched by a partial clone
+    are cached by git, so a retry resumes instead of restarting from zero.
+    stdout/stderr are captured so the real cause (network, ref, auth, …)
+    ends up in the raised error instead of being lost in the live UI redraw.
+    """
+    last = None
+    for attempt in range(1, max(1, attempts) + 1):
+        if log:
+            log(f"{desc} (attempt {attempt}/{attempts})…")
+        try:
+            proc = subprocess.run([GIT_CMD] + list(args), cwd=cwd,
+                                  capture_output=True, text=True, errors='replace')
+        except FileNotFoundError:
+            raise
+        if proc.returncode == 0:
+            return proc
+        detail = _tail(proc.stderr) or _tail(proc.stdout)
+        last = RuntimeError(
+            f"{desc}: exit {proc.returncode} (attempt {attempt}/{attempts})"
+            + (f" — {detail}" if detail else ''))
+        if attempt < attempts:
+            time.sleep(delay)
+            delay = min(delay * 2, 20.0)
+    raise last
+
+
+def _rmtree(path):
+    if not os.path.exists(path):
+        return
+
+    def remove_readonly(func, p, _):
+        try:
+            os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+        except OSError:
+            pass
+        func(p)
+
+    _rmtree_rw(path, remove_readonly)
+
+
+def _git_clone_sparse(info, clonedir, log=None):
+    """Shallow partial clone + sparse checkout: minimal download."""
+    _git(['-c', 'advice.detachedHead=false', 'clone', '-b', info.version,
+          '--depth', '1', '--filter=blob:none', '--sparse',
+          DART_GIT_URL, clonedir],
+         attempts=3, desc='git clone (Dart SDK)', log=log)
+    # This step lazily fetches ~30 MB of blobs: the most network-sensitive
+    # part of the whole fetch. More attempts because it is resumable.
+    _git(['sparse-checkout', 'set', *SPARSE_PATHS], cwd=clonedir,
+         attempts=4, delay=3.0, desc='git sparse-checkout', log=log)
+
+
+def _download_with_urllib(url, dest, log=None, attempts=8):
+    """Resumable single-stream download (Range), robust on flaky links.
+
+    A single HTTP stream survives bad mobile networks far better than git's
+    chatty fetch protocol; already-received bytes are kept in `<dest>.part`.
+    """
+    part = dest + '.part'
+    last = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            start = os.path.getsize(part) if os.path.exists(part) else 0
+            headers = {'User-Agent': 'Elit-f (dartvm_fetch_build)'}
+            if start > 0:
+                headers['Range'] = f'bytes={int(start)}-'
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                code = getattr(resp, 'status', None) or resp.getcode() or 0
+                if start > 0 and code != 206 and log:
+                    log('Server ignored resume request; restarting download…')
+                with open(part, 'ab' if (start > 0 and code == 206) else 'wb') as f:
+                    while True:
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+            os.replace(part, dest)
+            return
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError, EOFError) as e:
+            last = e
+            if log:
+                log(f"Download interrupted ({e}); retry {attempt}/{attempts}…")
+            time.sleep(min(2.0 * attempt, 10.0))
+    raise RuntimeError(f"Download failed after {attempts} attempts: {last}")
+
+
+def _download_with_curl(url, dest):
+    """Last-resort downloader for setups where Python TLS is broken."""
+    curl = shutil.which('curl')
+    if not curl:
+        return False
+    part = dest + '.part'
+    try:
+        proc = subprocess.run(
+            [curl, '-L', '--fail', '--retry', '6', '--retry-delay', '3',
+             '--retry-all-errors', '-o', part, url],
+            capture_output=True, text=True, errors='replace')
+    except OSError:
+        return False
+    if proc.returncode == 0 and os.path.isfile(part) and os.path.getsize(part) > 0:
+        os.replace(part, dest)
+        return True
+    return False
+
+
+def _download_tarball(info, dest, log=None):
+    url = DART_TARBALL_URL.format(version=info.version)
+    if log:
+        log(f"Downloading Dart SDK {info.version} archive…")
+    try:
+        _download_with_urllib(url, dest, log)
+    except (RuntimeError, OSError) as e:
+        if log:
+            log(f"Python download failed ({_tail(str(e), 160)}); trying curl…")
+        if not _download_with_curl(url, dest):
+            raise
+
+
+_TARBALL_SUBDIRS = ('runtime', 'tools', 'third_party/double-conversion')
+
+
+def _tarball_checkout(info, clonedir, log=None):
+    """Fallback without git: download the tag archive and extract only the
+    directories Elit-f compiles against. The archive is cached, so a later
+    re-run never downloads it twice."""
+    _rmtree(clonedir)
+    os.makedirs(SDK_DIR, exist_ok=True)
+    dest = os.path.join(SDK_DIR, f'dart-sdk-{info.version}.tar.gz')
+    if not os.path.isfile(dest):
+        _download_tarball(info, dest, log)
+    if log:
+        log("Extracting archive (runtime, tools, double-conversion)…")
+    os.makedirs(clonedir, exist_ok=True)
+    extracted = 0
+    with tarfile.open(dest, 'r:gz') as tf:
+        for member in tf:
+            parts = member.name.split('/', 1)
+            if len(parts) != 2:
+                continue  # repository top-level files: not needed for the build
+            rel = parts[1]
+            if not rel or '..' in rel.split('/'):
+                continue
+            if not any(rel == p or rel.startswith(p + '/')
+                       for p in _TARBALL_SUBDIRS):
+                continue
+            member.name = rel
+            try:
+                tf.extract(member, clonedir, filter='data')
+            except TypeError:
+                tf.extract(member, clonedir)
+            extracted += 1
+    if extracted == 0:
+        raise RuntimeError("Dart SDK archive unreadable or empty: " + dest)
+    if not os.path.isfile(os.path.join(clonedir, 'runtime', 'vm', 'version_in.cc')):
+        raise RuntimeError("Dart SDK archive incomplete "
+                           "(runtime/vm/version_in.cc missing): " + dest)
 
 imp_replace_snippet = """import importlib.util
 import importlib.machinery
@@ -303,22 +531,33 @@ class DartLibInfo:
             self.variant_suffix += '_' + snapshot_hash
         self.lib_name = f'dartvm{version}_{os_name}_{arch}{self.variant_suffix}'
 
-def checkout_dart(info: DartLibInfo):
+def checkout_dart(info: DartLibInfo, log=None):
     clonedir = os.path.join(SDK_DIR, 'v' + info.version + info.variant_suffix)
 
     version_file = os.path.join(clonedir, 'runtime', 'vm', 'version.cc')
     if os.path.exists(clonedir) and not os.path.exists(version_file):
-        print('Delete incomplete clone directory ' + clonedir)
-        def remove_readonly(func, path, _):
-            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
-            func(path)
-        _rmtree_rw(clonedir, remove_readonly)
+        _emit(log, 'Delete incomplete clone directory ' + clonedir)
+        _rmtree(clonedir)
 
     if not os.path.exists(clonedir):
-        subprocess.run([GIT_CMD, '-c', 'advice.detachedHead=false', 'clone', '-b', info.version,
-                        '--depth', '1', '--filter=blob:none', '--sparse', DART_GIT_URL, clonedir], check=True)
-        subprocess.run([GIT_CMD, 'sparse-checkout', 'set', 'runtime', 'tools',
-                        'third_party/double-conversion'], cwd=clonedir, check=True)
+        try:
+            _git_clone_sparse(info, clonedir, log=log)
+        except (RuntimeError, OSError) as git_err:
+            # git failed for good (bad network on the blob fetch, old git
+            # without sparse-checkout, proxy…): switch to a single-stream
+            # archive download which survives flaky mobile links.
+            _emit(log, 'git sparse-checkout failed (' + _tail(str(git_err), 200) + ')')
+            _emit(log, 'Falling back to direct archive download…')
+            try:
+                _tarball_checkout(info, clonedir, log=log)
+            except Exception as tar_err:
+                raise RuntimeError(
+                    f"Cannot fetch Dart SDK {info.version} sources.\n"
+                    f"  - git: {git_err}\n"
+                    f"  - archive: {tar_err}\n"
+                    "Check network connectivity, or point a reachable mirror "
+                    "with env vars ELITF_DART_SDK_GIT / ELITF_DART_SDK_TARBALL."
+                ) from tar_err
         with os.scandir(clonedir) as it:
             for entry in it:
                 if entry.is_file():
@@ -338,11 +577,19 @@ def checkout_dart(info: DartLibInfo):
                             f.seek(0)
                             f.truncate()
                             f.write(new_content)
-            subprocess.run([sys.executable, 'tools/make_version.py', '--output', 'runtime/vm/version.cc',
-                            '--input', 'runtime/vm/version_in.cc'], cwd=clonedir, check=True)
+            cmd = [sys.executable, 'tools/make_version.py', '--output', 'runtime/vm/version.cc',
+                   '--input', 'runtime/vm/version_in.cc']
+            if log:
+                _run_captured_checked(cmd, cwd=clonedir, log=log,
+                                      desc='Generating runtime/vm/version.cc')
+            else:
+                subprocess.run(cmd, cwd=clonedir, check=True)
         else:
-
-            subprocess.run([sys.executable, MAKE_VERSION_FILE, clonedir, info.snapshot_hash], check=True)
+            cmd = [sys.executable, MAKE_VERSION_FILE, clonedir, info.snapshot_hash]
+            if log:
+                _run_captured_checked(cmd, log=log, desc='Generating runtime/vm/version.cc')
+            else:
+                subprocess.run(cmd, check=True)
 
     if sys.platform == 'win32':
         vers = info.version.split('.', 2)
@@ -360,7 +607,7 @@ def checkout_dart(info: DartLibInfo):
 
     return clonedir
 
-def cmake_dart(info: DartLibInfo, target_dir: str):
+def cmake_dart(info: DartLibInfo, target_dir: str, log=None):
 
     parts = info.version.split('.')
     if len(parts) < 2:
@@ -384,23 +631,38 @@ def cmake_dart(info: DartLibInfo, target_dir: str):
         f.write('@PACKAGE_INIT@\n\n')
         f.write('include ( "${CMAKE_CURRENT_LIST_DIR}/dartvmTarget.cmake" )\n\n')
 
-    subprocess.run([sys.executable, CREATE_SRCLIST_FILE, target_dir], check=True)
+    if log:
+        _run_captured_checked([sys.executable, CREATE_SRCLIST_FILE, target_dir],
+                              log=log, desc='Listing Dart VM sources')
+    else:
+        subprocess.run([sys.executable, CREATE_SRCLIST_FILE, target_dir], check=True)
 
     builddir = os.path.join(BUILD_DIR, info.lib_name)
-    subprocess.run([CMAKE_CMD, '-GNinja', '-B', builddir,
-                    f'-DTARGET_OS={info.os_name}', f'-DTARGET_ARCH={info.arch}',
-                    f'-DDARTLIB_SUFFIX={info.variant_suffix}',
-                    f'-DCOMPRESSED_PTRS={1 if info.has_compressed_ptrs else 0}',
-                    '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE'],
-                   cwd=target_dir, check=True)
+    cmake_cmd = [CMAKE_CMD, '-GNinja', '-B', builddir,
+                 f'-DTARGET_OS={info.os_name}', f'-DTARGET_ARCH={info.arch}',
+                 f'-DDARTLIB_SUFFIX={info.variant_suffix}',
+                 f'-DCOMPRESSED_PTRS={1 if info.has_compressed_ptrs else 0}',
+                 '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE']
 
-    subprocess.run([NINJA_CMD], cwd=builddir, check=True)
-    subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=True)
+    if log:
+        # Output captured so nothing is written to the tty while rich Live
+        # owns the screen (raw writes break cursor positioning and stack
+        # frames — the Termux flood). Failures keep the stderr tail.
+        _run_captured_checked(cmake_cmd, cwd=target_dir, log=log,
+                              desc='Configuring Dart VM build (CMake)')
+        _run_captured_checked([NINJA_CMD], cwd=builddir, log=log,
+                              desc='Compiling Dart VM (ninja, may take a while)…')
+        _run_captured_checked([CMAKE_CMD, '--install', '.'], cwd=builddir, log=log,
+                              desc='Installing Dart VM library')
+    else:
+        subprocess.run(cmake_cmd, cwd=target_dir, check=True)
+        subprocess.run([NINJA_CMD], cwd=builddir, check=True)
+        subprocess.run([CMAKE_CMD, '--install', '.'], cwd=builddir, check=True)
 
-def fetch_and_build(info: DartLibInfo):
+def fetch_and_build(info: DartLibInfo, log=None):
     check_build_tools()
-    outdir = checkout_dart(info)
-    cmake_dart(info, outdir)
+    outdir = checkout_dart(info, log=log)
+    cmake_dart(info, outdir, log=log)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

@@ -322,7 +322,8 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                 log_mgr.add(f"Fetching Dart VM {elitf_input.dart_info.version}...", "info")
             try:
                 from dartvm_fetch_build import fetch_and_build
-                fetch_and_build(elitf_input.dart_info)
+                fetch_and_build(elitf_input.dart_info,
+                                log=log_mgr.add if log_mgr else None)
             except FileNotFoundError as e:
                 missing = os.path.basename(str(getattr(e, 'filename', None) or ''))
                 hint = (
@@ -333,7 +334,7 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                 raise RuntimeError(
                     f"Failed to fetch/build Dart VM {elitf_input.dart_info.version}: {hint}"
                 ) from e
-            except (subprocess.CalledProcessError, OSError) as e:
+            except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
                 raise RuntimeError(
                     f"Failed to fetch/build Dart VM {elitf_input.dart_info.version}: {e}. "
                     "Check network connectivity and that 'git', 'cmake' and 'ninja' are installed."
