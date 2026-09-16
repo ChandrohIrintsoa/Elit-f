@@ -6,6 +6,8 @@ import shlex
 import hashlib
 import shutil
 import subprocess
+import threading
+import time
 
 R2_HEADER = r"""e scr.color=0
 e scr.utf8=0
@@ -1099,6 +1101,101 @@ def _compose_r2_command(entry, values):
     return ' '.join(parts + tail)
 
 
+class R2PipeError(Exception):
+    """Erreur du protocole r2pipe (spawn impossible, timeout, EOF)."""
+
+
+class R2Pipe:
+    """Session r2 persistante via le protocole r2pipe (`r2 -q0 <fichier>`).
+
+    Une seule instance r2 vit pendant toute la console : le seek (`s`),
+    les flags et le résultat de l'analyse (`aaa`) sont conservés entre les
+    commandes — contrairement à l'ancien mode qui relançait r2 à chaque fois.
+    """
+
+    def __init__(self, r2_bin, so_path, writable=False, timeout=None):
+        self.so_path = so_path
+        self.timeout = timeout or _timeout()
+        argv = [r2_bin, '-q0']
+        if writable:
+            argv.append('-w')
+        argv.append(so_path)
+        try:
+            self.proc = subprocess.Popen(
+                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, bufsize=0)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise R2PipeError(f'Impossible de démarrer r2: {exc}') from exc
+        self._fd = self.proc.stdout.fileno()
+        self._buf = bytearray()
+        self._lock = threading.Lock()
+        self._eof = threading.Event()
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+
+    def _read_loop(self):
+        try:
+            while True:
+                # os.read = retourne dès que des octets sont dispo (pas de
+                # bufferisation bloquante comme BufferedReader.read(n))
+                chunk = os.read(self._fd, 4096)
+                if not chunk:
+                    break
+                with self._lock:
+                    self._buf += chunk
+        except (OSError, ValueError):
+            pass
+        finally:
+            self._eof.set()
+
+    def cmd(self, command, timeout=None):
+        """Exécute une commande r2, retourne sa sortie (protocole -q0)."""
+        if self.proc.poll() is not None:
+            raise R2PipeError('r2 session terminée')
+        deadline = time.monotonic() + (timeout or self.timeout)
+        with self._lock:
+            start = len(self._buf)
+        try:
+            self.proc.stdin.write(command.encode('utf-8') + b'\n')
+            self.proc.stdin.flush()
+        except (OSError, ValueError) as exc:
+            raise R2PipeError(f'écriture r2 impossible: {exc}') from exc
+        while True:
+            with self._lock:
+                idx = self._buf.find(b'\x00', start)
+                if idx >= 0:
+                    out = bytes(self._buf[start:idx])
+                    del self._buf[start:idx + 1]
+                    return out.decode('utf-8', errors='replace')
+            if self._eof.is_set() and self.proc.poll() is not None:
+                with self._lock:
+                    idx = self._buf.find(b'\x00', start)
+                    if idx >= 0:
+                        out = bytes(self._buf[start:idx])
+                        del self._buf[start:idx + 1]
+                        return out.decode('utf-8', errors='replace')
+                raise R2PipeError('r2 a fermé la session')
+            if time.monotonic() > deadline:
+                raise R2PipeError(f'timeout r2pipe (>{timeout or self.timeout}s)')
+            time.sleep(0.02)
+
+    def close(self):
+        try:
+            if self.proc.poll() is None:
+                try:
+                    self.proc.stdin.write(b'q\n')
+                    self.proc.stdin.flush()
+                    self.proc.wait(timeout=2)
+                except (OSError, ValueError, subprocess.TimeoutExpired):
+                    self.proc.terminate()
+                    try:
+                        self.proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        self.proc.kill()
+        except Exception:
+            pass
+
+
 class R2Session:
 
 
@@ -1118,6 +1215,7 @@ class R2Session:
         self.analysis_cmds = []
         self.anal_replay = True
         self.rw = False
+        self._pipe = None
 
     # -- cibles -------------------------------------------------------------
 
@@ -1127,6 +1225,7 @@ class R2Session:
 
     def _switch(self, idx):
         self.active = idx
+        self._close_pipe()  # nouvelle session r2 pour la nouvelle cible
         if self.rw:
             self._backup_active()
 
@@ -1165,6 +1264,51 @@ class R2Session:
         if not self.r2_bin:
             return 127, '', ('r2 introuvable — installez radare2 '
                              '(Termux: pkg install radare2)')
+        try:
+            return self._run_r2_pipe(cmd)
+        except R2PipeError as exc:
+            self._close_pipe()
+            if self.log_mgr:
+                self.log_mgr.add(
+                    f"Session r2 persistante indisponible ({exc}) — "
+                    "repli par commande", "debug")
+        return self._run_r2_fallback(cmd)
+
+    # -- session persistante -------------------------------------------------
+
+    def _ensure_pipe(self):
+        if self._pipe is not None:
+            return self._pipe
+        if self.rw:
+            self._backup_active()
+        self._pipe = R2Pipe(self.r2_bin, self.active_target['path'],
+                            writable=self.rw)
+        # En-tête + config session appliqués UNE fois dans la session r2
+        for part in list(R2_HEADER_LINES) + list(self.env_cmds):
+            self._pipe.cmd(part)
+        return self._pipe
+
+    def _close_pipe(self):
+        if self._pipe is not None:
+            self._pipe.close()
+            self._pipe = None
+
+    def close(self):
+        """Termine la session r2 persistante (appelé à la sortie du terminal)."""
+        self._close_pipe()
+
+    def _run_r2_pipe(self, cmd):
+        pipe = self._ensure_pipe()
+        out = pipe.cmd(cmd)
+        tokens = cmd.split()
+        first = tokens[0] if tokens else ''
+        if first in R2_ANALYSIS_COMMANDS and cmd not in self.analysis_cmds:
+            self.analysis_cmds.append(cmd)
+        return 0, out, ''
+
+    # -- repli (une invocation r2 par commande) ------------------------------
+
+    def _run_r2_fallback(self, cmd):
         try:
             timeout = _timeout()
         except ValueError:
@@ -1248,17 +1392,18 @@ class R2Session:
           if self.ui.console else "Mini terminal r2 — commandes")
         p("  <cmd r2>          Exécuter une commande r2 sur la cible active")
         p("                    ex: afl, px 64 @ 0x1000, pdf @ sym.main, izz~password")
+        p("                    Session PERSISTANTE: s 0x6f57ec puis pd 200 conserve le seek")
         p("  pptool <args>     Exécuter pptool — placeholders: {so} {libapp} {name} {outdir}")
         p("  !targets          Lister les cibles de la session")
-        p("  !use <n|nom>      Changer de cible active")
-        p("  !anal on|off      Replay automatique de la dernière analyse (aaa) avant chaque commande")
+        p("  !use <n|nom>      Changer de cible active (nouvelle session r2)")
+        p("  !anal on|off      Replay de l'analyse en mode repli (inutile en session persistante)")
         p("  !rw on|off        Mode écriture r2 -w (backup .elitf.bak automatique)")
-        p("  !set / !unset     Config session appliquée à chaque commande — ex: !set e asm.bytes=true")
+        p("  !set / !unset     Config session — ex: !set e asm.bytes=true (appliqué en direct)")
         p("  !lib              Chemin de la cible active")
         p("  !pptool           État pptool / exécuter avec !pptool <args>")
         p("  q | quit | exit   Quitter le terminal")
-        p("Astuce: chaque commande part d'une session r2 fraîche — lancez l'analyse (aaa) ou"
-          " activez !anal avant pdf/axt. Redirection possible: afl > fonctions.txt")
+        p("Astuce: la session r2 est persistante — le seek (s), les flags et l'analyse"
+          " (aaa) sont conservés entre les commandes. Redirection: afl > fonctions.txt")
 
     # -- builtins -----------------------------------------------------------
 
@@ -1291,12 +1436,22 @@ class R2Session:
         elif name == 'anal':
             if rest.lower() in ('on', 'off'):
                 self.anal_replay = rest.lower() == 'on'
-            last = self.analysis_cmds or 'aucune'
-            self.ui._print(f"Replay de l'analyse: {'ON' if self.anal_replay else 'OFF'}"
-                           f" (dernière: {last})")
+            if self._pipe is not None:
+                self.ui._print("Session r2 persistante: l'analyse (aaa) reste "
+                               "en mémoire — replay inutile"
+                               f" (replay {'ON' if self.anal_replay else 'OFF'} en mode repli)")
+            else:
+                last = self.analysis_cmds or 'aucune'
+                self.ui._print(f"Replay de l'analyse: {'ON' if self.anal_replay else 'OFF'}"
+                               f" (dernière: {last})")
         elif name == 'set':
             if rest and rest not in self.env_cmds:
                 self.env_cmds.append(rest)
+                if self._pipe is not None:
+                    try:
+                        self._pipe.cmd(rest)  # application immédiate dans la session
+                    except R2PipeError:
+                        self._close_pipe()
             self.ui._print(f"Config session: {self.env_cmds or 'vide'}"
                            "  (!set e var=valeur)")
         elif name == 'unset':
@@ -1306,9 +1461,11 @@ class R2Session:
         elif name == 'rw':
             if rest.lower() == 'on':
                 self.rw = True
+                self._close_pipe()  # relance avec -w à la prochaine commande
                 self._backup_active()
             elif rest.lower() == 'off':
                 self.rw = False
+                self._close_pipe()  # relance sans -w
             state = 'ON (backup .elitf.bak actif)' if self.rw else 'OFF'
             self.ui._print(f"Mode écriture r2 -w: {state}")
         elif name == 'pptool':
@@ -1343,31 +1500,34 @@ class R2Session:
                   if ui.console
                   else f"Terminal r2 — cible: {self.active_target['name']}"
                        f" — pptool: {pptool_state}")
-        ui._print("[dim]!help pour l'aide — q pour quitter[/]" if ui.console
-                  else "!help pour l'aide — q pour quitter")
-        while True:
-            try:
-                line = ui.r2_readline(f"r2({self.active_target['name']})> ")
-            except (KeyboardInterrupt, EOFError):
-                break
-            if line is None:
-                break
-            line = line.strip()
-            if not line:
-                continue
-            action = self.handle_builtin(line)
-            if action == 'quit':
-                break
-            if action == 'handled':
-                continue
-            if line == 'pptool' or line.startswith('pptool '):
-                ok, text = self.run_pptool(line[len('pptool'):].strip())
-                self._show_output(text, ok)
-                continue
-            rc, out, err = self.run_r2(line)
-            self._show_output(out, rc == 0)
-            if rc != 0 and err.strip():
-                self._emit('[stderr] ' + err.strip())
+        ui._print("[dim]!help pour l'aide — q pour quitter — session r2 persistante[/]" if ui.console
+                  else "!help pour l'aide — q pour quitter — session r2 persistante")
+        try:
+            while True:
+                try:
+                    line = ui.r2_readline(f"r2({self.active_target['name']})> ")
+                except (KeyboardInterrupt, EOFError):
+                    break
+                if line is None:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                action = self.handle_builtin(line)
+                if action == 'quit':
+                    break
+                if action == 'handled':
+                    continue
+                if line == 'pptool' or line.startswith('pptool '):
+                    ok, text = self.run_pptool(line[len('pptool'):].strip())
+                    self._show_output(text, ok)
+                    continue
+                rc, out, err = self.run_r2(line)
+                self._show_output(out, rc == 0)
+                if rc != 0 and err.strip():
+                    self._emit('[stderr] ' + err.strip())
+        finally:
+            self.close()
         return None
 
     def _ensure_write_mode(self):

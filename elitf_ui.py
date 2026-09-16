@@ -387,7 +387,9 @@ class ElitfUI:
                 ("2", "Radare2 - Console d'analyse",
                  "Sélection cibles + Terminal r2/pptool, catalogue complet,"
                  " presets, patching", "bright_green"),
-                ("3", "Analyser et générer les scripts IDA", "Analyse AOT avec exports IDA", "blue"),
+                ("3", "Dump Il2CppDumper (2 fichiers)",
+                 "Contrat 2 fichiers : libapp.so + libflutter.so →"
+                 " dump.dart + script.json", "blue"),
                 ("4", "Analyser et générer les scripts Frida", "Analyse AOT avec exports Frida", "red"),
                 ("5", "Information binaire détaillée",
                  "Infos détaillées des .so + changer les cibles / nettoyer"
@@ -407,7 +409,8 @@ class ElitfUI:
             print("\n  === 𝕸𝖊𝖓𝖚 𝕻𝖗𝖎𝖓𝖈𝖎𝖕𝖆𝖑 ===")
             print("  [1] Flutter/Dart AOT Analysis")
             print("  [2] Radare2 - Console d'analyse (terminal, catalogue, presets)")
-            print("  [3] Analyser et generer les scripts IDA")
+            print("  [3] Dump Il2CppDumper (2 fichiers : libapp.so + libflutter.so")
+            print("      -> dump.dart + script.json)")
             print("  [4] Analyser et generer les scripts Frida")
             print("  [5] Information binaire detaillee (+ cibles / nettoyage)")
             print("  [0] Quitter")

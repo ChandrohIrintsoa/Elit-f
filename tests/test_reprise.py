@@ -51,7 +51,7 @@ class RepriseTests(unittest.TestCase):
             self.assertEqual(result.stdout, 'ok:0x2a')
 
     def test_export_menus_run_analysis(self):
-        for choice in (3, 4):
+        for choice in (1, 4):
             with self.subTest(choice=choice), tempfile.TemporaryDirectory() as d:
                 ui = MagicMock()
                 ui.console = None
@@ -60,7 +60,58 @@ class RepriseTests(unittest.TestCase):
                 with patch('builtins.input', side_effect=[d, d, '']), patch.object(elitf, 'check_dependencies', return_value=[]), patch.object(elitf, 'run_flutter_analysis') as analyze:
                     elitf.main_interactive(ui)
                 analyze.assert_called_once()
-                self.assertEqual(analyze.call_args.args[4], choice == 3)
+                # options 1 et 4 : plus de forçage ida_fcn depuis le menu
+                # (l'option 3 utilise désormais elitf_dumper)
+                self.assertFalse(analyze.call_args.args[4])
+
+    def test_menu3_runs_il2cpp_dumper(self):
+        # Option [3] = dump style Il2CppDumper via elitf_dumper (plus ida_fcn)
+        # Contrat « exactement 2 fichiers » : libapp.so + libflutter.so requis
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / 'libapp.so').write_bytes(b'\x7fELF app')
+            (root / 'libflutter.so').write_bytes(b'\x7fELF flutter')
+            ui = MagicMock()
+            ui.console = None
+            ui.get_choice.side_effect = [3, 0]
+            ui.run_with_live_display.side_effect = lambda title, steps, work: work(ui.log_mgr)
+            with patch('builtins.input', side_effect=[d, d, '']), \
+                    patch.object(elitf, 'check_dependencies', return_value=[]), \
+                    patch.object(elitf, 'run_flutter_analysis') as analyze, \
+                    patch('elitf_dumper.ensure_kernel_outputs',
+                          return_value={'methods': 1, 'classes': 1,
+                                        'strings': 1, 'dump_dir': d,
+                                        'input_files': (str(root / 'libapp.so'),
+                                                        str(root / 'libflutter.so')),
+                                        'input_count': 2}) as dump:
+                elitf.main_interactive(ui)
+            analyze.assert_not_called()
+            dump.assert_called_once()
+            self.assertEqual(dump.call_args.args[0], d)
+            # le pair résolu est transmis au dumper (contrat 2 fichiers)
+            input_files = dump.call_args.kwargs.get('input_files')
+            self.assertEqual(
+                sorted(Path(p).name for p in input_files),
+                ['libapp.so', 'libflutter.so'])
+
+    def test_menu3_without_two_files_is_refused(self):
+        # Contrat : sans libapp.so + libflutter.so, l'option [3] refuse
+        # (comme l'original Il2CppDumper exige ses 2 fichiers) et retombe au menu
+        with tempfile.TemporaryDirectory() as d:
+            ui = MagicMock()
+            ui.console = None
+            ui.get_choice.side_effect = [3, 0]
+            with patch('builtins.input', side_effect=[d, d, '']), \
+                    patch.object(elitf, 'check_dependencies', return_value=[]), \
+                    patch.object(elitf, 'run_flutter_analysis') as analyze, \
+                    patch('elitf_dumper.ensure_kernel_outputs') as dump:
+                elitf.main_interactive(ui)
+            analyze.assert_not_called()
+            dump.assert_not_called()
+            # message d'erreur contractuel affiché
+            printed = ' '.join(str(c.args[0]) for c in ui._print.call_args_list
+                               if c.args)
+            self.assertIn('exactement 2 fichiers', printed)
 
     def test_batch_detects_zero_exit_errors(self):
         with tempfile.TemporaryDirectory() as d:
