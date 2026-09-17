@@ -114,8 +114,6 @@ class LogManager:
         self.lock = threading.Lock()
         self.step_count = 0
         self.total_steps = 0
-        # Sous-progression d'une longue phase (fetch/build Dart VM) :
-        # fraction exprimée en unités de step, + libellé de phase courant.
         self.sub_fraction = 0.0
         self.sub_label = ''
 
@@ -148,11 +146,7 @@ class LogManager:
             self.step_count += count
 
     def set_sub_progress(self, fraction=None, label=''):
-        """Publie la progression fine d'une longue phase (0..n step-units).
-
-        `fraction=None` remet à zéro (phase terminée, les step() réels
-        prennent le relais). Thread-safe : appelé depuis le worker.
-        """
+        
         with self.lock:
             self.sub_fraction = float(fraction) if fraction is not None else 0.0
             self.sub_label = label or ''
@@ -170,9 +164,7 @@ class LogManager:
         lines = []
         with self.lock:
             entries = list(self.logs)
-        # Le panneau "Opérations en direct" est borné en hauteur (~16 lignes)
-        # et rich rogne par le BAS : sans cette limite, les messages récents
-        # (ex. tentatives git) restent invisibles sous la ligne de flottaison.
+
         entries = entries[-16:]
         for ts, msg, level in entries:
             if level == "error":
@@ -384,12 +376,12 @@ class ElitfUI:
             menu_text = Text()
             menu_items = [
                 ("1", "Flutter/Dart AOT Analysis", "Analyse complète libapp.so + libflutter.so", "bright_cyan"),
-                ("2", "Radare2 - Console d'analyse",
-                 "Sélection cibles + Terminal r2/pptool, catalogue complet,"
-                 " presets, patching", "bright_green"),
-                ("3", "Dump Il2CppDumper (2 fichiers)",
-                 "Contrat 2 fichiers : libapp.so + libflutter.so →"
-                 " dump.dart + script.json", "blue"),
+                ("2", "Radare2 - Mini Terminal",
+                 "Terminal interactif r2 — TOUTES les commandes r2 (a/i/p/s/f/c/C/d/g/t/y/z/k/m/o/r/e/v/?/!)",
+                 "bright_green"),
+                ("3", "Il2Cpp Analysis (Il2CppInspector)",
+                 "dump.cs + symbol map + IDA/Ghidra scripts depuis libil2cpp.so + global-metadata.dat",
+                 "blue"),
                 ("4", "Analyser et générer les scripts Frida", "Analyse AOT avec exports Frida", "red"),
                 ("5", "Information binaire détaillée",
                  "Infos détaillées des .so + changer les cibles / nettoyer"
@@ -408,9 +400,8 @@ class ElitfUI:
         else:
             print("\n  === 𝕸𝖊𝖓𝖚 𝕻𝖗𝖎𝖓𝖈𝖎𝖕𝖆𝖑 ===")
             print("  [1] Flutter/Dart AOT Analysis")
-            print("  [2] Radare2 - Console d'analyse (terminal, catalogue, presets)")
-            print("  [3] Dump Il2CppDumper (2 fichiers : libapp.so + libflutter.so")
-            print("      -> dump.dart + script.json)")
+            print("  [2] Radare2 - Mini Terminal (toutes commandes r2)")
+            print("  [3] Il2Cpp Analysis (Il2CppInspector: dump.cs + IDA/Ghidra)")
             print("  [4] Analyser et generer les scripts Frida")
             print("  [5] Information binaire detaillee (+ cibles / nettoyage)")
             print("  [0] Quitter")
@@ -1355,12 +1346,7 @@ class ElitfUI:
 
     @staticmethod
     def _combined_completed(step_count, sub_fraction, steps, last=0.0):
-        """Barre = max(steps réels, sous-progression, dernier affiché).
 
-        Le max rend la barre monotone : la sous-progression d'une phase
-        longue ne peut pas faire reculer la barre quand la phase se termine
-        et rend la main aux step() réels ; elle est bornée par `steps`.
-        """
         try:
             steps = max(int(steps), 1)
         except (TypeError, ValueError):
@@ -1377,9 +1363,7 @@ class ElitfUI:
         from rich.table import Column
 
         if not getattr(self.console, 'is_terminal', False):
-            # Hors TTY (TERM=dumb, sortie redirigée), rich Live imprime chaque
-            # frame en statique → inondation de l'écran. Le mode plain,
-            # qui n'imprime les logs qu'une seule fois, est le bon choix ici.
+
             return self._run_plain(title, steps, work_fn, stream_logs=True)
 
         try:
@@ -1402,7 +1386,7 @@ class ElitfUI:
         )
 
         log_panel_content = Text.from_markup("  [dim]En attente...[/]")
-        log_panel = Panel(log_panel_content, title=" Opérations en direct ",
+        log_panel = Panel(log_panel_content, title=" Elit-f travaille ",
                           border_style=Style(color="bright_yellow"),
                           box=rbox.ROUNDED, padding=(0, 0), height=logs_h)
 
@@ -1427,7 +1411,7 @@ class ElitfUI:
 
         def update_logs():
             new_content = self.log_mgr.get_rich_text()
-            new_panel = Panel(new_content, title=" Opérations en direct ",
+            new_panel = Panel(new_content, title=" Elit-f travaille ",
                               border_style=Style(color="bright_yellow"),
                               box=rbox.ROUNDED, padding=(0, 0), height=logs_h)
             layout["logs"].update(new_panel)
@@ -1443,9 +1427,6 @@ class ElitfUI:
         thread.start()
 
         try:
-            # vertical_overflow="crop" : garde-fou supplémentaire — si la
-            # taille réelle du terminal est mal détectée, la frame est tronquée
-            # au lieu de déborder et de réimprimer le bandeau à l'infini.
             with Live(layout, console=self.console, refresh_per_second=4,
                       vertical_overflow="crop"):
                 task_id = progress.add_task("Initialisation...", total=steps)

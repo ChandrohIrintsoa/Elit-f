@@ -94,38 +94,6 @@ class R2WriteModeBackupTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def _run_write_mode(self):
-        class FakeUI:
-            console = None
-            prompts = iter(['0x1234', '00bf'])
-
-            def _print(self, *a, **k):
-                pass
-
-            def _prompt_text(self, prompt, default=''):
-                return next(self.prompts)
-
-        with patch.object(r2, '_find_r2', return_value='/fake/r2'), \
-                patch.object(r2.subprocess, 'run',
-                             return_value=subprocess.CompletedProcess([], 0, '', '')):
-            return r2._r2_write_mode(self.targets, str(self.root / 'out'),
-                                     LogManager(), FakeUI(), 'wx')
-
-    def test_patch_creates_backup(self):
-        self._run_write_mode()
-        backup = Path(str(self.target) + '.elitf.bak')
-        self.assertTrue(backup.exists())
-        self.assertEqual(backup.read_bytes(), b'ELF-PAYLOAD')
-
-    def test_second_patch_reuses_existing_backup(self):
-        self._run_write_mode()
-        backup = Path(str(self.target) + '.elitf.bak')
-        backup.write_bytes(b'ORIGINAL-PRISTINE')
-        # Ne doit pas lever : le backup existant est conservé, le patch s'applique
-        self._run_write_mode()
-        self.assertEqual(backup.read_bytes(), b'ORIGINAL-PRISTINE')
-        self.assertEqual(self.target.read_bytes(), b'ELF-PAYLOAD')
-
     def test_backup_helper_preserves_content(self):
         backup = r2._ensure_backup(str(self.target))
         self.assertEqual(Path(backup).read_bytes(), b'ELF-PAYLOAD')

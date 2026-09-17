@@ -13,7 +13,8 @@ import zipfile
 
 from dartvm_fetch_build import DartLibInfo, resolve_build_tools, ensure_native_deps
 from elitf_ui import LogManager, ElitfUI, AUTHOR, HAS_RICH, _is_termux
-from elitf_r2 import display_binary_info, r2_unified_analysis, run_r2_custom, R2_PRESETS
+from elitf_r2 import display_binary_info, run_r2_custom, R2_PRESETS, r2_mini_terminal
+from elitf_il2cpp import run_il2cpp_analysis, find_il2cpp_targets
 
 _TOOLS = resolve_build_tools()
 CMAKE_CMD = _TOOLS['cmake'] or os.getenv('CMAKE', 'cmake')
@@ -382,9 +383,7 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
                 log_mgr.add(f"Fetching Dart VM {elitf_input.dart_info.version}...", "info")
                 if _is_termux():
                     log_mgr.add(
-                        "Première compilation du Dart VM sur mobile : comptez "
-                        "20 à 60 min selon l'appareil (une seule fois ; les "
-                        "lancements suivants réutilisent le résultat).", "warn")
+                        "Le premier compilation prend quelques temps.", "warn")
                 on_prog = _make_dartvm_progress(log_mgr, float(log_mgr.step_count))
             else:
                 on_prog = None
@@ -453,53 +452,6 @@ def build_and_run(elitf_input: ElitfInput, log_mgr: LogManager = None):
         subprocess.run([elitf_input.bin_file, '-i', elitf_input.libapp_path,
                         '-o', elitf_input.outdir], check=True)
 
-def _prepare_fresh_analysis_outdir(outdir, log_mgr=None):
-    """Purge les sorties de l'analyse précédente AVANT une nouvelle analyse.
-
-    Le kernel écrit un fichier asm/ PAR bibliothèque Dart : sans purge, les
-    bibliothèques de l'application précédente restent mélangées aux
-    nouvelles, et pp.txt/objs.txt/ida_script/blutter_frida.js restent « à
-    leur origine ». On purge donc systématiquement (kernel + empreinte) —
-    l'ancien dump il2cpp_dump/ est purgé après succès (finalisation).
-    """
-    try:
-        import elitf_dumper
-    except ImportError:
-        return []
-    purged = elitf_dumper.purge_kernel_outputs(outdir)
-    if purged and log_mgr:
-        log_mgr.add(
-            f"Purge des sorties d'analyse précédentes : {len(purged)} "
-            "élément(s)", 'info')
-    return purged
-
-
-def _finalize_analysis_outputs(outdir, libapp_file, libflutter_file,
-                               dart_info, log_mgr=None):
-    """Après une analyse réussie : purge l'ancien dump + écrit l'empreinte.
-
-    L'empreinte (digests du pair) permet à l'option 3 de réutiliser les
-    sorties kernel SEULEMENT si la cible n'a pas changé — sinon elles sont
-    purgées et régénérées (le fichier de sortie ne reste plus à son origine).
-    """
-    try:
-        import elitf_dumper
-    except ImportError:
-        return
-    elitf_dumper.purge_dump_outputs(outdir)
-    path = elitf_dumper.write_analysis_fingerprint(
-        outdir, libapp_file, libflutter_file,
-        extra={'dart_version': dart_info.version,
-               'snapshot': dart_info.snapshot_hash})
-    if log_mgr:
-        if path:
-            log_mgr.add('Empreinte d\'analyse enregistrée (cache 2 fichiers '
-                        'validé)', 'info')
-        else:
-            log_mgr.add('Empreinte d\'analyse non écrite (cache invalidé)',
-                        'warn')
-
-
 def _analyze_libs(libapp_file, libflutter_file, outdir, rebuild, no_analysis, ida_fcn,
                   ui, log_mgr, vs_sln=False):
     dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs = \
@@ -517,15 +469,7 @@ def _analyze_libs(libapp_file, libflutter_file, outdir, rebuild, no_analysis, id
     dart_info = DartLibInfo(dart_version, os_name, arch, has_compressed_ptrs, snapshot_hash)
     input_obj = ElitfInput(libapp_file, dart_info, outdir, rebuild, no_analysis,
                            ida_fcn, log_mgr, create_vs_sln=vs_sln)
-    if not vs_sln:
-        # Pas de génération .sln seule : on (re)part sur des sorties propres
-        _prepare_fresh_analysis_outdir(outdir, log_mgr)
     build_and_run(input_obj, log_mgr)
-    if not vs_sln:
-        # build_and_run n'accepte que si le kernel a tourné avec succès ;
-        # la validation du cache exige de toute façon des sorties présentes.
-        _finalize_analysis_outputs(outdir, libapp_file, libflutter_file,
-                                   dart_info, log_mgr)
 
 def prepare_so_targets(indir, outdir, ui):
     if os.path.isfile(indir) and zipfile.is_zipfile(indir):
@@ -574,23 +518,8 @@ _CLEANUP_LABELS = {
     'packages': 'Cache SDK Dart VM (headers + libs)',
     'inputs': "Cache d'extraction APK/zip",
     'r2_output': 'Sorties r2 générées',
-    'kernel_out': "Sorties kernel de l'analyse (asm/, pp.txt…)",
-    'il2cpp_dump': 'Dump Il2CppDumper (dump.dart + script.json)',
     'pycache': 'Cache Python',
 }
-
-
-def _kernel_output_paths(outdir):
-    """Chemin des sorties kernel présentes dans outdir (noms connus)."""
-    try:
-        import elitf_dumper
-    except ImportError:
-        return []
-    names = list(elitf_dumper.KERNEL_OUTPUT_DIRS) + list(
-        elitf_dumper.KERNEL_OUTPUT_FILES)
-    return [os.path.join(outdir, n) for n in names
-            if os.path.isdir(os.path.join(outdir, n))
-            or os.path.isfile(os.path.join(outdir, n))]
 
 
 def _dir_size(path):
@@ -617,31 +546,12 @@ def find_cleanup_targets(project_dir, outdir):
         ('packages', os.path.join(project_dir, 'packages')),
         ('inputs', os.path.join(outdir, 'inputs') if outdir else ''),
         ('r2_output', os.path.join(outdir, 'r2_output') if outdir else ''),
-        ('il2cpp_dump', os.path.join(outdir, 'il2cpp_dump')
-         if outdir else ''),
     ]
     for kind, path in fixed:
         if path and os.path.isdir(path):
             items.append({'kind': kind, 'label': _CLEANUP_LABELS[kind],
                           'path': os.path.abspath(path),
                           'size': _dir_size(path)})
-    if outdir:
-        kernel_paths = _kernel_output_paths(outdir)
-        if kernel_paths:
-            size = 0
-            for p in kernel_paths:
-                if os.path.isdir(p):
-                    size += _dir_size(p)
-                else:
-                    try:
-                        size += os.path.getsize(p)
-                    except OSError:
-                        pass
-            items.append({'kind': 'kernel_out',
-                          'label': _CLEANUP_LABELS['kernel_out'],
-                          'path': os.path.abspath(kernel_paths[0]),
-                          'paths': [os.path.abspath(p) for p in kernel_paths],
-                          'size': size})
     if not os.path.isdir(project_dir):
         return items
     for root, dirs, _files in os.walk(project_dir):
@@ -657,8 +567,8 @@ def find_cleanup_targets(project_dir, outdir):
 
 
 def perform_cleanup(project_dir, outdir, items, picks, log_mgr=None):
-    """Supprime les dossiers/fichiers sélectionnés (garde-fou: uniquement
-    sous project_dir ou outdir, jamais les racines elles-mêmes)."""
+    """Supprime les dossiers sélectionnés (garde-fou: uniquement sous
+    project_dir ou outdir, jamais les racines elles-mêmes)."""
     project_real = os.path.realpath(project_dir)
     out_real = os.path.realpath(outdir) if outdir else None
     allowed = [project_real + os.sep]
@@ -667,23 +577,16 @@ def perform_cleanup(project_dir, outdir, items, picks, log_mgr=None):
     deleted, freed = [], 0
     for idx in picks:
         item = items[idx]
-        targets = item.get('paths') or [item['path']]
-        for target in targets:
-            path_real = os.path.realpath(target)
-            forbidden_roots = {project_real, out_real}
-            if path_real in forbidden_roots \
-                    or not any(path_real.startswith(root) for root in allowed):
-                raise ValueError(
-                    f"Chemin refusé (hors zone autorisée): {target}")
-            if os.path.isdir(path_real):
-                freed += _dir_size(path_real)
-                shutil.rmtree(path_real)
-            elif os.path.isfile(path_real):
-                try:
-                    freed += os.path.getsize(path_real)
-                except OSError:
-                    pass
-                os.remove(path_real)
+        path_real = os.path.realpath(item['path'])
+        forbidden_roots = {project_real, out_real}
+        if path_real in forbidden_roots \
+                or not any(path_real.startswith(root) for root in allowed):
+            raise ValueError(
+                f"Chemin refusé (hors zone autorisée): {item['path']}")
+        if not os.path.isdir(path_real):
+            continue
+        freed += item.get('size', 0) or _dir_size(path_real)
+        shutil.rmtree(path_real)
         deleted.append(item['path'])
         if log_mgr:
             log_mgr.add(f"Supprimé: {item['path']}", 'info')
@@ -972,68 +875,6 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             except Exception as e:
                 ui._print_error(e)
 
-        elif choice == 3:
-            # Dump style Il2CppDumper-Python adapté au kernel Elit-f.
-            # Contrat « exactement 2 fichiers » : libapp.so + libflutter.so,
-            # comme l'original Il2CppDumper (libil2cpp.so + global-metadata.dat).
-            import elitf_dumper
-            try:
-                input_files = elitf_dumper.resolve_two_files(
-                    indir, extract_dir=os.path.join(outdir, 'inputs'))
-            except ValueError as e:
-                msg = str(e)
-                ui._print(f"[bold red]{msg}[/]" if ui.console else msg)
-                continue
-            if not elitf_dumper.has_kernel_outputs(outdir) and \
-                    critical_dependencies_missing(check_dependencies()):
-                ui._print("[bold red]Analyse kernel requise: installez pyelftools et requests"
-                          " d'abord (ou lancez l'option 1).[/]" if ui.console
-                          else "Analyse kernel requise: installez pyelftools et requests"
-                               " d'abord (ou lancez l'option 1).")
-                continue
-            os.makedirs(outdir, exist_ok=True)
-            ui.log_mgr.clear()
-
-            def work_dump(lm):
-                return elitf_dumper.ensure_kernel_outputs(
-                    indir, outdir, rebuild, no_analysis, ui, lm, vs_sln,
-                    input_files=input_files)
-            try:
-                summary = ui.run_with_live_display(
-                    "Dump Il2CppDumper (Dart AOT)", 10, work_dump)
-                inames = ", ".join(
-                    os.path.basename(p)
-                    for p in summary.get('input_files', list(input_files)))
-                cache_status = summary.get('cache')
-                purged = summary.get('purged') or []
-                if cache_status == 'reused':
-                    cache_line = ("Analyse réutilisée (cache valide pour ce"
-                                  " pair)")
-                elif purged:
-                    cache_line = (f"Nouvelle analyse — {len(purged)}"
-                                  " élément(s) de l'analyse d'origine"
-                                  " purgé(s)")
-                else:
-                    cache_line = "Nouvelle analyse"
-                if ui.console:
-                    ui.console.print(_Panel(
-                        f"[bright_green]Dump Il2CppDumper généré.[/] "
-                        f"Contrat 2 fichiers : {inames} → dump.dart + "
-                        f"script.json. {summary['methods']} méthodes, "
-                        f"{summary['classes']} classes, {summary['strings']} "
-                        f"chaînes → [bold]{summary['dump_dir']}[/]\n"
-                        f"[dim]{cache_line}[/]",
-                        border_style=_Style(color="bright_green")))
-                else:
-                    print(f"Dump Il2CppDumper genere (2 fichiers: {inames} ->"
-                          f" dump.dart + script.json): {summary['methods']}"
-                          f" methodes, {summary['classes']} classes,"
-                          f" {summary['strings']} chaines"
-                          f" -> {summary['dump_dir']}"
-                          f" [{cache_line}]")
-            except Exception as e:
-                ui._print_error(e)
-
         elif choice == 2:
             if not ui.detected_so:
                 prepare_so_targets(indir, outdir, ui)
@@ -1044,10 +885,33 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
             try:
-                r2_unified_analysis(ui.detected_so, outdir, ui.log_mgr, ui)
+                r2_mini_terminal(ui.detected_so, outdir, ui.log_mgr, ui)
+            except Exception as e:
+                ui._print_error(e)
+
+        elif choice == 3:
+            os.makedirs(outdir, exist_ok=True)
+            ui.log_mgr.clear()
+            il2cpp_indir = indir
+            il2cpp_targets = find_il2cpp_targets(il2cpp_indir)
+            if not il2cpp_targets:
                 if ui.console:
                     ui.console.print(_Panel(
-                        "[bright_green]Analyse r2 unifiée terminée.[/]",
+                        "[bold yellow]Aucun libil2cpp.so / global-metadata.dat trouvé dans"
+                        " la cible.\\nPlacez un APK/XAPK ou un dossier contenant ces deux"
+                        " fichiers, puis relancez.[/]",
+                        title="[bold bright_yellow]Il2Cpp — cibles manquantes[/]",
+                        border_style=_Style(color="bright_yellow")))
+                else:
+                    print("Aucun libil2cpp.so / global-metadata.dat trouvé.")
+                continue
+            def work_il2cpp(lm):
+                run_il2cpp_analysis(il2cpp_indir, outdir, log_mgr=lm, ui=ui)
+            try:
+                ui.run_with_live_display("Il2Cpp Analysis (Il2CppInspector)", 8, work_il2cpp)
+                if ui.console:
+                    ui.console.print(_Panel(
+                        "[bright_green]Analyse Il2Cpp terminée — voir <outdir>/il2cpp_output/[/]",
                         border_style=_Style(color="bright_green")))
             except Exception as e:
                 ui._print_error(e)

@@ -6,8 +6,6 @@ import shlex
 import hashlib
 import shutil
 import subprocess
-import threading
-import time
 
 R2_HEADER = r"""e scr.color=0
 e scr.utf8=0
@@ -606,235 +604,21 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
         log_mgr.add(f"r2 {mode_tag}: {succeeded}/{len(generated)} succeeded", "success")
     return generated
 
-def r2_unified_analysis(so_list, outdir, log_mgr=None, ui=None):
-
-    selected = None
-    if ui is not None:
-        selected = ui.get_target_selection()
-        if not selected:
-            return None
-        targets = [so_list[i] for i in selected]
-    else:
-
-        targets = so_list
-
-    if not targets:
+def r2_mini_terminal(so_list, outdir, log_mgr=None, ui=None):
+    if ui is None:
+        raise ValueError("r2_mini_terminal requires a ui (interactive console)")
+    selected = ui.get_target_selection()
+    if not selected:
         if log_mgr:
-            log_mgr.add("Aucune cible sélectionnée.", "warn")
+            log_mgr.add("Aucune cible sélectionnée pour le mini terminal r2.", "warn")
         return None
-
+    targets = [so_list[i] for i in selected]
     if log_mgr:
-        log_mgr.add(f"Cibles sélectionnées: {len(targets)} fichier(s) .so", "info")
-
-    if ui is not None:
-        session = R2Session(targets, outdir, log_mgr, ui)
-        while True:
-            choice = ui.get_r2_console_choice(session)
-            if choice in ("back", None):
-                return None
-            if choice == "terminal":
-                session.terminal()
-                continue
-            if choice == "catalog":
-                session.catalog()
-                continue
-            break
-    else:
-
-        choice = "full"
-
-    if choice is None or choice == "back":
-        return None
-
-    if log_mgr:
-        log_mgr.add(f"Mode r2: {choice}", "info")
-
-    if choice in R2_PRESETS:
-        preset = R2_PRESETS[choice]
-        return run_r2_custom(
-            targets, outdir,
-            analysis_key=preset["analysis_key"],
-            extraction_keys=preset["extraction_keys"],
-            log_mgr=log_mgr,
-            use_write=preset.get("use_write", False),
-            execute=True,
-        )
-
-    if choice in R2_ANALYSIS_LEVELS:
-        return run_r2_custom(
-            targets, outdir,
-            analysis_key=choice,
-            extraction_keys=["functions"],
-            log_mgr=log_mgr,
-            execute=True,
-        )
-
-    if choice in R2_EXTRACTION_BLOCKS:
-        return run_r2_custom(
-            targets, outdir,
-            analysis_key="aaa",
-            extraction_keys=[choice],
-            log_mgr=log_mgr,
-            execute=True,
-        )
-
-    if choice == "write_wa":
-        return _r2_write_mode(targets, outdir, log_mgr, ui, "wa")
-    elif choice == "write_wx":
-        return _r2_write_mode(targets, outdir, log_mgr, ui, "wx")
-    elif choice == "write_w":
-        return _r2_write_mode(targets, outdir, log_mgr, ui, "w")
-
-    if choice == "generate_only":
-        return generate_r2_scripts(targets, outdir, log_mgr)
-
-    if choice == "custom":
-        return _r2_custom_mode(targets, outdir, log_mgr, ui)
-
-    if log_mgr:
-        log_mgr.add(f"Mode inconnu: {choice}", "warn")
+        log_mgr.add(f"Mini terminal r2 — {len(targets)} cible(s) sélectionnée(s)", "info")
+    session = R2Session(targets, outdir, log_mgr, ui)
+    session.terminal()
     return None
 
-def _r2_write_mode(targets, outdir, log_mgr, ui, write_cmd):
-    targets = _targets(targets)
-    r2_bin = _find_r2()
-    if not r2_bin:
-        raise RuntimeError('r2 not found. Cannot use write mode.')
-
-    cmd_labels = {
-        "wa": "Écriture assembleur (wa) — écrire des instructions asm à une adresse",
-        "wx": "Écriture hexadécimale (wx) — écrire des octets en hex à une adresse",
-        "w": "Écriture string (w) — écrire une chaîne à une adresse",
-    }
-
-    if log_mgr:
-        log_mgr.add(f"Mode écriture: {cmd_labels.get(write_cmd, write_cmd)}", "info")
-
-    results = []
-    patch_specs = []
-    for so in targets:
-        if ui is not None:
-            ui._print(f"\n  [bold bright_cyan]Patching: {so['name']}[/]" if ui.console
-                      else f"\n  Patching: {so['name']}")
-
-            addr = ui._prompt_text(
-                "  Adresse (hex, ex: 0x12345 ou sym.imp.printf)",
-                default=""
-            )
-            if not addr:
-                continue
-
-            if write_cmd == "wa":
-                data = ui._prompt_text(
-                    '  Instructions assembleur (ex: "mov r0, 0; bx lr")',
-                    default=""
-                )
-            elif write_cmd == "wx":
-                data = ui._prompt_text(
-                    "  Octets en hex (ex: 00bf00bf)",
-                    default=""
-                )
-            else:
-                data = ui._prompt_text(
-                    "  Chaîne à écrire",
-                    default=""
-                )
-            if not data:
-                continue
-
-            if not re.fullmatch(r'(?:0x[0-9a-fA-F]+|[A-Za-z_][A-Za-z0-9_.]*)', addr):
-                raise ValueError('Invalid patch address')
-            if any(c in data for c in '\r\n\x00'):
-                raise ValueError('Patch data must be a single line')
-            if write_cmd == 'wx' and not re.fullmatch(r'(?:[0-9a-fA-F]{2})+', data):
-                raise ValueError('Invalid hexadecimal bytes')
-            if write_cmd == 'w':
-                data = data.encode('utf-8').hex()
-                patch_cmd = 'wx'
-            else:
-                patch_cmd = write_cmd
-            patch_specs.append((so, f'{patch_cmd} {data} @ {addr}', addr))
-
-    if patch_specs:
-        try:
-            timeout = _timeout()
-        except ValueError:
-            timeout = 600
-
-        r2_out = os.path.join(outdir, "r2_output")
-        os.makedirs(r2_out, exist_ok=True)
-
-        def _apply_patch(spec):
-            so, r2_cmd, addr = spec
-            r2_script = f"e scr.color=0\ne scr.utf8=0\n{r2_cmd}\nq\n"
-            script_path = os.path.join(r2_out, f"r2_{so['name']}_patch_{write_cmd}.r2")
-            with open(script_path, "w", encoding="utf-8") as f:
-                f.write(r2_script)
-
-            if log_mgr:
-                log_mgr.add(f"Patch script: {so['name']} ({write_cmd} @ {addr})", "info")
-
-            try:
-                backup = _ensure_backup(so["path"])
-                if log_mgr:
-                    log_mgr.add(f"Backup disponible: {backup}", "debug")
-                result = subprocess.run(
-                    [r2_bin, "-w", "-q", "-i", script_path, so["path"]],
-                    capture_output=True, text=True, errors='replace', timeout=timeout,
-                    stdin=subprocess.DEVNULL,
-                )
-                if result.returncode == 0:
-                    if log_mgr:
-                        log_mgr.add(f"Patch appliqué: {so['name']}", "success")
-                else:
-                    if log_mgr:
-                        err = result.stderr.strip()
-                        if len(err) > 200:
-                            err = err[:200] + '...'
-                        log_mgr.add(f"Patch erreur sur {so['name']}: {err}", "error")
-                    raise RuntimeError(f"Patch failed: {so['name']}")
-            except Exception as e:
-                if log_mgr:
-                    log_mgr.add(f"Patch échoué sur {so['name']}: {e}", "error")
-                raise
-            if log_mgr:
-                log_mgr.step()
-            return script_path
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=_r2_max_workers(len(patch_specs))) as pool:
-            results = list(pool.map(_apply_patch, patch_specs))
-
-    if log_mgr:
-        log_mgr.add(f"Mode écriture terminé: {len(results)} script(s)", "success")
-    return results
-
-def _r2_custom_mode(targets, outdir, log_mgr, ui):
-    if ui is not None:
-
-        ui.display_r2_analysis_picker()
-        analysis_choice = ui.get_r2_analysis_choice()
-        if analysis_choice is None:
-            return None
-
-        ui.display_r2_extraction_picker()
-        extraction_choices = ui.get_r2_extraction_choices()
-        if not extraction_choices:
-            return None
-
-        do_execute = ui.get_r2_execute_choice()
-    else:
-
-        analysis_choice = "aaa"
-        extraction_choices = list(R2_EXTRACTION_BLOCKS.keys())
-        do_execute = True
-
-    return run_r2_custom(
-        targets, outdir,
-        analysis_key=analysis_choice,
-        extraction_keys=extraction_choices,
-        log_mgr=log_mgr,
-        execute=do_execute,
-    )
 
 def display_binary_info(so_list, outdir, log_mgr=None):
     readelf = _find_readelf()
@@ -1062,18 +846,440 @@ R2_TERMINAL_CATALOG = {
                  [("value", "valeur (true/false)", "true")]),
             _cat("e asm.offset", "Afficher les adresses (true/false)",
                  [("value", "valeur (true/false)", "true")]),
+            _cat("e asm.arch", "Changer l'architecture (x86, arm, arm64, mips)",
+                 [("value", "arch", "arm")]),
+            _cat("e asm.bits", "Bits (16/32/64)",
+                 [("value", "bits", "64")]),
             _cat("e anal.depth", "Profondeur maximale de l'analyse",
                  [("value", "profondeur (nombre)", "4")]),
             _cat("e scr.color", "Couleurs r2 (0 = désactivé)",
                  [("value", "valeur (0/1/2/3)", "0")]),
+            _cat("e scr.utf8", "UTF-8 en sortie (true/false)",
+                 [("value", "valeur", "true")]),
+            _cat("e bin.cache", "Cache binaire (true/false)",
+                 [("value", "valeur", "true")]),
+            _cat("e io.cache", "Cache IO pour écriture",
+                 [("value", "valeur", "true")]),
+            _cat("e emu.str", "Émulation de strings",
+                 [("value", "valeur", "true")]),
+            _cat("e", "Lister toute la configuration"),
+            _cat("ed", "Éditer la config dans $EDITOR"),
+        ],
+    },
+    "seek": {
+        "title": "Déplacement / Seek (s)",
+        "commands": [
+            _cat("s", "Aller à l'adresse",
+                 [("addr", "Adresse ou symbole", "")]),
+            _cat("s-", "Reculer dans l'historique"),
+            _cat("s+", "Avancer dans l'historique"),
+            _cat("s.", "Seek au point d'entrée (entry0)"),
+            _cat("s+", "Avancer de N octets",
+                 [("value", "Nombre d'octets", "16")]),
+            _cat("s-", "Reculer de N octets",
+                 [("value", "Nombre d'octets", "16")]),
+            _cat("sa", "Seek absolu + alignement",
+                 [("addr", "Adresse", "")]),
+            _cat("sb", "Seek au bloc de base",
+                 [("addr", "Adresse", "")]),
+            _cat("sf", "Seek au début de la fonction",
+                 [("addr", "Adresse ou symbole de fonction", "")]),
+            _cat("sr", "Rewind (debut du fichier)"),
+            _cat("sg", "Seek au symbole",
+                 [("value", "Nom de symbole", "")]),
+            _cat("sl", "Seek par numéro de ligne",
+                 [("value", "Ligne", "1")]),
+            _cat("sn", "Seek au symbole suivant"),
+            _cat("sp", "Seek au symbole précédent"),
+            _cat("so", "Seek à l'offset N dans la fonction",
+                 [("value", "Offset", "0")]),
+            _cat("sv", "Seek au Viewer"),
+        ],
+    },
+    "flags": {
+        "title": "Flags / Marqueurs (f)",
+        "commands": [
+            _cat("f", "Lister tous les flags"),
+            _cat("fj", "Flags en JSON"),
+            _cat("fs", "Lister les espaces de flags"),
+            _cat("fs", "Changer d'espace de flags",
+                 [("value", "Nom d'espace", "functions")]),
+            _cat("f+", "Ajouter un flag",
+                 [("addr", "Adresse", ""), ("value", "Nom du flag", "mon_flag")]),
+            _cat("f-", "Supprimer un flag",
+                 [("value", "Nom du flag", "")]),
+            _cat("fr", "Renommer un flag",
+                 [("value", "Ancien nom", ""), ("value", "Nouveau nom", "")]),
+            _cat("fc", "Couleur d'un flag",
+                 [("value", "Nom du flag", ""), ("value", "Couleur", "red")]),
+            _cat("ff", "Lister les flags de fonction"),
+            _cat("fb", "Lister les flags par bloc"),
+            _cat("fz", "Ajouter un flag avec string"),
+            _cat("fl", "Lister flags avec tailles"),
+        ],
+    },
+    "block": {
+        "title": "Bloc / Taille (b)",
+        "commands": [
+            _cat("b", "Taille du bloc courant",
+                 [("value", "Taille en octets", "256")]),
+            _cat("bf", "Taille du bloc depuis un flag",
+                 [("value", "Nom du flag", "")]),
+            _cat("b+", "Augmenter la taille du bloc",
+                 [("value", "Octets", "16")]),
+            _cat("b-", "Diminuer la taille du bloc",
+                 [("value", "Octets", "16")]),
+            _cat("bc", "Compter les octets non nuls"),
+            _cat("bm", "Masque de bloc"),
+        ],
+    },
+    "compare": {
+        "title": "Comparer (c)",
+        "commands": [
+            _cat("c", "Comparer N octets à l'adresse",
+                 [("count", "Octets", "32"), ("addr", "Adresse 1", ""),
+                  ("addr2", "Adresse 2", "")]),
+            _cat("cc", "Comparaison cyclique (CRC)"),
+            _cat("ca", "Addition hexadécimale",
+                 [("value", "Hex", "0x10")]),
+            _cat("cx", "Comparer avec une chaîne hex",
+                 [("value", "Hex", "deadbeef")]),
+            _cat("cX", "Comparer en hex avec offsets"),
+            _cat("cd", "Comparer données (binaire)"),
+            _cat("cw", "Comparer mots"),
+            _cat("cu", "Comparer unités (1/2/4/8 octets)"),
+            _cat("cj", "Comparer en JSON"),
+        ],
+    },
+    "crypto": {
+        "title": "Crypto / Entropie (C)",
+        "commands": [
+            _cat("Ca", "Assembler (ROR/ROL/ADD/SUB/XOR)"),
+            _cat("Cc", "Chiffrement César",
+                 [("value", "Décalage", "3")]),
+            _cat("CA", "AES"),
+            _cat("Cd", "Désassembler avec crypto"),
+            _cat("Cx", "XOR avec clé",
+                 [("value", "Clé hex", "ff")]),
+            _cat("Cb", "Brute-force XOR"),
+            _cat("Cf", "Trouver des clés crypto"),
+            _cat("Cp", "Plain-text crypto"),
+            _cat("Co", "OpenSSL crypto"),
+            _cat("Ch", "Hash (MD5/SHA1/SHA256)"),
+            _cat("Ce", "Entropie de Shannon"),
+        ],
+    },
+    "debug": {
+        "title": "Debug / Exécution (d)",
+        "commands": [
+            _cat("db", "Ajouter un point d'arrêt",
+                 [("addr", "Adresse", "")]),
+            _cat("db-", "Supprimer un point d'arrêt",
+                 [("addr", "Adresse", "")]),
+            _cat("dbi", "Lister les breakpoints"),
+            _cat("dc", "Continuer l'exécution"),
+            _cat("dcu", "Continuer jusqu'à l'adresse",
+                 [("addr", "Adresse", "")]),
+            _cat("ds", "Step into"),
+            _cat("dso", "Step over"),
+            _cat("dsf", "Step fin"),
+            _cat("dsb", "Step back"),
+            _cat("dr", "Afficher les registres"),
+            _cat("drr", "Afficher les références de registres"),
+            _cat("dr=", "Registres en mode visuel"),
+            _cat("dr8", "Registres en hexdump"),
+            _cat("drc", "Changer la valeur d'un registre",
+                 [("value", "Registre", "rax"), ("value", "Valeur", "0")]),
+            _cat("dm", "Carte mémoire du process"),
+            _cat("dm=", "Carte mémoire visuelle"),
+            _cat("dmm", "Carte mémoire des modules"),
+            _cat("dma", "Allouer de la mémoire",
+                 [("value", "Taille", "0x1000")]),
+            _cat("dmas", "Allouer et écrire une string",
+                 [("value", "String", "test")]),
+            _cat("dmad", "Allouer et dupliquer des données"),
+            _cat("dmh", "Heap info"),
+            _cat("do", "Ouvrir un process"),
+            _cat("doc", "Recharger core"),
+            _cat("dp", "Lister les processus"),
+            _cat("dpl", "Lister threads"),
+            _cat("dpc", "Process courant"),
+            _cat("dpid", "PID courant"),
+            _cat("dpt", "Lister les threads"),
+            _cat("dptn", "Nouveau thread"),
+            _cat("dptk", "Tuer un thread",
+                 [("value", "TID", "")]),
+            _cat("dg", "Générer un core dump"),
+            _cat("dml", "Lister les bibliothèques chargées"),
+            _cat("dmlv", "Vérifier les bibliothèques"),
+        ],
+    },
+    "graphs": {
+        "title": "Graphes / CFG (g)",
+        "commands": [
+            _cat("agf", "Graphe ASCII de la fonction à l'adresse",
+                 [("addr", "Adresse", "")]),
+            _cat("agfl", "Graphe ASCII linéaire",
+                 [("addr", "Adresse", "")]),
+            _cat("agd", "Graphe DOT de la fonction",
+                 [("addr", "Adresse", "")]),
+            _cat("agg", "Graphe graphique"),
+            _cat("agj", "Graphe JSON"),
+            _cat("ag-",
+                 "Supprimer un nœud du graphe",
+                 [("addr", "Adresse", "")]),
+            _cat("agn",
+                 "Ajouter un nœud",
+                 [("addr", "Adresse", ""), ("value", "Titre", "")]),
+            _cat("age",
+                 "Ajouter une arête",
+                 [("addr", "From", ""), ("addr2", "To", "")]),
+            _cat("agc", "Graphe des appels (callgraph)"),
+            _cat("agC", "Graphe global des appels"),
+            _cat("agr", "Graphe récursif"),
+            _cat("agR", "Graphe récursif global"),
+            _cat("agx", "Graphe cross-références",
+                 [("addr", "Adresse", "")]),
+            _cat("agt", "Graphe des threads"),
+            _cat("agv", "Graphe visuel"),
+        ],
+    },
+    "info_extra": {
+        "title": "Informations avancées (i+)",
+        "commands": [
+            _cat("iA", "Analyses disponibles"),
+            _cat("ia", "Infos sur l'architecture"),
+            _cat("iC", "Attributs/signatures"),
+            _cat("iD", "Dépendances"),
+            _cat("id", "Debug info (DWARF)"),
+            _cat("idp", "Liste des fichiers source DWARF"),
+            _cat("idpi", "Info sur un fichier source",
+                 [("value", "Index", "0")]),
+            _cat("idpd", "Lister les fonctions DWARF"),
+            _cat("ie", "Points d'entrée"),
+            _cat("iE", "Exports"),
+            _cat("iEj", "Exports JSON"),
+            _cat("ih", "Hashes du binaire"),
+            _cat("iHH", "Headers complets"),
+            _cat("ik", "KeyValue (sdb)"),
+            _cat("iK", "Bin exports (Java/Kotlin)"),
+            _cat("il", "Bibliothèques liées"),
+            _cat("iL", "Lister les plugins binaires"),
+            _cat("io", "Infos IO"),
+            _cat("iO", "Open info"),
+            _cat("ip", "PDB info"),
+            _cat("iP", "PDB paths"),
+            _cat("ir", "Réallocations"),
+            _cat("iR", "Relro info"),
+            _cat("is", "Symboles"),
+            _cat("isj", "Symboles JSON"),
+            _cat("iS", "Sections"),
+            _cat("iSj", "Sections JSON"),
+            _cat("iSS", "Segments"),
+            _cat("iSSj", "Segments JSON"),
+            _cat("iT", "Trap info"),
+            _cat("it", "Hashes textuels"),
+            _cat("iV", "Version info"),
+            _cat("iX", "Cross-bin info"),
+            _cat("iz", "Strings de la section données"),
+            _cat("izj", "Strings JSON"),
+            _cat("izz", "Strings de tout le binaire"),
+            _cat("izzj", "Strings globales JSON"),
+            _cat("iZ", "Strings size+length"),
+        ],
+    },
+    "open": {
+        "title": "Fichiers / Open (o)",
+        "commands": [
+            _cat("o", "Lister les fichiers ouverts"),
+            _cat("oj", "Fichiers ouverts JSON"),
+            _cat("oa", "Open avec arch",
+                 [("value", "Path", ""), ("value", "Arch", "arm"),
+                  ("value", "Bits", "64")]),
+            _cat("ob", "Open binaire"),
+            _cat("oc", "Close core"),
+            _cat("of", "Open fichier"),
+            _cat("oi", "Info d'un fd",
+                 [("value", "fd", "3")]),
+            _cat("om", "Carte mémoire des fichiers"),
+            _cat("on", "Open sans analyse"),
+            _cat("oo", "Reopen"),
+            _cat("ood", "Reopen en debug"),
+            _cat("oo+", "Reopen en écriture"),
+            _cat("op", "Open pipe"),
+            _cat("o-", "Fermer un fd",
+                 [("value", "fd", "3")]),
+            _cat("ox", "Échanger deux fds"),
+        ],
+    },
+    "resize": {
+        "title": "Redimensionner (r)",
+        "commands": [
+            _cat("r", "Redimensionner à N octets",
+                 [("value", "Taille", "0x1000")]),
+            _cat("r+", "Augmenter de N octets",
+                 [("value", "Octets", "0x100")]),
+            _cat("r-", "Diminuer de N octets",
+                 [("value", "Octets", "0x100")]),
+            _cat("rm", "Supprimer un fichier",
+                 [("value", "Path", "")]),
+            _cat("rh", "Taille du fichier"),
+            _cat("ro", "Rotate N octets",
+                 [("value", "Octets", "1")]),
+            _cat("rw", "Bytes aléatoires"),
+            _cat("rc", "Recompiler"),
+            _cat("rp", "Noms de fonctions heuristiques"),
+            _cat("rs", "Stuffer"),
+        ],
+    },
+    "types": {
+        "title": "Types / C (t)",
+        "commands": [
+            _cat("t", "Lister les types"),
+            _cat("tj", "Types JSON"),
+            _cat("tc", "Lister les types complexes"),
+            _cat("te", "Lister les enums"),
+            _cat("ts", "Lister les structures"),
+            _cat("tu", "Lister les unions"),
+            _cat("ta", "Analyser un type",
+                 [("value", "Nom de type", "")]),
+            _cat("td", "Définir un type C",
+                 [("value", "Définition", "struct Foo { int x; };")]),
+            _cat("tf", "Lister les typedefs"),
+            _cat("tn", "Lister les typedefs nacked"),
+            _cat("tp", "Définir un type sur un offset",
+                 [("value", "Type", ""), ("addr", "Adresse", "")]),
+            _cat("tpx", "Prévisualiser un type"),
+            _cat("tr", "Supprimer un type",
+                 [("value", "Nom", "")]),
+            _cat("tt", "Lister les typedefs"),
+            _cat("tv", "Variables"),
+            _cat("tx", "Lister les types xrefs"),
+            _cat("t*", "Types en r2 commands"),
+        ],
+    },
+    "yank": {
+        "title": "Yank / Copier (y)",
+        "commands": [
+            _cat("y", "Copier N octets",
+                 [("count", "Octets", "64"), ("addr", "Adresse", "")]),
+            _cat("yj", "Copier en JSON"),
+            _cat("yy", "Coller à l'adresse",
+                 [("addr", "Adresse", "")]),
+            _cat("yz", "Copier une string"),
+            _cat("yp", "Imprimer le yank buffer"),
+            _cat("yx", "Imprimer en hex"),
+            _cat("ys", "Imprimer en string"),
+            _cat("yw", "Écrire un fichier binaire"),
+            _cat("yf", "Copier depuis un fichier",
+                 [("value", "Path", ""), ("value", "Offset", "0"),
+                  ("value", "Taille", "0")]),
+            _cat("yt", "Copier à une adresse",
+                 [("count", "Octets", "64"), ("addr", "From", ""),
+                  ("addr2", "To", "")]),
+            _cat("ytf", "Copier vers un fichier"),
+            _cat("ya", "Yank et ajouter"),
+            _cat("yP", "Yank permanent (clipboard)"),
+        ],
+    },
+    "zignatures": {
+        "title": "Signatures (z)",
+        "commands": [
+            _cat("z", "Lister les zignatures"),
+            _cat("zj", "Zignatures JSON"),
+            _cat("z-", "Supprimer une zignature",
+                 [("value", "Nom", "")]),
+            _cat("za", "Ajouter une zignature",
+                 [("value", "Nom", ""), ("value", "Type", "f")]),
+            _cat("zg", "Générer des zignatures"),
+            _cat("zF", "Filtrer zignatures par type"),
+            _cat("zf", "Zignature de la fonction courante"),
+            _cat("zo", "Ouvrir un fichier zignatures",
+                 [("value", "Path", "")]),
+            _cat("zs", "Sauver dans un fichier zignatures",
+                 [("value", "Path", "")]),
+            _cat("z/ ", "Chercher des zignatures"),
+            _cat("z*", "Zignatures en r2 commands"),
+        ],
+    },
+    "sdb": {
+        "title": "Base de données (k)",
+        "commands": [
+            _cat("k", "Lister/Masquer sdb"),
+            _cat("kj", "sdb JSON"),
+            _cat("kd", "Dump sdb"),
+            _cat("ks", "Compter"),
+            _cat("ko", "Ouvrir sdb",
+                 [("value", "Path", "")]),
+            _cat("ka", "Ajouter clé/valeur",
+                 [("value", "Clé", ""), ("value", "Valeur", "")]),
+            _cat("kg", "Obtenir une clé",
+                 [("value", "Clé", "")]),
+            _cat("kr", "Supprimer une clé",
+                 [("value", "Clé", "")]),
+            _cat("kl", "Lister"),
+            _cat("kv", "Vérifier une clé"),
+            _cat("kf", "Existe (bool)"),
+        ],
+    },
+    "mount": {
+        "title": "Montage / Mount (m)",
+        "commands": [
+            _cat("m", "Lister les mounts"),
+            _cat("ml", "Lister"),
+            _cat("mi", "Infos mount"),
+            _cat("mo", "Ouvrir un mount"),
+            _cat("mc", "Fermer un mount"),
+            _cat("mf", "Filtrer"),
+            _cat("mm", "Mapper à une adresse",
+                 [("addr", "Adresse", ""), ("value", "Path", "")]),
+            _cat("me", "Évaluer"),
+            _cat("mv", "Vérifier"),
+            _cat("md", "Supprimer"),
+        ],
+    },
+    "visual": {
+        "title": "Mode visuel / Affichage (e scr+)",
+        "commands": [
+            _cat("e scr.color", "Couleur r2 (0/1/2/3)",
+                 [("value", "valeur", "0")]),
+            _cat("e scr.utf8", "UTF-8 en sortie",
+                 [("value", "valeur", "true")]),
+            _cat("e scr.interactive", "Mode interactif (false en batch)",
+                 [("value", "valeur", "false")]),
+            _cat("e asm.bytes", "Afficher les octets",
+                 [("value", "valeur", "true")]),
+            _cat("e asm.lines", "Afficher les lignes de flux",
+                 [("value", "valeur", "true")]),
+            _cat("e asm.comments", "Commentaires en désassemblage",
+                 [("value", "valeur", "true")]),
+            _cat("e asm.cmt.right", "Commentaires à droite",
+                 [("value", "valeur", "true")]),
         ],
     },
     "system": {
-        "title": "Système / Divers (?)",
+        "title": "Système / Divers (?/.)",
         "commands": [
-            _cat("?", "Aide générale r2 (lister les commandes)"),
+            _cat("?", "Aide générale r2"),
+            _cat("??", "Aide détaillée"),
             _cat("?v", "Évaluer une expression arithmétique",
                  [("value", "Expression (ex: 0x1000+0x20)", "")]),
+            _cat("?vi", "Évaluer en entier"),
+            _cat("?vx", "Évaluer en hex"),
+            _cat("?vd", "Calculer distance entre deux adresses",
+                 [("addr", "From", ""), ("addr2", "To", "")]),
+            _cat("?P", "Imprimer le prompt"),
+            _cat(". ", "Interpréter la sortie d'une commande shell",
+                 [("value", "Commande shell", "ls")]),
+            _cat(".! ", "Exécuter shell et interpréter",
+                 [("value", "Commande shell", "uname -a")]),
+            _cat("*", "Lister les commentaires"),
+            _cat("% ", "Foreach (loop)"),
+            _cat("@ ", "Temp seek @ addr"),
+            _cat("| ", "Pipe vers shell"),
+            _cat("> ", "Rediriger vers fichier"),
+            _cat(">> ", "Append vers fichier"),
+            _cat("H", "Voir l'historique"),
         ],
     },
 }
@@ -1101,101 +1307,6 @@ def _compose_r2_command(entry, values):
     return ' '.join(parts + tail)
 
 
-class R2PipeError(Exception):
-    """Erreur du protocole r2pipe (spawn impossible, timeout, EOF)."""
-
-
-class R2Pipe:
-    """Session r2 persistante via le protocole r2pipe (`r2 -q0 <fichier>`).
-
-    Une seule instance r2 vit pendant toute la console : le seek (`s`),
-    les flags et le résultat de l'analyse (`aaa`) sont conservés entre les
-    commandes — contrairement à l'ancien mode qui relançait r2 à chaque fois.
-    """
-
-    def __init__(self, r2_bin, so_path, writable=False, timeout=None):
-        self.so_path = so_path
-        self.timeout = timeout or _timeout()
-        argv = [r2_bin, '-q0']
-        if writable:
-            argv.append('-w')
-        argv.append(so_path)
-        try:
-            self.proc = subprocess.Popen(
-                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, bufsize=0)
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise R2PipeError(f'Impossible de démarrer r2: {exc}') from exc
-        self._fd = self.proc.stdout.fileno()
-        self._buf = bytearray()
-        self._lock = threading.Lock()
-        self._eof = threading.Event()
-        self._reader = threading.Thread(target=self._read_loop, daemon=True)
-        self._reader.start()
-
-    def _read_loop(self):
-        try:
-            while True:
-                # os.read = retourne dès que des octets sont dispo (pas de
-                # bufferisation bloquante comme BufferedReader.read(n))
-                chunk = os.read(self._fd, 4096)
-                if not chunk:
-                    break
-                with self._lock:
-                    self._buf += chunk
-        except (OSError, ValueError):
-            pass
-        finally:
-            self._eof.set()
-
-    def cmd(self, command, timeout=None):
-        """Exécute une commande r2, retourne sa sortie (protocole -q0)."""
-        if self.proc.poll() is not None:
-            raise R2PipeError('r2 session terminée')
-        deadline = time.monotonic() + (timeout or self.timeout)
-        with self._lock:
-            start = len(self._buf)
-        try:
-            self.proc.stdin.write(command.encode('utf-8') + b'\n')
-            self.proc.stdin.flush()
-        except (OSError, ValueError) as exc:
-            raise R2PipeError(f'écriture r2 impossible: {exc}') from exc
-        while True:
-            with self._lock:
-                idx = self._buf.find(b'\x00', start)
-                if idx >= 0:
-                    out = bytes(self._buf[start:idx])
-                    del self._buf[start:idx + 1]
-                    return out.decode('utf-8', errors='replace')
-            if self._eof.is_set() and self.proc.poll() is not None:
-                with self._lock:
-                    idx = self._buf.find(b'\x00', start)
-                    if idx >= 0:
-                        out = bytes(self._buf[start:idx])
-                        del self._buf[start:idx + 1]
-                        return out.decode('utf-8', errors='replace')
-                raise R2PipeError('r2 a fermé la session')
-            if time.monotonic() > deadline:
-                raise R2PipeError(f'timeout r2pipe (>{timeout or self.timeout}s)')
-            time.sleep(0.02)
-
-    def close(self):
-        try:
-            if self.proc.poll() is None:
-                try:
-                    self.proc.stdin.write(b'q\n')
-                    self.proc.stdin.flush()
-                    self.proc.wait(timeout=2)
-                except (OSError, ValueError, subprocess.TimeoutExpired):
-                    self.proc.terminate()
-                    try:
-                        self.proc.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        self.proc.kill()
-        except Exception:
-            pass
-
-
 class R2Session:
 
 
@@ -1215,7 +1326,6 @@ class R2Session:
         self.analysis_cmds = []
         self.anal_replay = True
         self.rw = False
-        self._pipe = None
 
     # -- cibles -------------------------------------------------------------
 
@@ -1225,7 +1335,6 @@ class R2Session:
 
     def _switch(self, idx):
         self.active = idx
-        self._close_pipe()  # nouvelle session r2 pour la nouvelle cible
         if self.rw:
             self._backup_active()
 
@@ -1264,51 +1373,6 @@ class R2Session:
         if not self.r2_bin:
             return 127, '', ('r2 introuvable — installez radare2 '
                              '(Termux: pkg install radare2)')
-        try:
-            return self._run_r2_pipe(cmd)
-        except R2PipeError as exc:
-            self._close_pipe()
-            if self.log_mgr:
-                self.log_mgr.add(
-                    f"Session r2 persistante indisponible ({exc}) — "
-                    "repli par commande", "debug")
-        return self._run_r2_fallback(cmd)
-
-    # -- session persistante -------------------------------------------------
-
-    def _ensure_pipe(self):
-        if self._pipe is not None:
-            return self._pipe
-        if self.rw:
-            self._backup_active()
-        self._pipe = R2Pipe(self.r2_bin, self.active_target['path'],
-                            writable=self.rw)
-        # En-tête + config session appliqués UNE fois dans la session r2
-        for part in list(R2_HEADER_LINES) + list(self.env_cmds):
-            self._pipe.cmd(part)
-        return self._pipe
-
-    def _close_pipe(self):
-        if self._pipe is not None:
-            self._pipe.close()
-            self._pipe = None
-
-    def close(self):
-        """Termine la session r2 persistante (appelé à la sortie du terminal)."""
-        self._close_pipe()
-
-    def _run_r2_pipe(self, cmd):
-        pipe = self._ensure_pipe()
-        out = pipe.cmd(cmd)
-        tokens = cmd.split()
-        first = tokens[0] if tokens else ''
-        if first in R2_ANALYSIS_COMMANDS and cmd not in self.analysis_cmds:
-            self.analysis_cmds.append(cmd)
-        return 0, out, ''
-
-    # -- repli (une invocation r2 par commande) ------------------------------
-
-    def _run_r2_fallback(self, cmd):
         try:
             timeout = _timeout()
         except ValueError:
@@ -1392,18 +1456,18 @@ class R2Session:
           if self.ui.console else "Mini terminal r2 — commandes")
         p("  <cmd r2>          Exécuter une commande r2 sur la cible active")
         p("                    ex: afl, px 64 @ 0x1000, pdf @ sym.main, izz~password")
-        p("                    Session PERSISTANTE: s 0x6f57ec puis pd 200 conserve le seek")
         p("  pptool <args>     Exécuter pptool — placeholders: {so} {libapp} {name} {outdir}")
         p("  !targets          Lister les cibles de la session")
-        p("  !use <n|nom>      Changer de cible active (nouvelle session r2)")
-        p("  !anal on|off      Replay de l'analyse en mode repli (inutile en session persistante)")
+        p("  !use <n|nom>      Changer de cible active")
+        p("  !anal on|off      Replay automatique de la dernière analyse (aaa) avant chaque commande")
         p("  !rw on|off        Mode écriture r2 -w (backup .elitf.bak automatique)")
-        p("  !set / !unset     Config session — ex: !set e asm.bytes=true (appliqué en direct)")
+        p("  !set / !unset     Config session appliquée à chaque commande — ex: !set e asm.bytes=true")
         p("  !lib              Chemin de la cible active")
+        p("  !catalog          Parcourir le catalogue des commandes r2 (24 catégories, ~310 cmds)")
         p("  !pptool           État pptool / exécuter avec !pptool <args>")
         p("  q | quit | exit   Quitter le terminal")
-        p("Astuce: la session r2 est persistante — le seek (s), les flags et l'analyse"
-          " (aaa) sont conservés entre les commandes. Redirection: afl > fonctions.txt")
+        p("Astuce: chaque commande part d'une session r2 fraîche — lancez l'analyse (aaa) ou"
+          " activez !anal avant pdf/axt. Redirection possible: afl > fonctions.txt")
 
     # -- builtins -----------------------------------------------------------
 
@@ -1436,22 +1500,12 @@ class R2Session:
         elif name == 'anal':
             if rest.lower() in ('on', 'off'):
                 self.anal_replay = rest.lower() == 'on'
-            if self._pipe is not None:
-                self.ui._print("Session r2 persistante: l'analyse (aaa) reste "
-                               "en mémoire — replay inutile"
-                               f" (replay {'ON' if self.anal_replay else 'OFF'} en mode repli)")
-            else:
-                last = self.analysis_cmds or 'aucune'
-                self.ui._print(f"Replay de l'analyse: {'ON' if self.anal_replay else 'OFF'}"
-                               f" (dernière: {last})")
+            last = self.analysis_cmds or 'aucune'
+            self.ui._print(f"Replay de l'analyse: {'ON' if self.anal_replay else 'OFF'}"
+                           f" (dernière: {last})")
         elif name == 'set':
             if rest and rest not in self.env_cmds:
                 self.env_cmds.append(rest)
-                if self._pipe is not None:
-                    try:
-                        self._pipe.cmd(rest)  # application immédiate dans la session
-                    except R2PipeError:
-                        self._close_pipe()
             self.ui._print(f"Config session: {self.env_cmds or 'vide'}"
                            "  (!set e var=valeur)")
         elif name == 'unset':
@@ -1461,11 +1515,9 @@ class R2Session:
         elif name == 'rw':
             if rest.lower() == 'on':
                 self.rw = True
-                self._close_pipe()  # relance avec -w à la prochaine commande
                 self._backup_active()
             elif rest.lower() == 'off':
                 self.rw = False
-                self._close_pipe()  # relance sans -w
             state = 'ON (backup .elitf.bak actif)' if self.rw else 'OFF'
             self.ui._print(f"Mode écriture r2 -w: {state}")
         elif name == 'pptool':
@@ -1479,6 +1531,8 @@ class R2Session:
             else:
                 ok, text = self.run_pptool(rest)
                 self._show_output(text, ok)
+        elif name == 'catalog':
+            self.catalog()
         else:
             self.ui._print(f"builtin inconnu: !{name} — !help pour l'aide")
         return 'handled'
@@ -1500,34 +1554,31 @@ class R2Session:
                   if ui.console
                   else f"Terminal r2 — cible: {self.active_target['name']}"
                        f" — pptool: {pptool_state}")
-        ui._print("[dim]!help pour l'aide — q pour quitter — session r2 persistante[/]" if ui.console
-                  else "!help pour l'aide — q pour quitter — session r2 persistante")
-        try:
-            while True:
-                try:
-                    line = ui.r2_readline(f"r2({self.active_target['name']})> ")
-                except (KeyboardInterrupt, EOFError):
-                    break
-                if line is None:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                action = self.handle_builtin(line)
-                if action == 'quit':
-                    break
-                if action == 'handled':
-                    continue
-                if line == 'pptool' or line.startswith('pptool '):
-                    ok, text = self.run_pptool(line[len('pptool'):].strip())
-                    self._show_output(text, ok)
-                    continue
-                rc, out, err = self.run_r2(line)
-                self._show_output(out, rc == 0)
-                if rc != 0 and err.strip():
-                    self._emit('[stderr] ' + err.strip())
-        finally:
-            self.close()
+        ui._print("[dim]!help pour l'aide — q pour quitter[/]" if ui.console
+                  else "!help pour l'aide — q pour quitter")
+        while True:
+            try:
+                line = ui.r2_readline(f"r2({self.active_target['name']})> ")
+            except (KeyboardInterrupt, EOFError):
+                break
+            if line is None:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            action = self.handle_builtin(line)
+            if action == 'quit':
+                break
+            if action == 'handled':
+                continue
+            if line == 'pptool' or line.startswith('pptool '):
+                ok, text = self.run_pptool(line[len('pptool'):].strip())
+                self._show_output(text, ok)
+                continue
+            rc, out, err = self.run_r2(line)
+            self._show_output(out, rc == 0)
+            if rc != 0 and err.strip():
+                self._emit('[stderr] ' + err.strip())
         return None
 
     def _ensure_write_mode(self):
