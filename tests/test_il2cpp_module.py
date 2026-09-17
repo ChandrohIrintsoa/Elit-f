@@ -25,7 +25,8 @@ class _LogCapture:
 def _build_v27_metadata_with_one_type():
     strings = (b"\x00App\x00NS\x00Foo\x00Bar\x00m1\x00m2\x00arg0\x00"
                b"ValueType\x00")
-    string_off = 176
+    fmt, names = il2cpp._build_header_struct(27)
+    string_off = struct.calcsize(fmt)
     string_size = len(strings)
 
     type_defs_off = string_off + string_size
@@ -33,23 +34,18 @@ def _build_v27_metadata_with_one_type():
     ns_idx = strings.find(b"NS\x00")
     type_blob = struct.pack("<i", name_idx)
     type_blob += struct.pack("<i", ns_idx)
-    type_blob += struct.pack("<i", -1) * 4
+    type_blob += struct.pack("<i", -1)
+    type_blob += struct.pack("<i", -1)
+    type_blob += struct.pack("<i", -1)
+    type_blob += struct.pack("<i", -1)
     type_blob += struct.pack("<i", -1)
     type_blob += struct.pack("<I", 0x100000)
-    type_blob += struct.pack("<i", 0)
-    type_blob += struct.pack("<i", 0)
-    type_blob += struct.pack("<i", -1) * 6
+    type_blob += struct.pack("<i", 0) * 8
     type_blob += struct.pack("<H", 2)
-    type_blob += struct.pack("<H", 0)
-    type_blob += struct.pack("<H", 0)
-    type_blob += struct.pack("<H", 0)
-    type_blob += struct.pack("<H", 0)
-    type_blob += struct.pack("<H", 0)
-    type_blob += struct.pack("<H", 0)
-    type_blob += struct.pack("<H", 0)
+    type_blob += struct.pack("<H", 0) * 7
     type_blob += struct.pack("<I", 0)
     type_blob += struct.pack("<I", 0x02000001)
-    type_blob += struct.pack("<i", -1)
+    assert len(type_blob) == 88, f"typedef blob size: {len(type_blob)} (expected 88 for v24.2+)"
     type_defs_size = len(type_blob)
 
     methods_off = type_defs_off + type_defs_size
@@ -61,11 +57,12 @@ def _build_v27_metadata_with_one_type():
         b += struct.pack("<i", -1)
         b += struct.pack("<i", 0)
         b += struct.pack("<i", -1)
-        b += struct.pack("<I", 0)
-        b += struct.pack("<i", -1)
         b += struct.pack("<I", 0x06000001 + name_idx)
         b += struct.pack("<H", 0)
         b += struct.pack("<H", 0)
+        b += struct.pack("<H", 0)
+        b += struct.pack("<H", 2)
+        assert len(b) == 32, f"method blob size: {len(b)} (expected 32 for v24.2-v29)"
         return b
     methods_blob = method_blob(m1_idx) + method_blob(m2_idx)
     methods_size = len(methods_blob)
@@ -78,35 +75,29 @@ def _build_v27_metadata_with_one_type():
     images_blob += struct.pack("<I", 1)
     images_blob += struct.pack("<I", 0)
     images_blob += struct.pack("<I", 0)
-    images_blob += struct.pack("<I", 0)
     images_blob += struct.pack("<I", 0x20000001)
     images_blob += struct.pack("<i", -1)
     images_blob += struct.pack("<I", 0)
+    images_blob += struct.pack("<I", 0)
+    assert len(images_blob) == 40, f"image blob size: {len(images_blob)} (expected 40 for v24.1+)"
     images_size = len(images_blob)
 
     header = bytearray(struct.pack("<Ii", il2cpp.IL2CPP_MAGIC,
                                    il2cpp.IL2CPP_METADATA_VERSION_27))
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", string_off, string_size)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", methods_off, methods_size)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", images_off, images_size)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", type_defs_off, type_defs_size)
-    header += struct.pack("<iI", 0, 0)
-    header += struct.pack("<iI", 0, 0)
+    fmt, names = il2cpp._build_header_struct(27)
+    values = {name: 0 for name in names}
+    values["sanity"] = il2cpp.IL2CPP_MAGIC
+    values["version"] = il2cpp.IL2CPP_METADATA_VERSION_27
+    values["stringOffset"] = string_off
+    values["stringSize"] = string_size
+    values["methodsOffset"] = methods_off
+    values["methodsSize"] = methods_size
+    values["typeDefinitionsOffset"] = type_defs_off
+    values["typeDefinitionsSize"] = type_defs_size
+    values["imagesOffset"] = images_off
+    values["imagesSize"] = images_size
+    packed = struct.pack(fmt, *[values[n] for n in names])
+    header = bytearray(packed)
 
     while len(header) < string_off:
         header += b"\x00"

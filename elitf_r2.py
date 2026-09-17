@@ -683,9 +683,14 @@ R2_ANALYSIS_COMMANDS = {
     "aap", "aau", "aao", "aav", "aaft", "afr", "ad",
 }
 
-R2_HEADER_LINES = ["e scr.color=0", "e scr.utf8=0", "e bin.cache=true"]
+R2_HEADER_LINES = ["e scr.color=0", "e scr.utf8=0", "e bin.cache=true",
+                   "e anal.strings=true", "e io.cache=true"]
 
-R2_OUTPUT_LIMIT = 100_000
+R2_OUTPUT_LIMIT = 1_000_000
+
+_R2_WRITE_PREFIXES = ("wa ", "wx ", "w ", "wo ", "r ", "r+", "r-", "rm ", "waF ", "wao ", "wv ")
+_R2_SHELL_METACHARS = (';', '@', '|', '>', '~', '"', '`', "'", '\\')
+_R2_SET_VALIDATOR = re.compile(r'^e\s+[A-Za-z0-9_.]+\s*=\s*\S+$')
 
 PPTOOL_HINT = (
     "pptool introuvable. PPTool est un outil Python de la communauté "
@@ -1285,8 +1290,14 @@ R2_TERMINAL_CATALOG = {
 }
 
 
-def _compose_r2_command(entry, values):
+def _escape_r2_value(v):
+    if any(c in v for c in _R2_SHELL_METACHARS):
+        escaped = v.replace('\\', '\\\\').replace('"', '\\"')
+        return '"' + escaped + '"'
+    return v
 
+
+def _compose_r2_command(entry, values):
     raw = entry.get('raw')
     if raw is not None:
         out = raw
@@ -1294,17 +1305,22 @@ def _compose_r2_command(entry, values):
             out = out.replace('{' + str(i) + '}', v or '')
         return out
     parts = [entry['cmd']]
-    tail = []
+    addr_tail = []
+    extra_tail = []
     args = entry.get('args') or []
     for (key, _prompt, _default), v in zip(args, values):
         v = (v or '').strip()
         if not v:
             continue
         if key == 'addr':
-            tail.append('@ ' + v)
+            addr_tail.append('@ ' + v)
+        elif key == 'addr2':
+            extra_tail.append(v)
+        elif key == 'value':
+            parts.append(_escape_r2_value(v))
         else:
             parts.append(v)
-    return ' '.join(parts + tail)
+    return ' '.join(parts + extra_tail + addr_tail)
 
 
 class R2Session:
@@ -1334,6 +1350,8 @@ class R2Session:
         return self.targets[self.active]
 
     def _switch(self, idx):
+        if idx != self.active:
+            self.analysis_cmds = []
         self.active = idx
         if self.rw:
             self._backup_active()
@@ -1379,14 +1397,16 @@ class R2Session:
             timeout = 600
         if self.rw:
             self._backup_active()
-        argv = [self.r2_bin] + (['-w'] if self.rw else []) + ['-q', '-N']
+        argv = [self.r2_bin] + (['-w'] if self.rw else []) + ['-q', '-e', 'bin.cache=true']
         for part in self._script_parts(cmd):
             argv += ['-c', part]
         argv.append(self.active_target['path'])
+        r2_out_dir = os.path.join(self.outdir, 'r2_output')
+        os.makedirs(r2_out_dir, exist_ok=True)
         try:
             result = subprocess.run(
                 argv, capture_output=True, text=True, errors='replace',
-                timeout=timeout, stdin=subprocess.DEVNULL)
+                timeout=timeout, stdin=subprocess.DEVNULL, cwd=r2_out_dir)
         except subprocess.TimeoutExpired:
             return 124, '', f'timeout r2 (>{timeout}s) — ajustez R2_TIMEOUT'
         except (OSError, subprocess.SubprocessError) as exc:
@@ -1504,10 +1524,17 @@ class R2Session:
             self.ui._print(f"Replay de l'analyse: {'ON' if self.anal_replay else 'OFF'}"
                            f" (dernière: {last})")
         elif name == 'set':
-            if rest and rest not in self.env_cmds:
+            if not rest:
+                self.ui._print("Usage: !set e var=valeur  (ex: !set e asm.bytes=true)")
+            elif not _R2_SET_VALIDATOR.match(rest):
+                self.ui._print(f"[!] Refusé — !set attend 'e var=valeur', reçu: {rest!r}")
+                self.ui._print("    Les caractères ; ! | > ~ \" ` ' \\ sont interdits.")
+            elif rest not in self.env_cmds:
                 self.env_cmds.append(rest)
-            self.ui._print(f"Config session: {self.env_cmds or 'vide'}"
-                           "  (!set e var=valeur)")
+                self.ui._print(f"Config session: {self.env_cmds}"
+                               "  (!set e var=valeur)")
+            else:
+                self.ui._print(f"Déjà présent dans la config: {rest}")
         elif name == 'unset':
             if rest in self.env_cmds:
                 self.env_cmds.remove(rest)
@@ -1575,6 +1602,17 @@ class R2Session:
                 ok, text = self.run_pptool(line[len('pptool'):].strip())
                 self._show_output(text, ok)
                 continue
+            if any(line.startswith(p) for p in _R2_WRITE_PREFIXES):
+                if not self._ensure_write_mode():
+                    continue
+            first_token = line.split()[0] if line.split() else ''
+            if (first_token in ('pdf', 'pdr', 'axt', 'axf', 'agf', 'agfl',
+                                'afi', 'ab') and self.anal_replay
+                    and not self.analysis_cmds):
+                ui._print("[dim]Astuce: lancez 'aaa' d'abord — "
+                          "pdf/axt/agf nécessitent l'analyse[/]" if ui.console
+                          else "Astuce: lancez 'aaa' d'abord — "
+                               "pdf/axt/agf nécessitent l'analyse")
             rc, out, err = self.run_r2(line)
             self._show_output(out, rc == 0)
             if rc != 0 and err.strip():

@@ -10,47 +10,148 @@ import subprocess
 IL2CPP_MAGIC = 0xFAB11BAF
 
 IL2CPP_METADATA_VERSIONS = (
-    16, 21, 22, 23, 24, 27, 28, 29,
+    16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 31,
 )
 
 IL2CPP_METADATA_VERSION_24 = 24
 IL2CPP_METADATA_VERSION_27 = 27
 IL2CPP_METADATA_VERSION_29 = 29
+IL2CPP_METADATA_VERSION_31 = 31
 
-_IL2CPP_HEADER_FMT_V24 = "<I" + "i" * 35
-_IL2CPP_HEADER_FMT_V27 = "<I" + "i" * 43
-_IL2CPP_HEADER_FMT_V29 = "<I" + "i" * 51
+_HEADER_FIELD_ORDER = (
+    ("sanity", "I"),
+    ("version", "i"),
+    ("stringLiteralOffset", "I"),
+    ("stringLiteralSize", "i"),
+    ("stringLiteralDataOffset", "I"),
+    ("stringLiteralDataSize", "i"),
+    ("stringOffset", "I"),
+    ("stringSize", "i"),
+    ("eventsOffset", "I"),
+    ("eventsSize", "i"),
+    ("propertiesOffset", "I"),
+    ("propertiesSize", "i"),
+    ("methodsOffset", "I"),
+    ("methodsSize", "i"),
+    ("parameterDefaultValuesOffset", "I"),
+    ("parameterDefaultValuesSize", "i"),
+    ("fieldDefaultValuesOffset", "I"),
+    ("fieldDefaultValuesSize", "i"),
+    ("fieldAndParameterDefaultValueDataOffset", "I"),
+    ("fieldAndParameterDefaultValueDataSize", "i"),
+    ("fieldMarshaledSizesOffset", "i"),
+    ("fieldMarshaledSizesSize", "i"),
+    ("parametersOffset", "I"),
+    ("parametersSize", "i"),
+    ("fieldsOffset", "I"),
+    ("fieldsSize", "i"),
+    ("genericParametersOffset", "I"),
+    ("genericParametersSize", "i"),
+    ("genericParameterConstraintsOffset", "I"),
+    ("genericParameterConstraintsSize", "i"),
+    ("genericContainersOffset", "I"),
+    ("genericContainersSize", "i"),
+    ("nestedTypesOffset", "I"),
+    ("nestedTypesSize", "i"),
+    ("interfacesOffset", "I"),
+    ("interfacesSize", "i"),
+    ("vtableMethodsOffset", "I"),
+    ("vtableMethodsSize", "i"),
+    ("interfaceOffsetsOffset", "i"),
+    ("interfaceOffsetsSize", "i"),
+    ("typeDefinitionsOffset", "I"),
+    ("typeDefinitionsSize", "i"),
+    ("rgctxEntriesOffset", "I", 0, 24.1),
+    ("rgctxEntriesCount", "i", 0, 24.1),
+    ("imagesOffset", "I"),
+    ("imagesSize", "i"),
+    ("assembliesOffset", "I"),
+    ("assembliesSize", "i"),
+    ("metadataUsageListsOffset", "I", 19, 24.5),
+    ("metadataUsageListsCount", "i", 19, 24.5),
+    ("metadataUsagePairsOffset", "I", 19, 24.5),
+    ("metadataUsagePairsCount", "i", 19, 24.5),
+    ("fieldRefsOffset", "I", 19, None),
+    ("fieldRefsSize", "i", 19, None),
+    ("referencedAssembliesOffset", "i", 20, None),
+    ("referencedAssembliesSize", "i", 20, None),
+    ("attributesInfoOffset", "I", 21, 27.2),
+    ("attributesInfoCount", "i", 21, 27.2),
+    ("attributeTypesOffset", "I", 21, 27.2),
+    ("attributeTypesCount", "i", 21, 27.2),
+    ("attributeDataOffset", "I", 29, None),
+    ("attributeDataSize", "i", 29, None),
+    ("attributeDataRangeOffset", "I", 29, None),
+    ("attributeDataRangeSize", "i", 29, None),
+    ("unresolvedVirtualCallParameterTypesOffset", "i", 22, None),
+    ("unresolvedVirtualCallParameterTypesSize", "i", 22, None),
+    ("unresolvedVirtualCallParameterRangesOffset", "i", 22, None),
+    ("unresolvedVirtualCallParameterRangesSize", "i", 22, None),
+    ("windowsRuntimeTypeNamesOffset", "i", 23, None),
+    ("windowsRuntimeTypeNamesSize", "i", 23, None),
+    ("windowsRuntimeStringsOffset", "i", 27, None),
+    ("windowsRuntimeStringsSize", "i", 27, None),
+    ("exportedTypeDefinitionsOffset", "i", 24, None),
+    ("exportedTypeDefinitionsSize", "i", 24, None),
+)
 
-_IL2CPP_STRING_OFFSET = b"global-metadata.dat"
-_LIBIL2CPP_NAME = "libil2cpp.so"
-_GLOBAL_METADATA_NAME = "global-metadata.dat"
 
-_TYPE_KINDS = {
-    1: "ValueType", 2: "Class", 3: "Interface",
-    4: "GenericClass", 5: "Array", 6: "Enum",
-    7: "GenericInstance", 8: "GenericParameter",
-    11: "Ptr", 12: "FnPtr", 13: "ByRef",
-    14: "MVar", 15: "Type", 16: "ModOpt", 17: "ModReq",
-    18: "Sentinel", 19: "Pinned",
-}
+def _field_present(field, version, sub):
+    if len(field) <= 2:
+        return True
+    mn = field[2] if len(field) > 2 else 0
+    mx = field[3] if len(field) > 3 else None
+    if mn and version < mn:
+        return False
+    if mx is not None and version > mx:
+        return False
+    return True
+
+
+def _build_header_struct(version):
+    fields = [(n, t) for n, t, *rest in _HEADER_FIELD_ORDER if _field_present((n, t, *rest), version, 0)]
+    fmt = "<" + "".join(t for _, t in fields)
+    return fmt, [n for n, _ in fields]
+
+
+def _read_header(buf, version):
+    fmt, names = _build_header_struct(version)
+    sz = struct.calcsize(fmt)
+    if len(buf) < sz:
+        raise ValueError("Truncated Il2Cpp header (v%d, need %d, got %d)" % (version, sz, len(buf)))
+    values = struct.unpack_from(fmt, buf, 0)
+    header = dict(zip(names, values))
+    header["_size"] = sz
+    return header
+
+
+def _detect_sub_version(buf, version, header):
+    if version != 24:
+        return float(version)
+    if header.get("stringLiteralOffset") == 264:
+        return 24.0
+    if version == 24 and header.get("typeDefinitionsSize", 0) > 0:
+        td_count = header["typeDefinitionsSize"] // 92
+        if td_count > 0:
+            first_td_off = header["typeDefinitionsOffset"]
+            if first_td_off and first_td_off + 92 <= len(buf):
+                token = struct.unpack_from("<I", buf, first_td_off + 80)[0]
+                if token == 1:
+                    return 24.1
+                return 24.2
+    return 24.1
+
 
 _TYPE_ATTR_VIS = {
     0x00: "public", 0x01: "famorassem", 0x02: "assembly",
     0x03: "family", 0x04: "famandassem", 0x05: "private",
 }
 
-_TYPE_ATTR_LAYOUT = {
-    0x00: "auto", 0x08: "sequential", 0x10: "explicit",
-}
-
-_TYPE_ATTR_FORMAT = {
-    0x00: "ansi", 0x18: "unicode", 0x30: "autochar",
-}
-
 _R2_BIN_NAMES = ("r2", "radare2")
 _READELF_NAMES = ("readelf", "greadelf", "llvm-readelf")
 
 _SYM_NAME_SAFE = re.compile(r"[^A-Za-z0-9_.$<>]")
+
 
 def _safe_name(name):
     if not name:
@@ -99,68 +200,52 @@ def _u64(buf, off):
     return struct.unpack_from("<Q", buf, off)[0]
 
 
-def _ptr(buf, off, bits):
-    if bits == 32:
-        return _u32(buf, off)
-    return _u64(buf, off)
+def _typedef_stride(version):
+    if version <= 22:
+        return 108
+    if version <= 24.1:
+        return 92
+    return 88
 
 
-def _align_up(v, a):
-    a = a or 1
-    return (v + a - 1) // a * a
+def _method_stride(version):
+    if version <= 24.1:
+        return 60
+    if version < 31:
+        return 32
+    return 36
+
+
+def _image_stride(version):
+    if version <= 18:
+        return 20
+    if version <= 23:
+        return 24
+    if version <= 24.0:
+        return 32
+    return 40
+
+
+def _param_stride(version):
+    if version <= 24.0:
+        return 16
+    return 12
+
+
+def _field_stride(version):
+    if version <= 18:
+        return 12
+    if version <= 24.0:
+        return 16
+    return 12
 
 
 class Il2CppMetadata:
     def __init__(self, data):
         self.raw = data
         self.version = 0
-        self.string_lits = ()
-        self.string_off = 0
-        self.string_size = 0
-        self.events_off = 0
-        self.events_size = 0
-        self.properties_off = 0
-        self.properties_size = 0
-        self.methods_off = 0
-        self.methods_size = 0
-        self.param_default_off = 0
-        self.param_default_size = 0
-        self.field_default_off = 0
-        self.field_default_size = 0
-        self.field_and_param_off = 0
-        self.field_and_param_size = 0
-        self.field_marshals_off = 0
-        self.field_marshals_size = 0
-        self.params_off = 0
-        self.params_size = 0
-        self.fields_off = 0
-        self.fields_size = 0
-        self.generic_insts_off = 0
-        self.generic_insts_size = 0
-        self.generic_methods_off = 0
-        self.generic_methods_size = 0
-        self.generic_containers_off = 0
-        self.generic_containers_size = 0
-        self.images_off = 0
-        self.images_size = 0
-        self.assemblies_off = 0
-        self.assemblies_size = 0
-        self.metadata_usage_off = 0
-        self.metadata_usage_size = 0
-        self.type_defs_off = 0
-        self.type_defs_size = 0
-        self.interface_offsets_off = 0
-        self.interface_offsets_size = 0
-        self.nested_off = 0
-        self.nested_size = 0
-        self.generic_constraints_off = 0
-        self.generic_constraints_size = 0
-        self.flags_off = 0
-        self.flags_size = 0
-        self.unresolved_indirect_off = 0
-        self.unresolved_indirect_size = 0
-        self.extra_field_info_off = 0
-        self.extra_field_info_size = 0
+        self.sub_version = 0.0
+        self.header = {}
         self._parse_header()
 
     def _parse_header(self):
@@ -173,190 +258,81 @@ class Il2CppMetadata:
         if version not in IL2CPP_METADATA_VERSIONS:
             raise ValueError("Unsupported Il2Cpp metadata version: %d" % version)
         self.version = version
-        if version <= IL2CPP_METADATA_VERSION_24:
-            self._parse_header_v24()
-        elif version < IL2CPP_METADATA_VERSION_29:
-            self._parse_header_v27()
-        else:
-            self._parse_header_v29()
+        self.header = _read_header(self.raw, version)
+        self.sub_version = _detect_sub_version(self.raw, version, self.header)
 
-    def _parse_header_v24(self):
-        sz = struct.calcsize(_IL2CPP_HEADER_FMT_V24)
-        if len(self.raw) < sz:
-            raise ValueError("Truncated Il2Cpp header (v24)")
-        f = struct.unpack_from(_IL2CPP_HEADER_FMT_V24, self.raw, 0)
-        (_magic, _ver,
-         _str_lit_off, _str_lit_size,
-         _str_lit_data_off, _str_lit_data_size,
-         self.string_off, self.string_size,
-         self.events_off, self.events_size,
-         self.properties_off, self.properties_size,
-         self.methods_off, self.methods_size,
-         self.param_default_off, self.param_default_size,
-         self.field_default_off, self.field_default_size,
-         self.field_and_param_off, self.field_and_param_size,
-         self.field_marshals_off, self.field_marshals_size,
-         self.params_off, self.params_size,
-         self.fields_off, self.fields_size,
-         self.generic_insts_off, self.generic_insts_size,
-         self.generic_methods_off, self.generic_methods_size,
-         self.generic_containers_off, self.generic_containers_size,
-         self.images_off, self.images_size,
-         self.assemblies_off, self.assemblies_size) = f
-        self.metadata_usage_off = 0
-        self.metadata_usage_size = 0
-        self.type_defs_off = 0
-        self.type_defs_size = 0
-        self.interface_offsets_off = 0
-        self.interface_offsets_size = 0
-        self.nested_off = 0
-        self.nested_size = 0
-        self.generic_constraints_off = 0
-        self.generic_constraints_size = 0
-        self.flags_off = 0
-        self.flags_size = 0
-        self.unresolved_indirect_off = 0
-        self.unresolved_indirect_size = 0
-        self.extra_field_info_off = 0
-        self.extra_field_info_size = 0
-
-    def _parse_header_v27(self):
-        sz = struct.calcsize(_IL2CPP_HEADER_FMT_V27)
-        if len(self.raw) < sz:
-            raise ValueError("Truncated Il2Cpp header (v27)")
-        f = struct.unpack_from(_IL2CPP_HEADER_FMT_V27, self.raw, 0)
-        (_magic, _ver,
-         _str_lit_off, _str_lit_size,
-         _str_lit_data_off, _str_lit_data_size,
-         self.string_off, self.string_size,
-         self.events_off, self.events_size,
-         self.properties_off, self.properties_size,
-         self.methods_off, self.methods_size,
-         self.param_default_off, self.param_default_size,
-         self.field_default_off, self.field_default_size,
-         self.field_and_param_off, self.field_and_param_size,
-         self.field_marshals_off, self.field_marshals_size,
-         self.params_off, self.params_size,
-         self.fields_off, self.fields_size,
-         self.generic_insts_off, self.generic_insts_size,
-         self.generic_methods_off, self.generic_methods_size,
-         self.generic_containers_off, self.generic_containers_size,
-         self.images_off, self.images_size,
-         self.assemblies_off, self.assemblies_size,
-         self.metadata_usage_off, self.metadata_usage_size,
-         self.type_defs_off, self.type_defs_size,
-         self.interface_offsets_off, self.interface_offsets_size,
-         self.nested_off, self.nested_size) = f
-        self.generic_constraints_off = 0
-        self.generic_constraints_size = 0
-        self.flags_off = 0
-        self.flags_size = 0
-        self.unresolved_indirect_off = 0
-        self.unresolved_indirect_size = 0
-        self.extra_field_info_off = 0
-        self.extra_field_info_size = 0
-
-    def _parse_header_v29(self):
-        sz = struct.calcsize(_IL2CPP_HEADER_FMT_V29)
-        if len(self.raw) < sz:
-            raise ValueError("Truncated Il2Cpp header (v29)")
-        f = struct.unpack_from(_IL2CPP_HEADER_FMT_V29, self.raw, 0)
-        (_magic, _ver,
-         _str_lit_off, _str_lit_size,
-         _str_lit_data_off, _str_lit_data_size,
-         self.string_off, self.string_size,
-         self.events_off, self.events_size,
-         self.properties_off, self.properties_size,
-         self.methods_off, self.methods_size,
-         self.param_default_off, self.param_default_size,
-         self.field_default_off, self.field_default_size,
-         self.field_and_param_off, self.field_and_param_size,
-         self.field_marshals_off, self.field_marshals_size,
-         self.params_off, self.params_size,
-         self.fields_off, self.fields_size,
-         self.generic_insts_off, self.generic_insts_size,
-         self.generic_methods_off, self.generic_methods_size,
-         self.generic_containers_off, self.generic_containers_size,
-         self.images_off, self.images_size,
-         self.assemblies_off, self.assemblies_size,
-         self.metadata_usage_off, self.metadata_usage_size,
-         self.type_defs_off, self.type_defs_size,
-         self.interface_offsets_off, self.interface_offsets_size,
-         self.nested_off, self.nested_size,
-         self.generic_constraints_off, self.generic_constraints_size,
-         self.flags_off, self.flags_size,
-         self.unresolved_indirect_off, self.unresolved_indirect_size,
-         self.extra_field_info_off, self.extra_field_info_size) = f
+    def _offset_size(self, name):
+        off = self.header.get(name + "Offset", 0)
+        size = self.header.get(name + "Size", 0)
+        if isinstance(off, int) and off < 0:
+            off = 0
+        if isinstance(size, int) and size < 0:
+            size = 0
+        return off, size
 
     def str_at(self, offset):
         if offset < 0:
             return ""
-        return _read_cstr(self.raw, self.string_off + offset)
+        base = self.header.get("stringOffset", 0)
+        return _read_cstr(self.raw, base + offset)
 
-    def count(self, off, size, item):
-        if off <= 0 or size <= 0:
+    def _count(self, name, item_size):
+        off, size = self._offset_size(name)
+        if off <= 0 or size <= 0 or item_size <= 0:
             return 0
-        return max(0, size // item)
+        return max(0, size // item_size)
 
     def count_typedefs(self):
-        if self.version <= IL2CPP_METADATA_VERSION_24:
-            return 0
-        return self.count(self.type_defs_off, self.type_defs_size, 92)
+        return self._count("typeDefinitions", _typedef_stride(self.sub_version))
 
     def count_methods(self):
-        return self.count(self.methods_off, self.methods_size, 36)
+        return self._count("methods", _method_stride(self.sub_version))
 
     def count_images(self):
-        return self.count(self.images_off, self.images_size, 40)
+        return self._count("images", _image_stride(self.sub_version))
 
     def count_params(self):
-        return self.count(self.params_off, self.params_size, 12)
+        return self._count("parameters", _param_stride(self.sub_version))
 
     def count_fields(self):
-        return self.count(self.fields_off, self.fields_size, 8)
+        return self._count("fields", _field_stride(self.sub_version))
 
     def iter_string_literals(self):
-        if self.version <= IL2CPP_METADATA_VERSION_24:
+        off, size = self._offset_size("stringLiteral")
+        data_off, data_size = self._offset_size("stringLiteralData")
+        if off <= 0 or size <= 0:
             return
-        if len(self.raw) < 8:
-            return
-        try:
-            lit_off = _u32(self.raw, 8)
-            lit_size = _i32(self.raw, 12)
-            data_off = _u32(self.raw, 16)
-            data_size = _i32(self.raw, 20)
-        except struct.error:
-            return
-        n = max(0, lit_size // 8)
+        n = max(0, size // 8)
         for i in range(n):
-            base = lit_off + i * 8
+            base = off + i * 8
             if base + 8 > len(self.raw):
                 break
             length = _u32(self.raw, base)
-            data_index = _u32(self.raw, base + 4)
+            data_index = _i32(self.raw, base + 4)
             start = data_off + data_index
             end = start + length
             if 0 <= start < len(self.raw) and 0 < end <= len(self.raw):
                 yield self.raw[start:end].decode("utf-8", "replace")
 
     def iter_images(self):
-        if self.images_off == 0 or self.images_size == 0:
+        off, size = self._offset_size("images")
+        if off <= 0 or size <= 0:
             return
-        n = self.count_images()
+        stride = _image_stride(self.sub_version)
+        n = size // stride
         for i in range(n):
-            base = self.images_off + i * 40
-            if base + 40 > len(self.raw):
+            base = off + i * stride
+            if base + stride > len(self.raw):
                 break
             name_idx = _i32(self.raw, base)
             asm_idx = _i32(self.raw, base + 4)
             type_start = _i32(self.raw, base + 8)
             type_count = _u32(self.raw, base + 12)
-            exported_start = _u32(self.raw, base + 16)
-            exported_count = _u32(self.raw, base + 20)
-            entry_point = _u32(self.raw, base + 24)
-            token = _u32(self.raw, base + 28)
-            custom_attr_start = _i32(self.raw, base + 32)
-            custom_attr_count = _u32(self.raw, base + 36)
+            exported_start = _u32(self.raw, base + 16) if self.version >= 24 else 0
+            exported_count = _u32(self.raw, base + 20) if self.version >= 24 else 0
+            entry_point_idx = _i32(self.raw, base + 24 if self.version >= 24 else 16)
+            token_off = base + 28 if self.version >= 24 else 20
+            token = _u32(self.raw, token_off) if self.version >= 19 else 0
             yield {
                 "name": self.str_at(name_idx),
                 "assembly_index": asm_idx,
@@ -364,52 +340,65 @@ class Il2CppMetadata:
                 "type_count": type_count,
                 "exported_start": exported_start,
                 "exported_count": exported_count,
-                "entry_point": entry_point,
+                "entry_point": entry_point_idx,
                 "token": token,
-                "custom_attr_start": custom_attr_start,
-                "custom_attr_count": custom_attr_count,
             }
 
     def iter_typedefs(self):
-        if self.version <= IL2CPP_METADATA_VERSION_24:
+        off, size = self._offset_size("typeDefinitions")
+        if off <= 0 or size <= 0:
             return
-        n = self.count_typedefs()
+        stride = _typedef_stride(self.sub_version)
+        n = size // stride
         for i in range(n):
-            base = self.type_defs_off + i * 92
-            if base + 92 > len(self.raw):
+            base = off + i * stride
+            if base + stride > len(self.raw):
                 break
             name_idx = _i32(self.raw, base)
-            namespace_idx = _i32(self.raw, base + 4)
-            byval_idx = _i32(self.raw, base + 8)
-            declaring_idx = _i32(self.raw, base + 12)
-            parent_idx = _i32(self.raw, base + 16)
-            element_idx = _i32(self.raw, base + 20)
-            generic_container_idx = _i32(self.raw, base + 24)
-            flags = _u32(self.raw, base + 28)
-            field_start = _i32(self.raw, base + 32)
-            method_start = _i32(self.raw, base + 36)
-            event_start = _i32(self.raw, base + 40)
-            property_start = _i32(self.raw, base + 44)
-            nested_start = _i32(self.raw, base + 48)
-            interfaces_start = _i32(self.raw, base + 52)
-            vtable_start = _i32(self.raw, base + 56)
-            interface_offsets_start = _i32(self.raw, base + 60)
-            method_count = _u16(self.raw, base + 64)
-            property_count = _u16(self.raw, base + 66)
-            field_count = _u16(self.raw, base + 68)
-            event_count = _u16(self.raw, base + 70)
-            nested_count = _u16(self.raw, base + 72)
-            vtable_count = _u16(self.raw, base + 74)
-            interfaces_count = _u16(self.raw, base + 76)
-            interface_offsets_count = _u16(self.raw, base + 78)
-            bitfield = _u32(self.raw, base + 80)
-            token = _u32(self.raw, base + 84)
-            custom_attr_start = _i32(self.raw, base + 88)
+            ns_idx = _i32(self.raw, base + 4)
+            cur = base + 8
+            if self.sub_version <= 24:
+                cur += 4
+            byval_idx = _i32(self.raw, cur); cur += 4
+            if self.sub_version <= 24.5:
+                byref_idx = _i32(self.raw, cur); cur += 4
+            else:
+                byref_idx = -1
+            declaring_idx = _i32(self.raw, cur); cur += 4
+            parent_idx = _i32(self.raw, cur); cur += 4
+            element_idx = _i32(self.raw, cur); cur += 4
+            if self.sub_version <= 24.1:
+                cur += 8
+            generic_container_idx = _i32(self.raw, cur); cur += 4
+            if self.sub_version <= 22:
+                cur += 8
+            if 21 <= self.sub_version <= 22:
+                cur += 8
+            flags = _u32(self.raw, cur); cur += 4
+            field_start = _i32(self.raw, cur); cur += 4
+            method_start = _i32(self.raw, cur); cur += 4
+            event_start = _i32(self.raw, cur); cur += 4
+            property_start = _i32(self.raw, cur); cur += 4
+            nested_start = _i32(self.raw, cur); cur += 4
+            interfaces_start = _i32(self.raw, cur); cur += 4
+            vtable_start = _i32(self.raw, cur); cur += 4
+            interface_offsets_start = _i32(self.raw, cur); cur += 4
+            method_count = _u16(self.raw, cur); cur += 2
+            property_count = _u16(self.raw, cur); cur += 2
+            field_count = _u16(self.raw, cur); cur += 2
+            event_count = _u16(self.raw, cur); cur += 2
+            nested_count = _u16(self.raw, cur); cur += 2
+            vtable_count = _u16(self.raw, cur); cur += 2
+            interfaces_count = _u16(self.raw, cur); cur += 2
+            interface_offsets_count = _u16(self.raw, cur); cur += 2
+            bitfield = _u32(self.raw, cur); cur += 4
+            token = _u32(self.raw, cur) if self.version >= 19 else 0
             yield {
                 "index": i,
                 "name": self.str_at(name_idx),
-                "namespace": self.str_at(namespace_idx),
+                "namespace": self.str_at(ns_idx),
                 "byval_type_index": byval_idx,
+                "byref_type_index": byref_idx,
                 "declaring_type_index": declaring_idx,
                 "parent_type_index": parent_idx,
                 "element_type_index": element_idx,
@@ -436,48 +425,68 @@ class Il2CppMetadata:
             }
 
     def iter_methods(self):
-        if self.methods_off == 0 or self.methods_size == 0:
+        off, size = self._offset_size("methods")
+        if off <= 0 or size <= 0:
             return
-        n = self.count_methods()
+        stride = _method_stride(self.sub_version)
+        n = size // stride
         for i in range(n):
-            base = self.methods_off + i * 36
-            if base + 36 > len(self.raw):
+            base = off + i * stride
+            if base + stride > len(self.raw):
                 break
             name_idx = _i32(self.raw, base)
             declaring_type = _i32(self.raw, base + 4)
             return_type = _i32(self.raw, base + 8)
-            param_start = _i32(self.raw, base + 12)
-            custom_attr_start = _i32(self.raw, base + 16)
-            custom_attr_count = _u32(self.raw, base + 20)
-            generic_container_index = _i32(self.raw, base + 24)
-            token = _u32(self.raw, base + 28)
-            flags = _u16(self.raw, base + 32)
-            iflags = _u16(self.raw, base + 34)
+            cur = base + 12
+            if self.version >= 31:
+                return_param_token = _i32(self.raw, cur); cur += 4
+            else:
+                return_param_token = 0
+            param_start = _i32(self.raw, cur); cur += 4
+            if self.sub_version <= 24:
+                cur += 4
+            generic_container_idx = _i32(self.raw, cur); cur += 4
+            if self.sub_version <= 24.1:
+                cur += 16
+            token = _u32(self.raw, cur); cur += 4
+            flags = _u16(self.raw, cur); cur += 2
+            iflags = _u16(self.raw, cur); cur += 2
+            slot = _u16(self.raw, cur); cur += 2
+            param_count = _u16(self.raw, cur); cur += 2
             yield {
                 "index": i,
                 "name": self.str_at(name_idx),
                 "declaring_type": declaring_type,
                 "return_type": return_type,
+                "return_parameter_token": return_param_token,
                 "param_start": param_start,
-                "custom_attr_start": custom_attr_start,
-                "custom_attr_count": custom_attr_count,
-                "generic_container_index": generic_container_index,
+                "param_count": param_count,
+                "generic_container_index": generic_container_idx,
                 "token": token,
                 "flags": flags,
                 "iflags": iflags,
+                "slot": slot,
             }
 
     def iter_params(self):
-        if self.params_off == 0 or self.params_size == 0:
+        off, size = self._offset_size("parameters")
+        if off <= 0 or size <= 0:
             return
-        n = self.count_params()
+        stride = _param_stride(self.sub_version)
+        n = size // stride
         for i in range(n):
-            base = self.params_off + i * 12
-            if base + 12 > len(self.raw):
+            base = off + i * stride
+            if base + stride > len(self.raw):
                 break
             name_idx = _i32(self.raw, base)
             token = _u32(self.raw, base + 4)
-            type_index = _i32(self.raw, base + 8)
+            if self.sub_version <= 24.0:
+                cur = base + 8
+                if self.sub_version <= 24:
+                    cur += 4
+                type_index = _i32(self.raw, cur)
+            else:
+                type_index = _i32(self.raw, base + 8)
             yield {
                 "index": i,
                 "name": self.str_at(name_idx),
@@ -486,18 +495,28 @@ class Il2CppMetadata:
             }
 
     def iter_fields(self):
-        if self.fields_off == 0 or self.fields_size == 0:
+        off, size = self._offset_size("fields")
+        if off <= 0 or size <= 0:
             return
-        n = self.count_fields()
+        stride = _field_stride(self.sub_version)
+        n = size // stride
         for i in range(n):
-            base = self.fields_off + i * 8
-            if base + 8 > len(self.raw):
+            base = off + i * stride
+            if base + stride > len(self.raw):
                 break
             name_idx = _i32(self.raw, base)
-            token = _u32(self.raw, base + 4)
+            if self.sub_version <= 24.0:
+                type_index = _i32(self.raw, base + 4)
+                token = _u32(self.raw, base + 8) if self.version >= 19 else 0
+                if self.sub_version <= 18:
+                    token = 0
+            else:
+                type_index = _i32(self.raw, base + 4)
+                token = _u32(self.raw, base + 8) if self.version >= 19 else 0
             yield {
                 "index": i,
                 "name": self.str_at(name_idx),
+                "type_index": type_index,
                 "token": token,
             }
 
@@ -507,7 +526,6 @@ class Il2CppBinary:
         self.path = path
         self.bits = bits
         self.data = b""
-        self._fp = None
 
     def load(self):
         with open(self.path, "rb") as f:
@@ -520,9 +538,9 @@ class Il2CppBinary:
             if pe_off and self.data[pe_off:pe_off + 4] == b"PE\x00\x00":
                 machine = _u16(self.data, pe_off + 4)
                 self.bits = 64 if machine == 0x8664 else 32
-        elif self.data[:4] == b"\xfe\xed\xfa\xce" or self.data[:4] == b"\xce\xfa\xed\xfe":
+        elif self.data[:4] in (b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe"):
             self.bits = 32
-        elif self.data[:4] == b"\xfe\xed\xfa\xcf" or self.data[:4] == b"\xcf\xfa\xed\xfe":
+        elif self.data[:4] in (b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"):
             self.bits = 64
         return self
 
@@ -581,16 +599,17 @@ class Il2CppInspector:
         self.params = list(self.metadata.iter_params())
         self.fields = list(self.metadata.iter_fields())
         self.images = list(self.metadata.iter_images())
-        self._log("Loaded Il2Cpp metadata v%d (%d types, %d methods, %d images)" %
-                  (self.metadata.version, len(self.types), len(self.methods),
-                   len(self.images)), "info")
+        self._log("Loaded Il2Cpp metadata v%s (sub %s) — %d types, %d methods, %d images" %
+                  (self.metadata.version, self.metadata.sub_version,
+                   len(self.types), len(self.methods), len(self.images)), "info")
         return self
 
     def write_dump_cs(self, path):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write("/* Il2Cpp dump generated by Elit-f (Il2CppInspector module) */\n")
-            f.write("/* metadata version: %d */\n\n" % self.metadata.version)
+            f.write("/* metadata version: %s (sub %s) */\n\n" %
+                    (self.metadata.version, self.metadata.sub_version))
             for image in self.images:
                 f.write("// Image: %s (types %d..%d)\n" %
                         (image["name"], image["type_start"],
@@ -643,7 +662,9 @@ class Il2CppInspector:
                 m = self.methods[meth_idx]
                 ret = self._type_name(m["return_type"])
                 params = []
-                for pi in range(8):
+                n_params = m.get("param_count", 8) or 8
+                n_params = min(n_params, 8)
+                for pi in range(n_params):
                     pidx = m["param_start"] + pi
                     if 0 <= pidx < len(self.params):
                         p = self.params[pidx]
@@ -756,7 +777,7 @@ class Il2CppInspector:
             f.write("Il2Cpp metadata summary\n")
             f.write("=======================\n")
             f.write("file: %s\n" % self.metadata_path)
-            f.write("version: %d\n" % self.metadata.version)
+            f.write("version: %s (sub %s)\n" % (self.metadata.version, self.metadata.sub_version))
             f.write("images: %d\n" % len(self.images))
             f.write("types: %d\n" % len(self.types))
             f.write("methods: %d\n" % len(self.methods))
@@ -801,12 +822,12 @@ def find_il2cpp_targets(indir):
         out = []
         with zipfile.ZipFile(indir, "r") as zf:
             for n in zf.namelist():
-                if n.endswith(_LIBIL2CPP_NAME) or n.endswith(_GLOBAL_METADATA_NAME):
+                if n.endswith("libil2cpp.so") or n.endswith("global-metadata.dat"):
                     out.append((n, n))
         return out
     if os.path.isdir(indir):
-        lib = _find_in_dir(indir, _LIBIL2CPP_NAME)
-        md = _find_in_dir(indir, _GLOBAL_METADATA_NAME)
+        lib = _find_in_dir(indir, "libil2cpp.so")
+        md = _find_in_dir(indir, "global-metadata.dat")
         if lib and md:
             return [(lib, md)]
     return []
@@ -834,14 +855,14 @@ def extract_targets(archive_or_dir, work_dir):
     if os.path.isfile(archive_or_dir) and zipfile.is_zipfile(archive_or_dir):
         with zipfile.ZipFile(archive_or_dir, "r") as zf:
             names = [n for n in zf.namelist()
-                     if n.endswith(_LIBIL2CPP_NAME) or n.endswith(_GLOBAL_METADATA_NAME)]
+                     if n.endswith("libil2cpp.so") or n.endswith("global-metadata.dat")]
             if not names:
                 raise ValueError("APK/XAPK ne contient ni libil2cpp.so ni global-metadata.dat")
             for n in names:
                 if not _is_safe_zip_entry(n):
                     raise ValueError("Entrée ZIP invalide (path traversal): %s" % n)
-            lib_candidates = [n for n in names if n.endswith(_LIBIL2CPP_NAME)]
-            md_candidates = [n for n in names if n.endswith(_GLOBAL_METADATA_NAME)]
+            lib_candidates = [n for n in names if n.endswith("libil2cpp.so")]
+            md_candidates = [n for n in names if n.endswith("global-metadata.dat")]
             lib_path = _select_preferred_abi(lib_candidates)
             md_path = md_candidates[0] if len(md_candidates) == 1 else \
                 _select_preferred_abi(md_candidates)
@@ -855,8 +876,8 @@ def extract_targets(archive_or_dir, work_dir):
                 raise ValueError("Extraction Il2Cpp échouée: fichiers absents")
             return (lib_disk, md_disk)
     if os.path.isdir(archive_or_dir):
-        lib = _find_in_dir(archive_or_dir, _LIBIL2CPP_NAME)
-        md = _find_in_dir(archive_or_dir, _GLOBAL_METADATA_NAME)
+        lib = _find_in_dir(archive_or_dir, "libil2cpp.so")
+        md = _find_in_dir(archive_or_dir, "global-metadata.dat")
         if not lib or not md:
             raise ValueError("Répertoire sans libil2cpp.so / global-metadata.dat")
         return (lib, md)
