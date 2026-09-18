@@ -622,33 +622,32 @@ def r2_exec_interactive(so_list, outdir, log_mgr=None, ui=None):
     selected = ui.get_target_selection()
     if not selected:
         if log_mgr:
-            log_mgr.add("Aucune cible sélectionnée pour r2 interactif.", "warn")
+            log_mgr.add("Aucune cible sélectionnée pour r2.", "warn")
         return None
     targets = [so_list[i] for i in selected]
     if not targets:
         return None
     target = targets[0]
     if len(targets) > 1:
-        ui._print("[dim]r2 interactif ne supporte qu'une cible à la fois — "
+        ui._print("[dim]r2  ne supporte qu'une cible à la fois — "
                   "utilisation de la première: %s[/]" % target["name"]
                   if ui.console else
-                  "r2 interactif ne supporte qu'une cible à la fois — "
+                  "r2  ne supporte qu'une cible à la fois — "
                   "utilisation de la premiere: %s" % target["name"])
     if log_mgr:
-        log_mgr.add(f"r2 interactif — cible: {target['name']} ({target['path']})", "info")
+        log_mgr.add(f"r2  — cible: {target['name']} ({target['path']})", "info")
         log_mgr.step()
     argv = [r2_bin, "-e", "scr.color=2", "-e", "bin.cache=true",
             "-e", "anal.strings=true", "-e", "io.cache=true"]
     if ui.console:
         argv += ["-e", "scr.utf8=true"]
     argv.append(target["path"])
-    header = ("=== r2 interactif — cible: %s ===\n"
-              "Toutes les commandes r2 natives sont disponibles (a/i/p/s/f/c/C/d/g/t/y/z/k/m/o/r/e/v/?/!)\n"
+    header = ("[blod red]%s[/]\n"
               "quit ou q pour revenir à Elit-f\n" % target["name"])
     if ui.console:
         from rich.panel import Panel as _Panel
         from rich.style import Style as _Style
-        ui.console.print(_Panel(header, title="[bold bright_green]r2 interactif[/]",
+        ui.console.print(_Panel(header, title="[bold bright_green]r2 [/]",
                                 border_style=_Style(color="bright_green")))
     else:
         print(header)
@@ -1325,7 +1324,7 @@ R2_TERMINAL_CATALOG = {
                  [("value", "valeur", "0")]),
             _cat("e scr.utf8", "UTF-8 en sortie",
                  [("value", "valeur", "true")]),
-            _cat("e scr.interactive", "Mode interactif (false en batch)",
+            _cat("e scr.interactive", "Mode (false en batch)",
                  [("value", "valeur", "false")]),
             _cat("e asm.bytes", "Afficher les octets",
                  [("value", "valeur", "true")]),

@@ -96,7 +96,7 @@ def build_logo(author: str, platform_name: str, date_str: str, offset: int = 0) 
 def logo_plain_text(author: str, platform_name: str, date_str: str) -> str:
     lines = list(ASCII_LINES)
     lines.append("")
-    lines.append("  E L I T - F   (Flutter/Dart AOT Reversing Engine)")
+    lines.append("  E L I T - F  ")
     lines.append(f"  ◈ Auteur    : {author}")
     lines.append(f"  ◈ Plateforme: {platform_name}")
     lines.append(f"  ◈ Date      : {date_str}")
@@ -376,8 +376,7 @@ class ElitfUI:
             menu_text = Text()
             menu_items = [
                 ("1", "Flutter/Dart AOT Analysis", "Analyse complète libapp.so + libflutter.so", "bright_cyan"),
-                ("2", "Radare2 - Terminal interactif",
-                 "Lance le vrai r2 (toutes commandes natives) sur la cible sélectionnée — quit avec 'q'",
+                ("2", "Radare2 - Terminal ",
                  "bright_green"),
                 ("3", "Il2Cpp Analysis (Il2CppInspector)",
                  "dump.cs + symbol map + IDA/Ghidra scripts depuis libil2cpp.so + global-metadata.dat",
@@ -400,7 +399,7 @@ class ElitfUI:
         else:
             print("\n  === 𝕸𝖊𝖓𝖚 𝕻𝖗𝖎𝖓𝖈𝖎𝖕𝖆𝖑 ===")
             print("  [1] Flutter/Dart AOT Analysis")
-            print("  [2] Radare2 - Terminal interactif (vrai r2 natif)")
+            print("  [2] Radare2 - Terminal  (vrai r2 natif)")
             print("  [3] Il2Cpp Analysis (Il2CppInspector: dump.cs + IDA/Ghidra)")
             print("  [4] Analyser et generer les scripts Frida")
             print("  [5] Information binaire detaillee (+ cibles / nettoyage)")

@@ -526,6 +526,8 @@ class Il2CppBinary:
         self.path = path
         self.bits = bits
         self.data = b""
+        self._elf = None
+        self._segments = []
 
     def load(self):
         with open(self.path, "rb") as f:
@@ -533,6 +535,7 @@ class Il2CppBinary:
         if self.data[:4] == b"\x7fELF":
             ei_class = self.data[4]
             self.bits = 64 if ei_class == 2 else 32
+            self._parse_elf()
         elif self.data[:2] == b"MZ":
             pe_off = _u32(self.data, 0x3c) if len(self.data) >= 0x40 else 0
             if pe_off and self.data[pe_off:pe_off + 4] == b"PE\x00\x00":
@@ -543,6 +546,240 @@ class Il2CppBinary:
         elif self.data[:4] in (b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"):
             self.bits = 64
         return self
+
+    def _parse_elf(self):
+        try:
+            from elftools.elf.elffile import ELFFile
+            from io import BytesIO
+            self._elf = ELFFile(BytesIO(self.data))
+            self._segments = list(self._elf.iter_segments())
+            self._relocations = {}
+            self._sym_relocations = {}
+            symtab = {}
+            for section in self._elf.iter_sections():
+                if section.name in ('.symtab', '.dynsym'):
+                    for sym in section.iter_symbols():
+                        if sym['st_value'] != 0:
+                            symtab[sym.name] = sym['st_value']
+            for section in self._elf.iter_sections():
+                if not section.name.startswith('.rel'):
+                    continue
+                try:
+                    is_rela = section.name.startswith('.rela')
+                    for rel in section.iter_relocations():
+                        r_offset = rel['r_offset']
+                        r_type = rel['r_info_type']
+                        r_addend = rel['r_addend'] if is_rela else 0
+                        r_sym_idx = rel['r_info_sym']
+                        is_relative = (
+                            (self.bits == 64 and r_type == 8) or
+                            (self.bits == 32 and r_type == 42) or
+                            r_type == 0x403
+                        )
+                        if is_relative:
+                            self._relocations[r_offset] = r_addend
+                        elif r_type in (1, 2, 22, 0x101):
+                            sym_section = None
+                            for s in self._elf.iter_sections():
+                                if s.name in ('.symtab', '.dynsym'):
+                                    syms = list(s.iter_symbols())
+                                    if r_sym_idx < len(syms):
+                                        sym = syms[r_sym_idx]
+                                        if sym['st_value'] != 0:
+                                            self._sym_relocations[r_offset] = sym['st_value'] + r_addend
+                                            break
+                except Exception:
+                    continue
+            return True
+        except Exception:
+            self._elf = None
+            self._segments = []
+            self._relocations = {}
+            self._sym_relocations = {}
+            return False
+
+    def _vaddr_to_offset(self, vaddr):
+        if not self._segments:
+            return None
+        for seg in self._segments:
+            if seg['p_type'] != 'PT_LOAD':
+                continue
+            v_start = seg['p_vaddr']
+            v_end = v_start + seg['p_filesz']
+            if v_start <= vaddr < v_end:
+                return vaddr - v_start + seg['p_offset']
+        return None
+
+    def find_symbol(self, name):
+        if not self._elf:
+            return None
+        for section in self._elf.iter_sections():
+            if section.name not in ('.symtab', '.dynsym'):
+                continue
+            for sym in section.iter_symbols():
+                if sym.name == name and sym['st_value'] != 0:
+                    return sym['st_value']
+        return None
+
+    def read_u64_at_vaddr(self, vaddr):
+        offset = self._vaddr_to_offset(vaddr)
+        if offset is None or offset + 8 > len(self.data):
+            return None
+        val = struct.unpack_from('<Q', self.data, offset)[0]
+        if val == 0:
+            if vaddr in self._relocations:
+                return self._relocations[vaddr] or vaddr
+            if vaddr in self._sym_relocations:
+                return self._sym_relocations[vaddr]
+        return val
+
+    def read_u32_at_vaddr(self, vaddr):
+        offset = self._vaddr_to_offset(vaddr)
+        if offset is None or offset + 4 > len(self.data):
+            return None
+        val = struct.unpack_from('<I', self.data, offset)[0]
+        if val == 0:
+            if vaddr in self._relocations:
+                return self._relocations[vaddr] or vaddr
+            if vaddr in self._sym_relocations:
+                return self._sym_relocations[vaddr]
+        return val
+
+    def read_pointer_at_vaddr(self, vaddr):
+        if self.bits == 64:
+            return self.read_u64_at_vaddr(vaddr)
+        return self.read_u32_at_vaddr(vaddr)
+
+    def get_method_vaddrs(self, method_count):
+        if not self._elf:
+            return None
+        code_reg_sym = self.find_symbol('g_CodeRegistration')
+        if not code_reg_sym:
+            return None
+        code_reg_addr = self.read_pointer_at_vaddr(code_reg_sym)
+        if code_reg_addr is None or code_reg_addr == 0:
+            return None
+        method_ptrs_addr = self.read_pointer_at_vaddr(code_reg_addr)
+        if method_ptrs_addr is None or method_ptrs_addr == 0:
+            return None
+        ptr_size = 8 if self.bits == 64 else 4
+        vaddrs = []
+        for i in range(method_count):
+            ptr_vaddr = method_ptrs_addr + i * ptr_size
+            v = self.read_pointer_at_vaddr(ptr_vaddr)
+            vaddrs.append(v if v else 0)
+        return vaddrs
+
+    def get_type_names(self, type_count):
+        if not self._elf:
+            return None
+        meta_reg_sym = self.find_symbol('g_MetadataRegistration')
+        if not meta_reg_sym:
+            return None
+        meta_reg_addr = self.read_pointer_at_vaddr(meta_reg_sym)
+        if meta_reg_addr is None or meta_reg_addr == 0:
+            return None
+        types_arr_addr = self.read_pointer_at_vaddr(meta_reg_addr)
+        if types_arr_addr is None or types_arr_addr == 0:
+            return None
+        ptr_size = 8 if self.bits == 64 else 4
+        type_ptrs = []
+        for i in range(type_count):
+            ptr_vaddr = types_arr_addr + i * ptr_size
+            v = self.read_pointer_at_vaddr(ptr_vaddr)
+            type_ptrs.append(v if v else 0)
+        type_names = {}
+        for i, tp in enumerate(type_ptrs):
+            if tp == 0:
+                continue
+            type_name = self._read_il2cpp_type_name(tp)
+            if type_name:
+                type_names[i] = type_name
+        return type_names
+
+    def _read_il2cpp_type_name(self, type_ptr_vaddr):
+        type_offset = self._vaddr_to_offset(type_ptr_vaddr)
+        if type_offset is None or type_offset + 16 > len(self.data):
+            return None
+        type_byte = self.data[type_offset]
+        attrs = self.data[type_offset + 1]
+        data_offset = type_offset + 8 if self.bits == 64 else type_offset + 4
+        if data_offset + 8 > len(self.data):
+            return None
+        type_kind = type_byte & 0x3f
+        if type_kind == 0x0e:
+            return "Type"
+        elif type_kind == 0x02:
+            class_idx_or_ptr = struct.unpack_from('<Q', self.data, data_offset)[0] if self.bits == 64 else struct.unpack_from('<I', self.data, data_offset)[0]
+            if class_idx_or_ptr == 0:
+                return "object"
+            name_ptr = self.read_pointer_at_vaddr(class_idx_or_ptr + (24 if self.bits == 64 else 12))
+            if name_ptr and name_ptr != 0:
+                name_off = self._vaddr_to_offset(name_ptr)
+                if name_off and name_off < len(self.data):
+                    end = self.data.find(b'\x00', name_off)
+                    if end > name_off:
+                        return self.data[name_off:end].decode('utf-8', 'replace')
+            return "Class_%x" % class_idx_or_ptr
+        elif type_kind == 0x06:
+            return "Enum"
+        elif type_kind == 0x01:
+            return "ValueType"
+        elif type_kind == 0x03:
+            return "Interface"
+        elif type_kind == 0x04:
+            return "GenericClass"
+        elif type_kind == 0x05:
+            return "Array"
+        elif type_kind == 0x07:
+            return "GenericInstance"
+        elif type_kind == 0x08:
+            return "GenericParameter"
+        elif type_kind == 0x0b:
+            return "Ptr"
+        elif type_kind == 0x0c:
+            return "FnPtr"
+        elif type_kind == 0x0d:
+            return "ByRef"
+        elif type_kind == 0x14:
+            return "MVar"
+        elif type_kind == 0x11:
+            return "Sentinel"
+        elif type_kind == 0x12:
+            return "Pinned"
+        elif type_kind == 0x1e:
+            return "void"
+        elif type_kind == 0x1f:
+            return "bool"
+        elif type_kind == 0x20:
+            return "char"
+        elif type_kind == 0x21:
+            return "sbyte"
+        elif type_kind == 0x22:
+            return "byte"
+        elif type_kind == 0x23:
+            return "short"
+        elif type_kind == 0x24:
+            return "ushort"
+        elif type_kind == 0x25:
+            return "int"
+        elif type_kind == 0x26:
+            return "uint"
+        elif type_kind == 0x27:
+            return "long"
+        elif type_kind == 0x28:
+            return "ulong"
+        elif type_kind == 0x29:
+            return "float"
+        elif type_kind == 0x2a:
+            return "double"
+        elif type_kind == 0x2b:
+            return "string"
+        elif type_kind == 0x2c:
+            return "intptr"
+        elif type_kind == 0x2d:
+            return "uintptr"
+        return "TypeKind_0x%02x" % type_kind
 
     def symbols(self):
         readelf = _find_tool(_READELF_NAMES)
@@ -582,6 +819,9 @@ class Il2CppInspector:
         self.params = []
         self.fields = []
         self.images = []
+        self.method_vaddrs = None
+        self.type_names = None
+        self.has_binary_symbols = False
 
     def _log(self, msg, level="info"):
         if self.log_mgr:
@@ -602,14 +842,65 @@ class Il2CppInspector:
         self._log("Loaded Il2Cpp metadata v%s (sub %s) — %d types, %d methods, %d images" %
                   (self.metadata.version, self.metadata.sub_version,
                    len(self.types), len(self.methods), len(self.images)), "info")
+        code_reg = self.binary.find_symbol('g_CodeRegistration') if self.binary._elf else None
+        meta_reg = self.binary.find_symbol('g_MetadataRegistration') if self.binary._elf else None
+        if code_reg:
+            self.has_binary_symbols = True
+            self.method_vaddrs = self.binary.get_method_vaddrs(len(self.methods))
+            if self.method_vaddrs:
+                resolved = sum(1 for v in self.method_vaddrs if v and v > 0)
+                self._log("CodeRegistration found — %d/%d method vaddrs resolved" %
+                          (resolved, len(self.method_vaddrs)), "success")
+            else:
+                self._log("CodeRegistration symbol found but methodPointers unreadable", "warn")
+        else:
+            self._log("g_CodeRegistration not found in symbol table (binary stripped?) — "
+                      "dumps will use method indices, not vaddrs", "warn")
+        if meta_reg:
+            self.type_names = self.binary.get_type_names(65536)
+            if self.type_names:
+                self._log("MetadataRegistration found — %d type names resolved" %
+                          len(self.type_names), "success")
         return self
+
+    def _method_vaddr(self, method):
+        if not self.method_vaddrs:
+            return None
+        idx = method["index"]
+        if 0 <= idx < len(self.method_vaddrs):
+            v = self.method_vaddrs[idx]
+            return v if v and v > 0 else None
+        return None
+
+    def _type_name(self, type_index):
+        if type_index is None or type_index < 0:
+            return "void"
+        if self.type_names and type_index in self.type_names:
+            return self.type_names[type_index]
+        if 0 <= type_index < len(self.types):
+            t = self.types[type_index]
+            if t["namespace"]:
+                return "%s.%s" % (t["namespace"], t["name"])
+            return t["name"] or "Type_%d" % type_index
+        return "Type_%d" % type_index
 
     def write_dump_cs(self, path):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write("/* Il2Cpp dump generated by Elit-f (Il2CppInspector module) */\n")
-            f.write("/* metadata version: %s (sub %s) */\n\n" %
+            f.write("/* metadata version: %s (sub %s) */\n" %
                     (self.metadata.version, self.metadata.sub_version))
+            if self.has_binary_symbols and self.method_vaddrs:
+                f.write("/* vaddr mapping: RESOLVED via g_CodeRegistration (%d methods) */\n" %
+                        len(self.method_vaddrs))
+            else:
+                f.write("/* vaddr mapping: NOT available (binary stripped) — using method indices */\n")
+            if self.type_names:
+                f.write("/* type resolution: RESOLVED via g_MetadataRegistration (%d types) */\n" %
+                        len(self.type_names))
+            else:
+                f.write("/* type resolution: partial (typedef names only, no Il2CppType[] from binary) */\n")
+            f.write("\n")
             for image in self.images:
                 f.write("// Image: %s (types %d..%d)\n" %
                         (image["name"], image["type_start"],
@@ -630,12 +921,8 @@ class Il2CppInspector:
         is_interface = (flags & 0x20) != 0
         is_abstract = (flags & 0x80) != 0
         is_sealed = (flags & 0x100) != 0
-        is_enum = (t["element_type_index"] >= 0 and t["parent_type_index"] >= 0
-                   and "Enum" in self._type_name(t["parent_type_index"]))
         if is_interface:
             kind = "interface"
-        elif is_enum:
-            kind = "enum"
         f.write("\n")
         if ns:
             f.write("namespace %s\n{\n" % ns)
@@ -647,49 +934,49 @@ class Il2CppInspector:
         f.write(" %s %s" % (kind, name))
         if t["generic_container_index"] >= 0:
             f.write("<T>")
-        f.write(" // TypeDefIndex: %d\n" % t["index"])
+        f.write(" // TypeDefIndex: %d, token: 0x%08x\n" % (t["index"], t["token"]))
         f.write("{\n")
         for fi in range(t["field_count"]):
             field_idx = t["field_start"] + fi
             if 0 <= field_idx < len(self.fields):
                 field = self.fields[field_idx]
-                f.write("    public object %s; // 0x%08x\n" %
-                        (field["name"] or "field_%d" % field_idx,
-                         field["token"]))
+                ftype = self._type_name(field.get("type_index", -1))
+                f.write("    %s %s; // fieldIdx: %d\n" %
+                        (ftype, field["name"] or "field_%d" % field_idx, field_idx))
         for mi in range(t["method_count"]):
             meth_idx = t["method_start"] + mi
             if 0 <= meth_idx < len(self.methods):
                 m = self.methods[meth_idx]
                 ret = self._type_name(m["return_type"])
                 params = []
-                n_params = m.get("param_count", 8) or 8
-                n_params = min(n_params, 8)
+                n_params = m.get("param_count", 0) or 0
+                n_params = min(n_params, 16)
                 for pi in range(n_params):
                     pidx = m["param_start"] + pi
                     if 0 <= pidx < len(self.params):
                         p = self.params[pidx]
                         params.append("%s %s" % (self._type_name(p["type_index"]),
                                                   p["name"] or "arg%d" % pi))
-                f.write("    %s %s(%s); // 0x%08x\n" %
+                vaddr = self._method_vaddr(m)
+                vaddr_str = " VA: 0x%08x" % vaddr if vaddr else " VA: <unresolved>"
+                f.write("    %s %s(%s); // token: 0x%08x, methIdx: %d%s\n" %
                         (ret, m["name"] or "method_%d" % meth_idx,
-                         ", ".join(params) or "", m["token"]))
+                         ", ".join(params) or "", m["token"], meth_idx, vaddr_str))
         f.write("}\n")
         if ns:
             f.write("} // namespace %s\n" % ns)
 
-    def _type_name(self, type_index):
-        if type_index is None or type_index < 0:
-            return "void"
-        if type_index < len(self.types):
-            t = self.types[type_index]
-            if t["namespace"]:
-                return "%s.%s" % (t["namespace"], t["name"])
-            return t["name"] or "_Unknown"
-        return "Type_%d" % type_index
-
     def write_symbol_map(self, path):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
+            f.write("# Il2Cpp symbol map — Elit-f\n")
+            f.write("# metadata version: %s (sub %s)\n" %
+                    (self.metadata.version, self.metadata.sub_version))
+            if self.has_binary_symbols and self.method_vaddrs:
+                f.write("# vaddr mapping: RESOLVED via g_CodeRegistration\n")
+            else:
+                f.write("# vaddr mapping: NOT available — addresses are method indices (NOT vaddrs)\n")
+            f.write("# format: <vaddr_or_index> <symbol_name>\n\n")
             for t in self.types:
                 ns = t["namespace"]
                 name = t["name"] or "Type_%d" % t["index"]
@@ -701,7 +988,12 @@ class Il2CppInspector:
                         m = self.methods[meth_idx]
                         mname = m["name"] or "method_%d" % meth_idx
                         sym = "Il2Cpp_%s_%s" % (safe, _safe_name(mname))
-                        f.write("0x%08x %s\n" % (m["token"], sym))
+                        vaddr = self._method_vaddr(m)
+                        if vaddr:
+                            f.write("0x%016x %s\n" % (vaddr, sym))
+                        else:
+                            f.write("# method_idx_%d %s  (vaddr unresolved)\n" %
+                                    (meth_idx, sym))
         return path
 
     def write_ida_script(self, path):
@@ -709,9 +1001,13 @@ class Il2CppInspector:
         with open(path, "w", encoding="utf-8") as f:
             f.write("import idaapi\n")
             f.write("import idc\n\n")
-            f.write("print('Il2CppInspector (Elit-f): applying Il2Cpp names from metadata tokens')\n")
-            f.write("print('NOTE: addresses below are metadata tokens (0x06xxxxxx), not virtual addresses.')\n")
-            f.write("print('For real vaddr mapping, parse CodeRegistration/methodPointers from libil2cpp.so.')\n\n")
+            if self.has_binary_symbols and self.method_vaddrs:
+                f.write("print('Il2CppInspector (Elit-f): applying Il2Cpp names from REAL virtual addresses')\n")
+                f.write("print('vaddr mapping: RESOLVED via g_CodeRegistration in libil2cpp.so')\n\n")
+            else:
+                f.write("print('Il2CppInspector (Elit-f): WARNING — binary is stripped, no g_CodeRegistration found')\n")
+                f.write("print('Addresses below are METHOD INDICES, not virtual addresses.')\n")
+                f.write("print('To get real vaddrs, use a non-stripped libil2cpp.so or run Il2CppDumper separately.')\n\n")
             f.write("_NAMES = [\n")
             for t in self.types:
                 ns = t["namespace"]
@@ -724,14 +1020,20 @@ class Il2CppInspector:
                         m = self.methods[meth_idx]
                         mname = m["name"] or "method_%d" % meth_idx
                         sym = "Il2Cpp_%s_%s" % (safe, _safe_name(mname))
-                        f.write("    (0x%08x, '%s'),\n" % (m["token"], sym))
+                        vaddr = self._method_vaddr(m)
+                        if vaddr:
+                            f.write("    (0x%x, '%s'),\n" % (vaddr, sym))
             f.write("]\n\n")
+            f.write("applied = 0\n")
             f.write("for ea, name in _NAMES:\n")
             f.write("    try:\n")
-            f.write("        idc.set_name(ea, name, idaapi.SN_NOWARN | idaapi.SN_NOCHECK)\n")
+            f.write("        if idc.set_name(ea, name, idaapi.SN_NOWARN | idaapi.SN_NOCHECK):\n")
+            f.write("            applied += 1\n")
+            f.write("        else:\n")
+            f.write("            idc.set_cmt(ea, name, 0)\n")
             f.write("    except Exception as e:\n")
             f.write("        print('rename failed @ 0x%x: %s' % (ea, e))\n\n")
-            f.write("print('Il2CppInspector: done (%d entries)' % len(_NAMES))\n")
+            f.write("print('Il2CppInspector: applied %d/%d names' % (applied, len(_NAMES)))\n")
         return path
 
     def write_ghidra_script(self, path):
@@ -739,9 +1041,13 @@ class Il2CppInspector:
         with open(path, "w", encoding="utf-8") as f:
             f.write("# Ghidra script — Il2Cpp symbol names from Elit-f\n")
             f.write("# @category Il2Cpp\n\n")
+            if self.has_binary_symbols and self.method_vaddrs:
+                f.write("print('Il2CppInspector (Elit-f): applying Il2Cpp names from REAL virtual addresses')\n")
+                f.write("print('vaddr mapping: RESOLVED via g_CodeRegistration in libil2cpp.so')\n\n")
+            else:
+                f.write("print('Il2CppInspector (Elit-f): WARNING — binary is stripped, no g_CodeRegistration found')\n")
+                f.write("print('Addresses below are METHOD INDICES, not virtual addresses.')\n\n")
             f.write("from ghidra.program.model.symbol import SourceType\n\n")
-            f.write("print('Il2CppInspector (Elit-f): applying Il2Cpp names from metadata tokens')\n")
-            f.write("print('NOTE: addresses below are metadata tokens (0x06xxxxxx), not virtual addresses.')\n\n")
             f.write("names = [\n")
             for t in self.types:
                 ns = t["namespace"]
@@ -754,11 +1060,19 @@ class Il2CppInspector:
                         m = self.methods[meth_idx]
                         mname = m["name"] or "method_%d" % meth_idx
                         sym = "Il2Cpp_%s_%s" % (safe, _safe_name(mname))
-                        f.write("    (0x%08x, \"%s\"),\n" % (m["token"], sym))
+                        vaddr = self._method_vaddr(m)
+                        if vaddr:
+                            f.write("    (0x%x, \"%s\"),\n" % (vaddr, sym))
             f.write("]\n\n")
+            f.write("applied = 0\n")
             f.write("for ea, name in names:\n")
             f.write("    addr = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(ea)\n")
-            f.write("    currentProgram.getSymbolTable().createLabel(addr, name, SourceType.USER_DEFINED, True)\n")
+            f.write("    try:\n")
+            f.write("        currentProgram.getSymbolTable().createLabel(addr, name, SourceType.USER_DEFINED, True)\n")
+            f.write("        applied += 1\n")
+            f.write("    except Exception as e:\n")
+            f.write("        print('rename failed @ 0x%x: %s' % (ea, e))\n\n")
+            f.write("print('Il2CppInspector: applied %d/%d names' % (applied, len(names)))\n")
         return path
 
     def write_string_literal_dump(self, path):
