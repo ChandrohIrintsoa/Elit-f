@@ -768,10 +768,13 @@ class ElitfUI:
                 return default
 
     def print_raw(self, text):
-
-        if self.console:
-            from rich.text import Text as _RawText
-            self.console.print(_RawText(text))
+        if self.console and not self.force_plain:
+            try:
+                sys.stdout.write(text + "\n")
+                sys.stdout.flush()
+            except Exception:
+                from rich.text import Text as _RawText
+                self.console.print(_RawText(text), soft_wrap=True, overflow="ignore", crop=False)
         else:
             print(text)
 

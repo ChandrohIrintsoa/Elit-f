@@ -686,7 +686,16 @@ R2_ANALYSIS_COMMANDS = {
 R2_HEADER_LINES = ["e scr.color=0", "e scr.utf8=0", "e bin.cache=true",
                    "e anal.strings=true", "e io.cache=true"]
 
-R2_OUTPUT_LIMIT = 1_000_000
+def _r2_output_limit():
+    try:
+        v = int(os.getenv("R2_OUTPUT_LIMIT", "0"))
+        if v > 0:
+            return v
+    except ValueError:
+        pass
+    return 10_000_000
+
+R2_OUTPUT_LIMIT = _r2_output_limit()
 
 _R2_WRITE_PREFIXES = ("wa ", "wx ", "w ", "wo ", "r ", "r+", "r-", "rm ", "waF ", "wao ", "wv ")
 _R2_SHELL_METACHARS = (';', '@', '|', '>', '~', '"', '`', "'", '\\')
@@ -1461,14 +1470,17 @@ class R2Session:
 
     def _show_output(self, text, ok=True):
         text = (text or '').rstrip()
-        if len(text) > R2_OUTPUT_LIMIT:
-            text = (text[:R2_OUTPUT_LIMIT] +
-                    f"\n… [sortie tronquée à {R2_OUTPUT_LIMIT} caractères]")
+        limit = _r2_output_limit()
+        if len(text) > limit:
+            text = (text[:limit] +
+                    f"\n... [sortie tronquee a {limit} caracteres sur {len(text)}]"
+                    f"\n    Astuce: augmentez la limite avec R2_OUTPUT_LIMIT=50000000"
+                    f" ou redirigez: cmd > fichier.txt")
         if text:
             self._emit(text)
         if not ok:
-            self.ui._print("[bold red]✗ échec de la commande[/]" if self.ui.console
-                           else "✗ échec de la commande")
+            self.ui._print("[bold red]X echec de la commande[/]" if self.ui.console
+                           else "X echec de la commande")
 
     def _print_help(self):
         p = self.ui._print
@@ -1484,6 +1496,7 @@ class R2Session:
         p("  !set / !unset     Config session appliquée à chaque commande — ex: !set e asm.bytes=true")
         p("  !lib              Chemin de la cible active")
         p("  !catalog          Parcourir le catalogue des commandes r2 (24 catégories, ~310 cmds)")
+        p("  !limit [N]        Afficher ou définir la limite de sortie (défaut 10MB)")
         p("  !pptool           État pptool / exécuter avec !pptool <args>")
         p("  q | quit | exit   Quitter le terminal")
         p("Astuce: chaque commande part d'une session r2 fraîche — lancez l'analyse (aaa) ou"
@@ -1560,6 +1573,22 @@ class R2Session:
                 self._show_output(text, ok)
         elif name == 'catalog':
             self.catalog()
+        elif name == 'limit':
+            global R2_OUTPUT_LIMIT
+            if not rest:
+                self.ui._print(f"Limite de sortie: {R2_OUTPUT_LIMIT} caractères"
+                               f" ({R2_OUTPUT_LIMIT // 1_000_000} MB)")
+                self.ui._print("Pour changer: !limit 50000000  (50 MB)"
+                               " ou export R2_OUTPUT_LIMIT=50000000")
+            else:
+                try:
+                    new_limit = int(rest)
+                    if new_limit < 1000:
+                        raise ValueError("too small")
+                    R2_OUTPUT_LIMIT = new_limit
+                    self.ui._print(f"Limite de sortie: {R2_OUTPUT_LIMIT} caractères")
+                except ValueError:
+                    self.ui._print(f"[!] Valeur invalide: {rest!r} — attendu un nombre >= 1000")
         else:
             self.ui._print(f"builtin inconnu: !{name} — !help pour l'aide")
         return 'handled'
