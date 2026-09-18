@@ -376,8 +376,8 @@ class ElitfUI:
             menu_text = Text()
             menu_items = [
                 ("1", "Flutter/Dart AOT Analysis", "Analyse complète libapp.so + libflutter.so", "bright_cyan"),
-                ("2", "Radare2 - Mini Terminal",
-                 "Terminal interactif r2 — TOUTES les commandes r2 (a/i/p/s/f/c/C/d/g/t/y/z/k/m/o/r/e/v/?/!)",
+                ("2", "Radare2 - Terminal interactif",
+                 "Lance le vrai r2 (toutes commandes natives) sur la cible sélectionnée — quit avec 'q'",
                  "bright_green"),
                 ("3", "Il2Cpp Analysis (Il2CppInspector)",
                  "dump.cs + symbol map + IDA/Ghidra scripts depuis libil2cpp.so + global-metadata.dat",
@@ -400,7 +400,7 @@ class ElitfUI:
         else:
             print("\n  === 𝕸𝖊𝖓𝖚 𝕻𝖗𝖎𝖓𝖈𝖎𝖕𝖆𝖑 ===")
             print("  [1] Flutter/Dart AOT Analysis")
-            print("  [2] Radare2 - Mini Terminal (toutes commandes r2)")
+            print("  [2] Radare2 - Terminal interactif (vrai r2 natif)")
             print("  [3] Il2Cpp Analysis (Il2CppInspector: dump.cs + IDA/Ghidra)")
             print("  [4] Analyser et generer les scripts Frida")
             print("  [5] Information binaire detaillee (+ cibles / nettoyage)")

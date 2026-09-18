@@ -604,20 +604,86 @@ def run_r2_custom(so_list, outdir, analysis_key, extraction_keys, log_mgr=None,
         log_mgr.add(f"r2 {mode_tag}: {succeeded}/{len(generated)} succeeded", "success")
     return generated
 
-def r2_mini_terminal(so_list, outdir, log_mgr=None, ui=None):
+def r2_exec_interactive(so_list, outdir, log_mgr=None, ui=None):
     if ui is None:
-        raise ValueError("r2_mini_terminal requires a ui (interactive console)")
+        raise ValueError("r2_exec_interactive requires a ui (interactive console)")
+    r2_bin = _find_r2()
+    if not r2_bin:
+        msg = ("r2 introuvable — installez radare2 "
+               "(Termux: pkg install radare2, Debian: apt install radare2)")
+        if ui.console:
+            from rich.panel import Panel as _Panel
+            from rich.style import Style as _Style
+            ui.console.print(_Panel(msg, title="[bold red]r2 absent[/]",
+                                    border_style=_Style(color="red")))
+        else:
+            print(msg)
+        return None
     selected = ui.get_target_selection()
     if not selected:
         if log_mgr:
-            log_mgr.add("Aucune cible sélectionnée pour le mini terminal r2.", "warn")
+            log_mgr.add("Aucune cible sélectionnée pour r2 interactif.", "warn")
         return None
     targets = [so_list[i] for i in selected]
+    if not targets:
+        return None
+    target = targets[0]
+    if len(targets) > 1:
+        ui._print("[dim]r2 interactif ne supporte qu'une cible à la fois — "
+                  "utilisation de la première: %s[/]" % target["name"]
+                  if ui.console else
+                  "r2 interactif ne supporte qu'une cible à la fois — "
+                  "utilisation de la premiere: %s" % target["name"])
     if log_mgr:
-        log_mgr.add(f"Mini terminal r2 — {len(targets)} cible(s) sélectionnée(s)", "info")
-    session = R2Session(targets, outdir, log_mgr, ui)
-    session.terminal()
+        log_mgr.add(f"r2 interactif — cible: {target['name']} ({target['path']})", "info")
+        log_mgr.step()
+    argv = [r2_bin, "-e", "scr.color=2", "-e", "bin.cache=true",
+            "-e", "anal.strings=true", "-e", "io.cache=true"]
+    if ui.console:
+        argv += ["-e", "scr.utf8=true"]
+    argv.append(target["path"])
+    header = ("=== r2 interactif — cible: %s ===\n"
+              "Toutes les commandes r2 natives sont disponibles (a/i/p/s/f/c/C/d/g/t/y/z/k/m/o/r/e/v/?/!)\n"
+              "quit ou q pour revenir à Elit-f\n" % target["name"])
+    if ui.console:
+        from rich.panel import Panel as _Panel
+        from rich.style import Style as _Style
+        ui.console.print(_Panel(header, title="[bold bright_green]r2 interactif[/]",
+                                border_style=_Style(color="bright_green")))
+    else:
+        print(header)
+    import subprocess
+    import sys as _sys
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdin=_sys.stdin,
+            stdout=_sys.stdout,
+            stderr=_sys.stderr,
+            close_fds=True,
+        )
+        proc.wait()
+    except OSError as exc:
+        ui._print(f"[bold red]Erreur lancement r2: {exc}[/]" if ui.console
+                  else f"Erreur lancement r2: {exc}")
+        return None
+    except KeyboardInterrupt:
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    if ui.console:
+        ui.console.print("[dim]Retour à Elit-f.[/]")
+    else:
+        print("\nRetour à Elit-f.")
     return None
+
+
+r2_mini_terminal = r2_exec_interactive
 
 
 def display_binary_info(so_list, outdir, log_mgr=None):

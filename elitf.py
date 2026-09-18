@@ -877,10 +877,10 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
 
         elif choice == 2:
             if not ui.detected_so:
-                prepare_so_targets(indir, outdir, ui)
-            if not ui.detected_so:
-                ui._print("[bold yellow]Aucun fichier .so à analyser.[/]" if ui.console
-                          else "Aucun fichier .so a analyser.")
+                ui._print("[bold yellow]Aucun fichier .so détecté — "
+                          "sélectionnez un répertoire contenant libapp.so/libflutter.so"
+                          " (ou un APK) au démarrage.[/]" if ui.console
+                          else "Aucun fichier .so detecte — relancez avec un dossier/APK valide.")
                 continue
             os.makedirs(outdir, exist_ok=True)
             ui.log_mgr.clear()
@@ -918,10 +918,12 @@ def main_interactive(ui, rebuild=False, no_analysis=False, ida_fcn=False,
 
         elif choice == 5:
             if not ui.detected_so:
-                prepare_so_targets(indir, outdir, ui)
-            if not ui.detected_so:
-                ui._print("[bold yellow]Aucun fichier .so détecté.[/]" if ui.console
-                          else "Aucun fichier .so detecte.")
+                ui._print("[bold yellow]Aucun fichier .so détecté — "
+                          "impossible d'afficher les infos binaires.\n"
+                          "Sélectionnez un répertoire contenant libapp.so/libflutter.so"
+                          " (ou un APK) au démarrage.[/]" if ui.console
+                          else "Aucun fichier .so detecte — impossible d'afficher les infos binaires.\n"
+                               "Relancez avec un dossier/APK valide.")
                 continue
             os.makedirs(outdir, exist_ok=True)
             info_action = ui.get_info_menu_choice()
