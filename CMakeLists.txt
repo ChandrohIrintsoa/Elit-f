@@ -72,7 +72,7 @@ endif()
 
 if (MSVC)
         target_link_libraries(${BINNAME} PRIVATE ntdll)
-        string(REPLACE "/GR" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+        string(REPLACE "/GR" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
         if (CMAKE_GENERATOR MATCHES "Visual Studio")
                 set(cc_opts /GR- /MD /D SEMIDBG)
                 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${BINNAME})

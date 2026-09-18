@@ -311,10 +311,7 @@ def get_dart_lib_info(libapp_path: str, libflutter_path: str, log_mgr: LogManage
     has_compressed_ptrs = 'compressed-pointers' in flags
     return dart_version, snapshot_hash, flags, arch, os_name, has_compressed_ptrs
 
-# Plage [lo, hi] de la barre globale associée à chaque phase du fetch/build
-# Dart VM (phase la plus longue de l'analyse : de quelques minutes sur PC
-# jusqu'à une heure sur mobile). Les fractions rendent la barre expressive
-# au lieu de rester à 0% pendant toute la compilation ninja.
+# Plage [lo, hi] de la barre globale par phase du fetch/build Dart VM.
 _DARTVM_PHASE_RANGE = {
     'download': (0.00, 0.30),
     'clone': (0.00, 0.20),
@@ -334,12 +331,7 @@ _DARTVM_PHASE_LABELS_FR = {
 
 
 def _make_dartvm_progress(log_mgr, base, weight=2.9):
-    """Convertit on_progress(done, total, phase) du fetch/build Dart VM en
-    sous-progression de la barre rich (unités de step), avec libellés FR.
-
-    `base` = step_count au démarrage du fetch ; la phase ne peut donc jamais
-    faire reculer la barre (garde monotone côté UI en plus).
-    """
+    """Convertit on_progress(done, total, phase) en sous-progression de la barre rich (step units)."""
     def handler(done, total, phase):
         lo, hi = _DARTVM_PHASE_RANGE.get(phase, (0.0, 1.0))
         try:

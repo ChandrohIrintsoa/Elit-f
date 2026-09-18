@@ -277,26 +277,17 @@ MAKE_VERSION_FILE = os.path.join(SCRIPT_DIR, 'scripts', 'dartvm_make_version.py'
 SDK_DIR = os.path.join(SCRIPT_DIR, 'dartsdk')
 BUILD_DIR = os.path.join(SCRIPT_DIR, 'build')
 
-# Overridable for censored/slow networks (e.g. set them to a mirror that
-# works from your carrier):
-#   export ELITF_DART_SDK_GIT=https://git.example.com/mirror/dart-sdk.git
-#   export ELITF_DART_SDK_TARBALL=https://mirror.example.net/dart-sdk/{version}.tar.gz
+# Overridable for censored/slow networks via ELITF_DART_SDK_GIT / ELITF_DART_SDK_TARBALL.
 DART_GIT_URL = (os.getenv('ELITF_DART_SDK_GIT')
                 or 'https://github.com/dart-lang/sdk.git')
 DART_TARBALL_URL = (os.getenv('ELITF_DART_SDK_TARBALL')
                     or 'https://github.com/dart-lang/sdk/archive/refs/tags/{version}.tar.gz')
 
-# Only these paths are needed to build the Dart VM static library.
 SPARSE_PATHS = ('runtime', 'tools', 'third_party/double-conversion')
 
 
 def _emit(log, msg):
-    """Route a status line through the UI log panel when available, else print.
-
-    Printing raw text while rich Live redraws breaks the cursor positioning
-    and stacks frames on screen (the Termux flood) — so when embedded in the
-    UI, every message must go through the captured log panel instead.
-    """
+    """Route a status line through the UI log panel when available, else print."""
     if log:
         log(msg)
     else:
@@ -304,11 +295,7 @@ def _emit(log, msg):
 
 
 def _run_captured(cmd, cwd=None, check=True, log=None, desc=''):
-    """Run a build command with captured output (safe inside rich Live).
-
-    Only used when a log callback is provided (embedded UI). Fails with the
-    stderr tail in the raised error so the cause stays visible.
-    """
+    """Run a build command with captured output (safe inside rich Live)."""
     if desc and log:
         log(desc)
     try:
@@ -363,13 +350,7 @@ def _read_mem_available():
 
 
 def safe_parallel_jobs(mem_bytes=None, cpu_count=None):
-    """Ninja parallelism that will not OOM-kill the device mid-build.
-
-    Heavy Dart VM translation units can eat ~2 GB each with clang -O2;
-    on a phone, ninja's default (-j<all cores>) gets the compiler killed
-    by the OOM killer and the build then looks frozen forever.
-    ELITF_NINJA_JOBS overrides everything.
-    """
+    """Ninja parallelism bounded by available RAM. ELITF_NINJA_JOBS overrides."""
     env = os.getenv('ELITF_NINJA_JOBS', '').strip()
     if env:
         try:
@@ -392,13 +373,8 @@ def _run_streaming(cmd, cwd=None, log=None, on_progress=None, desc='',
                    phase='compile', min_interval=8.0, tail_lines=80):
     """Run a build command and stream its stdout line by line.
 
-    Unlike the fully-captured runs, ninja's `[N/M]` progress lines are parsed
-    as they arrive and forwarded to `on_progress(done, total, phase)`, so the
-    UI bar advances during a build that can last an hour on a phone. Nothing
-    is ever written raw to the tty (rich Live owns the screen): milestone
-    lines go through `log`, throttled to at most one every `min_interval`
-    seconds and 5% of progress. Failures raise RuntimeError with the output
-    tail so the actual error stays visible.
+    Ninja's `[N/M]` progress lines feed `on_progress(done, total, phase)`.
+    Milestone lines go through `log`, throttled by time and 5% progress.
     """
     if desc and log:
         log(desc)
@@ -450,7 +426,7 @@ def _run_streaming(cmd, cwd=None, log=None, on_progress=None, desc='',
 
 
 def _ninja_command():
-    """Ninja invocation bounded by device memory (safe_parallel_jobs)."""
+    """Ninja invocation bounded by device memory."""
     return [NINJA_CMD, '-j', str(safe_parallel_jobs())]
 
 
@@ -472,7 +448,7 @@ def _run_ninja_build(builddir, log=None, on_progress=None):
 
 
 def _tail(text, limit=600):
-    """Last `limit` chars of a command output, single line (for error messages)."""
+    """Last `limit` chars of a command output, single line for error messages."""
     text = (text or '').strip()
     if not text:
         return ''
@@ -482,14 +458,7 @@ def _tail(text, limit=600):
 
 
 def _git(args, cwd=None, attempts=3, delay=2.0, desc='git', log=None):
-    """Run git with captured output and automatic retries.
-
-    On unstable mobile networks (Termux), commands that download data often
-    fail once and succeed on retry. Blobs already fetched by a partial clone
-    are cached by git, so a retry resumes instead of restarting from zero.
-    stdout/stderr are captured so the real cause (network, ref, auth, …)
-    ends up in the raised error instead of being lost in the live UI redraw.
-    """
+    """Run git with captured output and automatic retries (resumable on flaky networks)."""
     last = None
     for attempt in range(1, max(1, attempts) + 1):
         if log:
@@ -531,22 +500,13 @@ def _git_clone_sparse(info, clonedir, log=None):
           '--depth', '1', '--filter=blob:none', '--sparse',
           DART_GIT_URL, clonedir],
          attempts=3, desc='git clone (Dart SDK)', log=log)
-    # This step lazily fetches ~30 MB of blobs: the most network-sensitive
-    # part of the whole fetch. More attempts because it is resumable.
     _git(['sparse-checkout', 'set', *SPARSE_PATHS], cwd=clonedir,
          attempts=4, delay=3.0, desc='git sparse-checkout', log=log)
 
 
 def _download_with_urllib(url, dest, log=None, attempts=8,
                           on_progress=None, min_interval=3.0):
-    """Resumable single-stream download (Range), robust on flaky links.
-
-    A single HTTP stream survives bad mobile networks far better than git's
-    chatty fetch protocol; already-received bytes are kept in `<dest>.part`.
-    Milestones (`Downloaded 12.3 MB…`) are throttled so a slow link never
-    leaves the user staring at a frozen screen, and byte counts are forwarded
-    to `on_progress(received, total_or_0, 'download')` for the UI bar.
-    """
+    """Resumable single-stream download (Range) for flaky links."""
     part = dest + '.part'
     last = None
     for attempt in range(1, max(1, attempts) + 1):
@@ -597,7 +557,7 @@ def _download_with_urllib(url, dest, log=None, attempts=8,
 
 
 def _download_with_curl(url, dest):
-    """Last-resort downloader for setups where Python TLS is broken."""
+    """Last-resort downloader when Python TLS is broken."""
     curl = shutil.which('curl')
     if not curl:
         return False
@@ -632,9 +592,7 @@ _TARBALL_SUBDIRS = ('runtime', 'tools', 'third_party/double-conversion')
 
 
 def _tarball_checkout(info, clonedir, log=None, on_progress=None):
-    """Fallback without git: download the tag archive and extract only the
-    directories Elit-f compiles against. The archive is cached, so a later
-    re-run never downloads it twice."""
+    """Fallback without git: download tag archive and extract only needed dirs. Archive is cached."""
     _rmtree(clonedir)
     os.makedirs(SDK_DIR, exist_ok=True)
     dest = os.path.join(SDK_DIR, f'dart-sdk-{info.version}.tar.gz')
@@ -720,9 +678,7 @@ def checkout_dart(info: DartLibInfo, log=None, on_progress=None):
         try:
             _git_clone_sparse(info, clonedir, log=log)
         except (RuntimeError, OSError) as git_err:
-            # git failed for good (bad network on the blob fetch, old git
-            # without sparse-checkout, proxy…): switch to a single-stream
-            # archive download which survives flaky mobile links.
+            # git failed: fall back to a single-stream archive download.
             _emit(log, 'git sparse-checkout failed (' + _tail(str(git_err), 200) + ')')
             _emit(log, 'Falling back to direct archive download…')
             try:
@@ -822,10 +778,7 @@ def cmake_dart(info: DartLibInfo, target_dir: str, log=None, on_progress=None):
                  '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE']
 
     if log:
-        # Output captured or streamed so nothing is written to the tty while
-        # rich Live owns the screen (raw writes break cursor positioning and
-        # stack frames — the Termux flood). The ninja build is STREAMED: its
-        # [N/M] lines feed on_progress so the UI bar moves during the compile.
+        # Output captured/streamed so nothing breaks the rich Live redraw.
         if on_progress:
             try:
                 on_progress(0, 1, 'configure')
