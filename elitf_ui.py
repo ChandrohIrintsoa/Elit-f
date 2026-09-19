@@ -376,8 +376,7 @@ class ElitfUI:
             menu_text = Text()
             menu_items = [
                 ("1", "Flutter/Dart AOT Analysis", "Analyse complète libapp.so + libflutter.so", "bright_cyan"),
-                ("2", "Radare2 - Terminal ",
-                 "bright_green"),
+                ("2", "Radare2 - Terminal", "(vrai r2 natif)", "bright_green"),
                 ("3", "Il2Cpp Analysis (Il2CppInspector)",
                  "dump.cs + symbol map + IDA/Ghidra scripts depuis libil2cpp.so + global-metadata.dat",
                  "blue"),
